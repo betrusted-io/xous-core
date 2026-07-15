@@ -9,9 +9,300 @@ This document describes the USB CCID transport implemented in `usb-bao1x`
 GnuPG, and how to configure a Raspberry Pi as a hardware-in-the-loop (HIL) test
 host.
 
-OpenPGP / smart-card cryptography is intentionally **not** implemented in
-xous-core. This repository provides USB framing and first-boot provisioning only;
-an external Xous service is expected to handle APDUs via IPC.
+**Audience:** reviewers who are not CCID experts, firmware developers wiring an
+APDU handler, and anyone setting up hardware-in-the-loop (HIL) regression tests.
+
+**Code navigation:** [`docs/code_map.md`](code_map.md) — symptom-to-source map
+for debugging and fixing CCID/provisioning issues.
+
+## Table of contents
+
+1. [Background: smart cards, CCID, and OpenPGP](#background-smart-cards-ccid-and-openpgp)
+2. [Scope: what xous-core does and does not do](#scope-what-xous-core-does-and-does-not-do)
+3. [Security considerations](#security-considerations)
+4. [Architecture overview](#architecture-overview)
+5. [USB composite device](#usb-composite-device)
+6. [Feature flags and firmware images](#feature-flags-and-firmware-images)
+7. [CCID USB interface](#ccid-usb-interface)
+8. [Message framing on the wire](#message-framing-on-the-wire)
+   - [Example CCID hex dumps](#example-ccid-hex-dumps)
+9. [APDUs, T=1, and XfrBlock](#apdus-t1-and-xfrblock)
+10. [Xous IPC API and handler integration](#xous-ipc-api-and-handler-integration)
+   - [Handler skeleton (Rust)](#handler-skeleton-rust)
+11. [First-boot provisioning (CDC serial)](#first-boot-provisioning-cdc-serial)
+12. [HIL test personality (`ccid-echo`)](#hil-test-personality-ccid-echo)
+13. [Host software path (pcscd / GnuPG)](#host-software-path-pcscd--gnupg)
+14. [Testing guide](#testing-guide)
+15. [Raspberry Pi HIL setup](#raspberry-pi-hil-setup)
+16. [CI summary](#ci-summary)
+
+---
+
+## Background: smart cards, CCID, and OpenPGP
+
+### Smart cards
+
+A **smart card** (or secure element acting as one) exposes a command/response
+protocol called **APDU** (Application Protocol Data Unit). Typical exchanges
+look like: host sends `SELECT`, `GET DATA`, `SIGN`, and so on; the card returns
+status bytes (`SW1-SW2`, e.g. `90 00` for success) plus optional response data.
+
+OpenPGP hardware tokens (YubiKey OpenPGP, Nitrokey, etc.) implement the
+[OpenPGP card specification](https://gnupg.org/ftp/specs/OpenPGP-card-3.4.pdf)
+on top of that APDU layer.
+
+### CCID (Chip Card Interface Device)
+
+**CCID** is a USB device class (interface class `0x0B`) defined for card
+*readers*. The host does not send raw APDUs on USB directly; it wraps them in
+**CCID bulk messages**:
+
+- **`PC_to_RDR_*`** — host to reader (request)
+- **`RDR_to_PC_*`** — reader to host (response)
+
+Linux routes these through **`pcscd`** (PC/SC daemon). User tools such as
+**GnuPG** (`gpg --card-status`, `gpg --sign`) talk to `pcscd`, which talks
+CCID to the USB device.
+
+Reference: [USB CCID 1.1 specification](https://www.usb.org/sites/default/files/DWG_SmartCard_CCID_V1.1.pdf).
+
+### Where Baosec fits
+
+From the host's point of view, a Baosec running this firmware looks like a
+**USB CCID reader** with one slot. The "card" is not a physical insert; the
+OpenPGP application logic runs in a **separate Xous service** on the device.
+`usb-bao1x` is the USB plumbing between the Linux host and that service.
+
+```
+  gpg / OpenSC          pcscd              pyusb (HIL tests)
+       |                  |                        |
+       +------------------+------------------------+
+                          |
+                    CCID bulk USB
+                          |
+                    usb-bao1x  -------- IPC ------>  OpenPGP handler
+                   (framing only)                  (APDU + crypto)
+```
+
+---
+
+## Scope: what xous-core does and does not do
+
+| Layer | Responsibility | In xous-core? |
+|-------|----------------|---------------|
+| USB CCID descriptors, bulk IN/OUT, frame assembly | Transport | **Yes** (`ccid_transport.rs`, `ccid_framing.rs`) |
+| Deferred IPC for complete host frames | Transport API | **Yes** (`CcidRxDeferred` / `CcidTx`) |
+| First-boot capture of two opaque PIN lines into PDDB | Provisioning | **Yes** (`ccid_store.rs`, provisioning CDC) |
+| Parse `PC_to_RDR_*` message types | Protocol | **No** |
+| T=1 block protocol, APDU parsing | Card protocol | **No** |
+| OpenPGP card emulation, key storage, crypto | Application | **No** (external service, e.g. `baochip-openpgp`) |
+| `pcscd` driver, GnuPG integration | Host stack | **No** |
+| CCID interrupt notifications (insert/remove) | Transport | **No** (stub endpoint only) |
+
+The Cargo feature is named `ccid-openpgp` for product alignment, but **no
+OpenPGP or Galdralag crates** are linked into xous-core. All cryptography stays
+out of tree behind IPC.
+
+Everything is gated behind `ccid-openpgp` on Xous builds so default `baosec`
+images are unaffected when the feature is disabled.
+
+---
+
+## Security considerations
+
+This section is for merge review of [PR #890](https://github.com/betrusted-io/xous-core/pull/890).
+The PR adds a **potentially security-sensitive USB surface** (CCID + first-boot
+provisioning). It does **not** deliver OpenPGP security by itself; it exposes
+transport and storage primitives that a handler and factory process must use
+correctly.
+
+### Threat model and non-goals
+
+**In scope for this PR (xous-core):**
+
+- Present a USB CCID bulk interface to a connected host.
+- Reassemble and forward complete `PC_to_RDR` frames to one deferred IPC listener.
+- Accept complete `RDR_to_PC` reply blobs from that listener and stream them on bulk IN.
+- Optionally expose a one-time provisioning CDC port until PDDB marks provisioning complete.
+- Persist two opaque byte lines and a completion marker in PDDB.
+
+**Explicit non-goals (must be provided elsewhere):**
+
+- OpenPGP card security, key generation, PIN verification, or cryptographic operations.
+- Authentication of the USB host or provisioning tool.
+- Rate limiting, intrusion detection, or audit logging beyond basic `log` lines.
+- Validation of provisioning line format or semantic meaning.
+- Protection against a compromised or malicious Xous process that already holds PDDB access.
+
+**Security claim of this PR:** transport isolation and feature gating only. **End-user
+OpenPGP security depends entirely on the out-of-tree handler, PDDB/key policy,
+and factory provisioning procedures.**
+
+### Trust boundaries
+
+```
+  [ USB host ]     untrusted; may send arbitrary CCID bytes
+       |
+  [ ccid_transport / usb-bao1x ]   trusted for framing only; no semantic checks
+       |
+  [ IPC: CcidRxDeferred / CcidTx ]   capability boundary; one listener PID
+       |
+  [ OpenPGP handler service ]   MUST enforce APDU policy, crypto, authorization
+       |
+  [ PDDB ]   persistence; access controlled by PDDB server + basis policy
+```
+
+| Layer | May assume | Must not assume |
+|-------|------------|-----------------|
+| **USB host** | Device speaks CCID 1.1 bulk framing | Device validates APDUs, PINs, or OpenPGP policy |
+| **`usb-bao1x` transport** | Handler will parse frames; USB stack is configured | Frames are well-formed CCID commands; host is benign |
+| **IPC (`CcidRxDeferred` / `CcidTx`)** | Only registered handler receives frames | Handler is always running; multiple handlers coordinate |
+| **OpenPGP handler** | Transport delivers full raw frames | xous-core filtered dangerous APDUs; host is authenticated |
+| **PDDB** | Keys exist after successful `save_provisioned_pins` | PIN lines are secret from other processes without PDDB access |
+
+#### Single-listener `Denied` rule
+
+`usb-bao1x` allows **one process** to hold a deferred `CcidRxDeferred` wait
+(the first PID wins, same pattern as FIDO). A second process receives
+`CcidCode::Denied`.
+
+This matters because the handler receives **complete host-origin frames** that
+may trigger signing, PIN prompts, or key operations. Allowing multiple
+competing listeners would create ambiguous dispatch, possible double-processing,
+or a confused-deputy path where the wrong service responds on bulk IN. The
+handler process should be treated as part of the trusted computing base for
+smart-card operations.
+
+### Host attack surface
+
+`usb-bao1x` **forwards host CCID frames blindly by design**. It does not:
+
+- Reject unknown `bMessageType` values
+- Cap command rates
+- Inspect XfrBlock payloads for APDU content
+- Enforce ordering beyond USB reassembly
+
+Implications for the handler:
+
+1. **Treat every received frame as hostile.** Parse strictly against CCID and
+   APDU/T=1 rules; reject oversize, truncated, or nonsensical messages.
+2. **Do not echo or reflect host bytes** in production (see `ccid-echo` below).
+3. **Rate-limit expensive operations** (sign, decrypt, PIN verify) in the handler;
+   the transport will keep delivering frames as fast as the host sends them.
+4. **Never log secrets** from frame payloads at the transport layer; handler
+   logging policy is handler-owned.
+5. **USB disconnect** (`CcidCode::Hangup`) is signaled when the gadget is not
+   configured; handler should drop partial transaction state.
+
+A malicious host with physical USB access cannot directly read PDDB through this
+interface, but it **can probe the handler** with arbitrary CCID/APDU traffic once
+the handler is running.
+
+### Production vs HIL: `ccid-echo` security boundary
+
+| Build target | Features | CCID behavior | Intended use |
+|--------------|----------|---------------|--------------|
+| `cargo xtask baosec` | `ccid-openpgp` | Frames go to IPC handler only | Production / field images |
+| `cargo xtask ccid-hil` | `ccid-openpgp` + **`ccid-echo`** | IRQ path **echoes host frames on bulk IN** without handler | Lab / CI HIL only |
+
+**`ccid-echo` must never ship in production images.**
+
+With `ccid-echo` enabled, any host that can write bulk OUT receives the same
+bytes back on bulk IN. That:
+
+- Bypasses the OpenPGP handler entirely for CCID replies.
+- Creates a trivial protocol oracle useful for transport testing but **unsafe**
+  if mistaken for a smart-card implementation.
+- Must not be combined with tools (`pcscd`, GnuPG) that interpret responses as
+  genuine card replies.
+
+Production builds use `baosec_common()` which adds `ccid-openpgp` but **does
+not** add `ccid-echo`. Only the dedicated `ccid-hil` xtask target enables echo.
+
+**Release checklist:** verify the flashed image was built with `ccid-hil` only on
+test benches; confirm `ccid-echo` is absent from production feature sets.
+
+### Provisioning trust model
+
+First-boot provisioning exposes an **extra CDC ACM serial port** when PDDB
+`usb.ccid` / `provisioned` is not `OKV1`.
+
+#### Who may write the two PIN lines?
+
+**Any party that can open the provisioning serial port on USB** while the device
+is in the unprovisioned state. xous-core performs **no authentication** of the
+host or tool:
+
+- No pairing code
+- No physical button confirmation in this layer
+- No certificate or factory credential check
+
+The intended trust model is **controlled factory or owner setup**:
+
+- Device is provisioned in a trusted environment before untrusted USB exposure, **or**
+- The first host to reach the provisioning port during the provisioning window
+  defines the stored lines (similar to many "setup over USB" flows).
+
+Operators should treat an **unprovisioned device on a hostile USB bus** as
+vulnerable to provisioning capture: an attacker could write their own two lines
+before the legitimate operator.
+
+#### Attacker reaches provisioning CDC before factory setup
+
+If an attacker connects first on an unprovisioned device:
+
+1. They can send two lines and commit provisioning (`save_provisioned_pins`).
+2. PDDB stores `user_pin_line`, `admin_pin_line`, and sets `provisioned = OKV1`.
+3. USB resets; the provisioning port **disappears permanently** until factory reset.
+4. The legitimate factory tool later sees an already-provisioned device and cannot
+   overwrite lines through this USB path without reset.
+
+**Mitigation is operational, not cryptographic in xous-core:** keep devices
+unprovisioned only in trusted physical custody; use factory-reset before
+re-provisioning; consider shipping pre-provisioned from factory.
+
+There is **no rollback** of provisioning via the CCID/USB path once `OKV1` is written.
+
+#### Why no format validation in xous-core?
+
+PIN lines are **opaque blobs** to `usb-bao1x`:
+
+- Format, entropy, and derivation are defined by the OpenPGP / product layer
+  (out of tree), not the transport crate.
+- xous-core only filters wire bytes to printable ASCII (`>= 0x20`) and line
+  delimiters (`\r`/`\n`), rejecting control characters on the serial path.
+- Semantic validation (length, KDF input structure, forbidden patterns) belongs
+  in the handler or factory tool where the format is defined.
+
+This keeps the USB layer small and avoids duplicating policy that the handler
+must enforce anyway when reading PDDB.
+
+#### What is stored in PDDB and who can read it later?
+
+Written by `ccid_store.rs` into dictionary **`usb.ccid`**:
+
+| Key | Max size | Content |
+|-----|----------|---------|
+| `user_pin_line` | 256 bytes | First provisioning line (opaque) |
+| `admin_pin_line` | 256 bytes | Second provisioning line (opaque) |
+| `provisioned` | 32 bytes | Marker `OKV1` when complete |
+
+**Who can read:** any Xous process that can open these PDDB keys through the
+normal PDDB API for the active basis. xous-core does not add a separate ACL on
+top of PDDB; access follows [PDDB basis and dictionary
+policy](https://betrusted.io/xous-book/ch09-00-pddb-overview.html). In
+practice, the OpenPGP handler and other privileged services in the product TCB
+should read these keys; unprivileged apps must not receive PDDB handles for
+`usb.ccid`.
+
+**Who can write after provisioning:** not via the provisioning CDC (port removed).
+Further updates require factory reset or a product-specific PDDB update path
+defined outside this PR.
+
+**Host visibility:** lines are **not** exposed over CCID bulk. They travel only
+on the provisioning CDC during the one-time window, then live in PDDB on device.
+
+---
 
 ## Architecture overview
 
@@ -531,18 +822,10 @@ successful flash, nightly runs validate transport regressions.
 
 | Tier | Where | What |
 |------|-------|------|
-| Unit tests | GitHub-hosted (`ccid-ci.yml`) | `ccid_framing` tests, compile gates |
-| HIL transport | Pi self-hosted (`ccid-hil.yml`) | Enumeration, echo, stress |
-| OpenPGP E2E | Out of tree | `gpg --card-status` once handler service exists |
+| Unit tests | GitHub-hosted | `ccid_framing` (7 tests) |
+| Compile + image | GitHub-hosted | `ccid-ci.yml`, `build.yml` / `baosec` |
+| HIL transport | Pi self-hosted | Enumeration, echo, stress |
+| OpenPGP E2E | Out of tree | `gpg --card-status` with handler service |
 
-## Related files
-
-| Path | Purpose |
-|------|---------|
-| `services/usb-bao1x/src/ccid_transport.rs` | USB CCID class driver |
-| `services/usb-bao1x/src/ccid_framing.rs` | Wire format helpers + unit tests |
-| `services/usb-bao1x/src/ccid_store.rs` | PDDB provisioning storage |
-| `tools/ccid_smoke.py` | Host smoke test |
-| `tools/ccid_hil/` | HIL scripts and suite |
-| `.github/workflows/ccid-ci.yml` | CI compile + unit tests |
-| `.github/workflows/ccid-hil.yml` | Nightly Pi HIL |
+See also [`docs/CCID_TEST_REPORT.md`](CCID_TEST_REPORT.md) for recorded
+verification results and [`docs/code_map.md`](code_map.md) for source navigation.

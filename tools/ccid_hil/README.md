@@ -7,8 +7,34 @@ SPDX-License-Identifier: Apache-2.0
 Hardware-in-the-loop tests for the `usb-bao1x` CCID transport (`ccid-openpgp`
 feature).
 
-**Protocol reference and Raspberry Pi setup:** see
-[`docs/CCID_PROTOCOL_AND_HIL.md`](../../docs/CCID_PROTOCOL_AND_HIL.md).
+## Documentation
+
+| Document | Contents |
+|----------|----------|
+| [`docs/CCID_PROTOCOL_AND_HIL.md`](../../docs/CCID_PROTOCOL_AND_HIL.md) | **Main reference** — smart-card/CCID background, architecture, IPC handler guide, security considerations, Pi setup, testing guide |
+| [`docs/code_map.md`](../../docs/code_map.md) | **Code map** — symptom-to-source navigation for debugging and fixes |
+| [`docs/CCID_TEST_REPORT.md`](../../docs/CCID_TEST_REPORT.md) | Recorded verification results and CI status |
+
+## Quick start
+
+```bash
+# 1. Build and flash HIL image (ccid-openpgp + ccid-echo)
+cargo xtask ccid-hil
+
+# 2. Cable device USB data port to Linux host
+
+# 3. Unit tests (no hardware)
+cargo test -p usb-bao1x --lib ccid_framing
+
+# 4. Smoke test (~30 s)
+pip install pyusb
+python3 tools/ccid_smoke.py
+
+# 5. Full suite (~2 min)
+pip install pyusb pyserial
+chmod +x tools/ccid_hil/*.sh
+tools/ccid_hil/run_all.sh
+```
 
 ## Requirements
 

@@ -10,9 +10,9 @@ Repository: betrusted-io/xous-core
 Branch: dev  
 Reference crates / API: sibling firmware tree (see path deps in `libs/baochip-openpgp/Cargo.toml`)
 
-Complete stdout/stderr for each cargo invocation was captured during this run
-under `/tmp/ccid-test-out/` (`01-baochip-openpgp.txt` through
-`06-workspace.txt`) and is not duplicated here.
+For protocol background, handler integration, Pi HIL setup, **security
+considerations**, and source navigation, see [`CCID_PROTOCOL_AND_HIL.md`](CCID_PROTOCOL_AND_HIL.md)
+and [`code_map.md`](code_map.md).
 
 ## Results
 
