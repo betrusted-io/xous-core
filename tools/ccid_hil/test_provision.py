@@ -1,68 +1,78 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
-"""HIL-02: provisioning CDC two-line capture (unprovisioned device only)."""
+"""HIL-02: Persona A provisioning surface check (no USB CDC provisioning).
+
+Under Persona A (`ccid-openpgp` images), the Corigine 8-slot budget forces
+CCID+FIDO+NKRO only. Debug CDC and provisioning CDC are NOT allocated.
+PIN lines are offline / pre-flash PDDB only; host USB cannot provision.
+
+This test therefore does NOT open a serial port or send two PIN lines.
+It verifies the CCID image presents NO CDC ACM interfaces for the device VID:PID
+while CCID is present — the USB path that `test_provision.py` used to exercise
+is gone by design.
+
+Offline OKV1 / PDDB seeding cannot be proven over USB from this harness (OPEN:
+UART log capture not wired into HIL). When that is added, a follow-up can assert
+boot log text for OKV1 vs warn-and-continue.
+"""
 
 from __future__ import annotations
 
 import argparse
 import sys
-import time
 from pathlib import Path
-
-try:
-    import serial
-    from serial.tools import list_ports
-except ImportError as exc:
-    raise SystemExit("pyserial is required: pip install pyserial") from exc
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from ccid_usb import BAOSEC_PID, BAOSEC_VID, find_ccid_device
-
-
-def find_provisioning_port(vid: int, pid: int) -> str:
-    """Pick a CDC ACM port for the device that is not the primary debug serial."""
-    matches = []
-    for port in list_ports.comports():
-        if port.vid == vid and port.pid == pid and port.device:
-            matches.append(port)
-    if not matches:
-        raise RuntimeError(f"No serial ports for {vid:04x}:{pid:04x}")
-    # Prefer ttyACM* ports; use the last match (provisioning is typically enumerated after debug serial).
-    acm = [p for p in matches if "ACM" in (p.device or "").upper() or "ttyACM" in (p.device or "")]
-    if len(acm) >= 2:
-        return sorted(p.device for p in acm)[-1]
-    if acm:
-        return acm[0].device
-    return matches[-1].device
+from ccid_usb import (
+    BAOSEC_PID,
+    BAOSEC_VID,
+    assert_persona_a_composite,
+    find_ccid_device,
+    list_cdc_interfaces,
+)
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(
+        description="HIL-02 Persona A: no USB CDC provisioning on CCID images"
+    )
     parser.add_argument("--vid", type=lambda x: int(x, 0), default=BAOSEC_VID)
     parser.add_argument("--pid", type=lambda x: int(x, 0), default=BAOSEC_PID)
-    parser.add_argument("--port", default=None, help="Provisioning CDC port (auto-detect if omitted)")
-    parser.add_argument("--user-line", default="test-user-pin")
-    parser.add_argument("--admin-line", default="test-admin-pin")
     parser.add_argument("--timeout", type=float, default=60.0)
+    parser.add_argument(
+        "--legacy-usb-provision",
+        action="store_true",
+        help="Deprecated: refuses to run old CDC two-line path (always exits 2)",
+    )
     args = parser.parse_args()
 
-    # Ensure device is present before opening serial.
-    find_ccid_device(vid=args.vid, pid=args.pid, timeout_s=args.timeout)
+    if args.legacy_usb_provision:
+        print(
+            "HIL-02 REFUSED: --legacy-usb-provision is dead under Persona A "
+            "(no provisioning CDC on CCID images). Seed PDDB offline instead.",
+            file=sys.stderr,
+        )
+        return 2
 
-    port = args.port or find_provisioning_port(args.vid, args.pid)
-    print(f"Opening provisioning port {port}...")
-    with serial.Serial(port, 115200, timeout=2) as ser:
-        ser.write((args.user_line + "\r\n").encode())
-        ser.flush()
-        time.sleep(0.5)
-        ser.write((args.admin_line + "\r\n").encode())
-        ser.flush()
+    eps = find_ccid_device(vid=args.vid, pid=args.pid, timeout_s=args.timeout)
+    layout = assert_persona_a_composite(eps.device)
+    cdc = list_cdc_interfaces(eps.device)
+    if cdc:
+        print(
+            f"FAIL: Persona A expects zero CDC interfaces; found {cdc}",
+            file=sys.stderr,
+        )
+        return 1
 
-    print("Waiting for USB re-enumeration after provisioning...")
-    time.sleep(3.0)
-    find_ccid_device(vid=args.vid, pid=args.pid, timeout_s=args.timeout)
-    print("HIL-02 PASS: provisioning lines sent and device re-enumerated")
+    print(
+        "HIL-02 PASS (Persona A): no CDC ACM; USB PIN provision path absent; "
+        f"layout={layout}"
+    )
+    print(
+        "NOTE: Offline OKV1 / UART boot-warn not checked here "
+        "(HIL harness has no UART capture yet)."
+    )
     return 0
 
 

@@ -1,6 +1,13 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
-"""HIL-03: CCID bulk echo round-trip (requires ccid-echo image)."""
+"""HIL-03 / HIL-05: CCID bulk echo round-trip (requires ccid-echo image).
+
+What: GetSlotStatus echo (HIL-03); optional --stress N random XfrBlock echoes
+(HIL-05). Finds the CCID interface by class 0x0B (no CDC / index assumptions).
+
+Why: prove USB bulk transport and multi-packet reassembly without an OpenPGP
+handler. Does not check Persona A layout (that is HIL-01/02) or PDDB/OKV1.
+"""
 
 from __future__ import annotations
 

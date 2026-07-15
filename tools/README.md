@@ -160,13 +160,20 @@ image offline with `pddbdbg.py`. It exits non-zero if any test fails. A cold run
 ## CCID USB testing
 
 Host-side smoke and hardware-in-the-loop tests for the `usb-bao1x` CCID transport
-(`ccid-openpgp` feature) live under `tools/ccid_hil/` and `tools/ccid_smoke.py`.
+(`ccid-openpgp`). They check USB enumeration, Persona A layout (no CDC on CCID
+images), and bulk echo — not OpenPGP/APDU. Status: `docs/CCID_TEST_REPORT.md`.
 
 ```sh
-# Unit tests (also run in CI via .github/workflows/ccid-ci.yml)
-cargo test -p usb-bao1x --lib ccid_framing
+# Unit tests (also in .github/workflows/ccid-ci.yml)
+cargo test -p usb-bao1x --lib ccid_framing   # wire math (7 tests)
+cargo test -p usb-bao1x --lib ep_budget      # cumulative EP ledger (4 tests)
 
-# Manual USB smoke test (device image: cargo xtask ccid-hil)
+# Local EP arithmetic / mock Persona A (no hardware)
+python3 tools/check_ep_budget.py
+python3 tools/test_ep_budget_cumulative.py
+python3 tools/sim_persona_a_composite.py
+
+# Manual USB smoke (flash: cargo xtask ccid-hil)
 python3 tools/ccid_smoke.py
 
 # Full HIL suite on a Linux USB host

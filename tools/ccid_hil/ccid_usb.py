@@ -7,19 +7,36 @@ from __future__ import annotations
 import struct
 import time
 from dataclasses import dataclass
-from typing import Optional, Tuple
+from typing import List, Optional, Tuple
 
 try:
     import usb.core
     import usb.util
-except ImportError as exc:
-    raise SystemExit("pyusb is required: pip install pyusb") from exc
+
+    _PYUSB_ERR: Optional[ImportError] = None
+except ImportError as exc:  # allow sim/tooling without pyusb for layout asserts
+    usb = None  # type: ignore
+    _PYUSB_ERR = exc
+
+
+def _require_pyusb() -> None:
+    if _PYUSB_ERR is not None:
+        raise SystemExit("pyusb is required: pip install pyusb") from _PYUSB_ERR
 
 BAOSEC_VID = 0x1D50
 BAOSEC_PID = 0x6198
 DABAO_PID = 0x6197
 USB_CLASS_CCID = 0x0B
+USB_CLASS_HID = 0x03
+USB_CLASS_CDC_COMM = 0x02
+USB_CLASS_CDC_DATA = 0x0A
 CCID_HEADER_LEN = 10
+
+# Persona A expected unidirectional non-EP0 slots on Corigine (CRG_EP_NUM=8).
+# Per class (see tools/check_ep_budget.py and source cites therein):
+#   CCID 3, FIDO 2, NKRO 2 => 7; no CDC.
+PERSONA_A_EXPECTED_NON_EP0 = 7
+PERSONA_A_MAX_NON_EP0 = 8
 
 
 def make_get_slot_status(seq: int = 0) -> bytes:
@@ -62,6 +79,7 @@ def find_ccid_device(
     pid: int = BAOSEC_PID,
     timeout_s: float = 30.0,
 ) -> CcidEndpoints:
+  _require_pyusb()
   deadline = time.monotonic() + timeout_s
   last_err: Optional[str] = None
   while time.monotonic() < deadline:
@@ -147,3 +165,78 @@ def verify_ccid_descriptor(dev: "usb.core.Device") -> dict:
     "dw_protocols": dw_protocols,
     "max_message_length": max_msg,
   }
+
+
+def list_cdc_interfaces(dev: "usb.core.Device") -> List[dict]:
+  """Return CDC COMM/DATA interfaces for the active configuration (should be empty on Persona A)."""
+  cfg = dev.get_active_configuration()
+  out: List[dict] = []
+  for intf in cfg:
+    cls = intf.bInterfaceClass
+    if cls in (USB_CLASS_CDC_COMM, USB_CLASS_CDC_DATA):
+      out.append(
+        {
+          "number": intf.bInterfaceNumber,
+          "class": cls,
+          "subclass": intf.bInterfaceSubClass,
+          "protocol": intf.bInterfaceProtocol,
+        }
+      )
+  return out
+
+
+def summarize_composite(dev: "usb.core.Device") -> dict:
+  """Count interfaces and non-EP0 endpoints on the active configuration."""
+  cfg = dev.get_active_configuration()
+  by_class: dict = {}
+  non_ep0 = 0
+  hid_ifaces = 0
+  ccid_ifaces = 0
+  for intf in cfg:
+    cls = intf.bInterfaceClass
+    by_class[cls] = by_class.get(cls, 0) + 1
+    if cls == USB_CLASS_HID:
+      hid_ifaces += 1
+    if cls == USB_CLASS_CCID:
+      ccid_ifaces += 1
+    for ep in intf:
+      if (ep.bEndpointAddress & 0x0F) != 0:
+        non_ep0 += 1
+  return {
+    "by_class": by_class,
+    "hid_interfaces": hid_ifaces,
+    "ccid_interfaces": ccid_ifaces,
+    "cdc_interfaces": list_cdc_interfaces(dev),
+    "non_ep0_endpoints": non_ep0,
+  }
+
+
+def assert_persona_a_composite(dev: "usb.core.Device") -> dict:
+  """Fail if layout is incompatible with Persona A CCID images (no CDC; CCID+HID; EP budget).
+
+  Expected roughly: CCID (0x0B) + two HID (FIDO+NKRO), unidirectional non-EP0 == 7, none > 8.
+  Interface indices are not hardcoded — CDC removal can shift numbers.
+  """
+  layout = summarize_composite(dev)
+  if layout["cdc_interfaces"]:
+    raise RuntimeError(
+      f"Persona A violation: CDC interface(s) present {layout['cdc_interfaces']}"
+    )
+  if layout["ccid_interfaces"] < 1:
+    raise RuntimeError("Persona A: expected at least one CCID interface (0x0B)")
+  if layout["hid_interfaces"] < 2:
+    raise RuntimeError(
+      f"Persona A: expected >=2 HID interfaces (FIDO+NKRO), got {layout['hid_interfaces']}"
+    )
+  n = layout["non_ep0_endpoints"]
+  if n > PERSONA_A_MAX_NON_EP0:
+    raise RuntimeError(
+      f"Persona A: non-EP0 endpoint count {n} exceeds Corigine CRG_EP_NUM={PERSONA_A_MAX_NON_EP0}"
+    )
+  if n != PERSONA_A_EXPECTED_NON_EP0:
+    # Soft mismatch: some hosts count differently; still fail so HIL catches drift.
+    raise RuntimeError(
+      f"Persona A: expected {PERSONA_A_EXPECTED_NON_EP0} non-EP0 endpoints "
+      f"(CCID3+FIDO2+NKRO2), got {n}; layout={layout}"
+    )
+  return layout
