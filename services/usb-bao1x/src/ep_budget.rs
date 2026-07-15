@@ -35,9 +35,7 @@ pub struct EpBudgetLedger {
 }
 
 impl EpBudgetLedger {
-    pub fn new(label: &'static str) -> Self {
-        Self { label, total: 0, len: 0, parts: [("", 0); MAX_PARTS] }
-    }
+    pub fn new(label: &'static str) -> Self { Self { label, total: 0, len: 0, parts: [("", 0); MAX_PARTS] } }
 
     pub fn total(&self) -> usize { self.total }
 
@@ -94,9 +92,7 @@ impl EpBudgetLedger {
 /// Old (broken-for-gap) semantics: each subtotal checked independently.
 /// Used only in tests to prove the cumulative gap.
 #[cfg(test)]
-pub fn old_independent_subtotal_ok(subtotals: &[usize]) -> bool {
-    subtotals.iter().all(|&n| n <= CRG_EP_NUM)
-}
+pub fn old_independent_subtotal_ok(subtotals: &[usize]) -> bool { subtotals.iter().all(|&n| n <= CRG_EP_NUM) }
 
 #[cfg(test)]
 mod tests {
