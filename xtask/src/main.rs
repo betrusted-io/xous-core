@@ -427,8 +427,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         Some("ccid-hil") => {
             baosec_common(&mut builder)?;
-            builder.add_feature("ccid-openpgp");
             builder.add_feature("ccid-echo");
+            builder.add_feature("oem-baosec-lite");
+            builder.add_loader_feature("oem-baosec-lite");
         }
 
         // ------ Precursor hardware image configs ------
@@ -1020,7 +1021,7 @@ Hosted emulation:
  pddb-dev                Testing for compilation errors on hardware targets on the PDDB.
  hosted-ci               Check that precursor hosted mode isn't broken
  hosted-bao1x-ci         Check that bao1x hosted mode isn't broken
- ccid-hil                Baosec image with ccid-openpgp + ccid-echo for USB HIL testing
+ ccid-hil                Baosec-lite HIL image (ccid-openpgp + ccid-echo; oem-baosec-lite for PDDB boards)
 
 Renode emulation:
  renode-image            Renode user image. Unspecified [cratespecs] are apps
