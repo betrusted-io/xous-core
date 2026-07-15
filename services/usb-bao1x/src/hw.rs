@@ -83,8 +83,9 @@ pub struct Bao1xUsb<'a> {
     pub irq_serviced: AtomicBool,
     #[cfg(feature = "ccid-openpgp")]
     pub ccid: CcidTransportClass<'a, CorigineWrapper>,
+    /// Present only while PDDB `usb.ccid` / `provisioned` is not `OKV1` (saves 2 bulk endpoints).
     #[cfg(feature = "ccid-openpgp")]
-    pub provision_serial: SerialPort<'a, CorigineWrapper, [u8; 1024], [u8; 1024]>,
+    pub provision_serial: Option<SerialPort<'a, CorigineWrapper, [u8; 1024], [u8; 1024]>>,
     #[cfg(feature = "ccid-openpgp")]
     pub ccid_rx: Rc<RefCell<VecDeque<Vec<u8>>>>,
     #[cfg(feature = "ccid-openpgp")]
@@ -106,12 +107,7 @@ impl<'a> Bao1xUsb<'a> {
         usb_alloc: &'a UsbBusAllocator<CorigineWrapper>,
         serial_number: &'a String,
         #[cfg(feature = "ccid-openpgp")] ccid: CcidTransportClass<'a, CorigineWrapper>,
-        #[cfg(feature = "ccid-openpgp")] provision_serial: SerialPort<
-            'a,
-            CorigineWrapper,
-            [u8; 1024],
-            [u8; 1024],
-        >,
+        #[cfg(feature = "ccid-openpgp")] enable_provision_serial: bool,
         #[cfg(feature = "ccid-openpgp")] ccid_rx: Rc<RefCell<VecDeque<Vec<u8>>>>,
         #[cfg(feature = "ccid-openpgp")] prov_lines: Rc<RefCell<VecDeque<Vec<u8>>>>,
         #[cfg(feature = "ccid-openpgp")] prov_capture_enabled: Arc<AtomicBool>,
@@ -174,7 +170,11 @@ impl<'a> Bao1xUsb<'a> {
             #[cfg(feature = "ccid-openpgp")]
             ccid,
             #[cfg(feature = "ccid-openpgp")]
-            provision_serial,
+            provision_serial: if enable_provision_serial {
+                Some(make_provisioning_serial(usb_alloc))
+            } else {
+                None
+            },
             #[cfg(feature = "ccid-openpgp")]
             ccid_rx,
             #[cfg(feature = "ccid-openpgp")]
@@ -240,7 +240,9 @@ impl<'a> Bao1xUsb<'a> {
         #[cfg(feature = "ccid-openpgp")]
         {
             self.ccid.reset();
-            self.provision_serial.reset();
+            if let Some(prov) = &mut self.provision_serial {
+                prov.reset();
+            }
         }
         self.fido_tx_queue = RefCell::new(VecDeque::new());
         self.kbd_tx_queue = RefCell::new(VecDeque::new());
@@ -340,7 +342,9 @@ pub(crate) fn composite_handler(_irq_no: usize, arg: *mut usize) {
                         #[cfg(feature = "ccid-openpgp")]
                         {
                             usb.ccid.reset();
-                            usb.provision_serial.reset();
+                            if let Some(prov) = &mut usb.provision_serial {
+                                prov.reset();
+                            }
                         }
                     }
                 }
@@ -351,12 +355,19 @@ pub(crate) fn composite_handler(_irq_no: usize, arg: *mut usize) {
                 #[cfg(not(feature = "ccid-openpgp"))]
                 let polled = device.poll(&mut [class, serial as &mut dyn UsbClass<_>]);
                 #[cfg(feature = "ccid-openpgp")]
-                let polled = device.poll(&mut [
-                    class,
-                    serial as &mut dyn UsbClass<_>,
-                    &mut usb.provision_serial as &mut dyn UsbClass<_>,
-                    &mut usb.ccid as &mut dyn UsbClass<_>,
-                ]);
+                let polled = {
+                    let ccid = &mut usb.ccid as &mut dyn UsbClass<_>;
+                    if let Some(prov) = &mut usb.provision_serial {
+                        device.poll(&mut [
+                            class,
+                            serial as &mut dyn UsbClass<_>,
+                            prov as &mut dyn UsbClass<_>,
+                            ccid,
+                        ])
+                    } else {
+                        device.poll(&mut [class, serial as &mut dyn UsbClass<_>, ccid])
+                    }
+                };
                 if polled {
                     if let Ok(count) = serial.read(&mut usb.serial_rx) {
                         xous::try_send_message(
@@ -397,36 +408,37 @@ pub(crate) fn composite_handler(_irq_no: usize, arg: *mut usize) {
                     #[cfg(feature = "ccid-openpgp")]
                     {
                         if usb.prov_capture_enabled.load(Ordering::SeqCst) {
-                            if let Ok(n) = usb.provision_serial.read(&mut usb.prov_serial_rx) {
-                                for &b in &usb.prov_serial_rx[..n] {
-                                    if b == b'\n' || b == b'\r' {
-                                        let line: Vec<u8> = {
-                                            let mut acc = usb.prov_line_acc.borrow_mut();
-                                            if acc.is_empty() {
-                                                continue;
-                                            }
-                                            std::mem::take(&mut *acc)
-                                        };
-                                        RefCell::borrow_mut(&*Rc::clone(&usb.prov_lines)).push_back(line);
-                                        xous::try_send_message(
-                                            usb.conn,
-                                            Message::new_scalar(
-                                                Opcode::IrqProvSerialRx.to_usize().unwrap(),
-                                                0,
-                                                0,
-                                                0,
-                                                0,
-                                            ),
-                                        )
-                                        .ok();
-                                    } else if b >= 0x20 {
-                                        usb.prov_line_acc.borrow_mut().push(b);
+                            if let Some(prov_serial) = &mut usb.provision_serial {
+                                if let Ok(n) = prov_serial.read(&mut usb.prov_serial_rx) {
+                                    for &b in &usb.prov_serial_rx[..n] {
+                                        if b == b'\n' || b == b'\r' {
+                                            let line: Vec<u8> = {
+                                                let mut acc = usb.prov_line_acc.borrow_mut();
+                                                if acc.is_empty() {
+                                                    continue;
+                                                }
+                                                std::mem::take(&mut *acc)
+                                            };
+                                            RefCell::borrow_mut(&*Rc::clone(&usb.prov_lines)).push_back(line);
+                                            xous::try_send_message(
+                                                usb.conn,
+                                                Message::new_scalar(
+                                                    Opcode::IrqProvSerialRx.to_usize().unwrap(),
+                                                    0,
+                                                    0,
+                                                    0,
+                                                    0,
+                                                ),
+                                            )
+                                            .ok();
+                                        } else if b >= 0x20 {
+                                            usb.prov_line_acc.borrow_mut().push(b);
+                                        }
                                     }
                                 }
                             }
                         }
                     }
-                }
                 {
                     // scoping on the hardware lock to manipulate pointer states
                     let mut hw_lock = usb.wrapper.core();

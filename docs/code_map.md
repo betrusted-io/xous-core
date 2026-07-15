@@ -73,7 +73,7 @@ Shared queues on `Bao1xUsb` (`hw.rs`):
 | [`services/usb-bao1x/src/hw.rs`](../services/usb-bao1x/src/hw.rs) | Composite gadget registration, `make_ccid_transport`, `make_provisioning_serial`, IRQ provisioning capture |
 | [`services/usb-bao1x/src/main.rs`](../services/usb-bao1x/src/main.rs) | Boot: PDDB provision check, queue setup; loop: CCID IPC, echo branch, provisioning commit |
 | [`services/usb-bao1x/src/lib.rs`](../services/usb-bao1x/src/lib.rs) | Public `ccid_framing` module; U2F client API (template for handler IPC) |
-| [`xtask/src/main.rs`](../xtask/src/main.rs) | `baosec_common()` adds `ccid-openpgp`; `ccid-hil` target adds `ccid-echo` |
+| [`xtask/src/main.rs`](../xtask/src/main.rs) | `baosec` = no CCID; `baosec-ccid` adds `ccid-openpgp`; `ccid-hil` adds echo + `oem-baosec-lite`; `pddb` before `usb-bao1x` in service order |
 
 ---
 
@@ -99,7 +99,7 @@ Shared queues on `Bao1xUsb` (`hw.rs`):
 
 | Symptom | First places to inspect |
 |---------|-------------------------|
-| No CCID interface in `lsusb` | Image features: `xtask` target; `hw.rs` composite class list; missing `ccid-openpgp` |
+| No CCID interface in `lsusb` | Built `baosec` (no CCID) instead of `baosec-ccid` / `ccid-hil`; `hw.rs` composite class list; missing `ccid-openpgp` |
 | `echo mismatch` / smoke test fail | Image has `ccid-echo`? `main.rs` `IrqCcidRx` echo branch; host timing (`ccid_smoke.py`) |
 | Handler never receives frames | Handler connected to `_Xous USB device driver_`? `CcidRxDeferred` with `RxWait`; production image must **not** use `ccid-echo` |
 | `CcidCode::Denied` on receive | Only one listener PID; second process blocked in `main.rs` `CcidRxDeferred` |
@@ -107,7 +107,7 @@ Shared queues on `Bao1xUsb` (`hw.rs`):
 | Partial / truncated CCID frames | `ccid_framing.rs` `drain_complete_frames`; host sending before configured |
 | Oversize frame / silent drop | `append_bulk_out` overflow path in `ccid_transport.rs` `endpoint_out` |
 | Bulk IN stuck / no reply | `poll_bulk_in`, `tx_pending` in `ccid_transport.rs`; handler called `CcidTx`? |
-| Provisioning port missing | Already `OKV1` in PDDB; `is_ccid_provisioned` at boot |
+| Provisioning port missing | Already `OKV1` in PDDB (`is_ccid_provisioned` at boot); `hw.rs` skips `provision_serial` when provisioned |
 | Provisioning port won't accept lines | `prov_capture_enabled` false; non-printable bytes filtered in `hw.rs` |
 | Provisioning saved but no reset | `save_provisioned_pins` error path; `main.rs` `IrqProvSerialRx` |
 | PDDB keys wrong / missing | `ccid_store.rs` dict and key names; PDDB basis policy (out of tree) |
@@ -139,7 +139,7 @@ match the failing step to the table above.
 | Path | Runs |
 |------|------|
 | [`.github/workflows/ccid-ci.yml`](../.github/workflows/ccid-ci.yml) | Unit tests + hosted/board check + `ccid-hil` compile |
-| [`.github/workflows/build.yml`](../.github/workflows/build.yml) | Full `cargo xtask baosec` matrix (includes `ccid-openpgp`) |
+| [`.github/workflows/build.yml`](../.github/workflows/build.yml) | Full `cargo xtask baosec` matrix (default image, no CCID) |
 | [`.github/workflows/ccid-hil.yml`](../.github/workflows/ccid-hil.yml) | Self-hosted `tools/ccid_hil/run_all.sh` |
 
 Local equivalents:

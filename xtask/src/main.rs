@@ -427,6 +427,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         Some("ccid-hil") => {
             baosec_common(&mut builder)?;
+            builder.add_feature("ccid-openpgp");
             builder.add_feature("ccid-echo");
             builder.add_feature("oem-baosec-lite");
             builder.add_loader_feature("oem-baosec-lite");
@@ -770,6 +771,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             baosec_common(&mut builder)?;
         }
 
+        Some("baosec-ccid") => {
+            baosec_common(&mut builder)?;
+            builder.add_feature("ccid-openpgp");
+        }
+
         Some("baosec-lite") => {
             baosec_common(&mut builder)?;
             builder.add_feature("oem-baosec-lite");
@@ -1001,7 +1007,8 @@ Hardware images:
  ro-test                 automation framework for TRNG testing (RO directly, no CPRNG). [cratespecs] ignored.
  av-test                 automation framework for TRNG testing (AV directly, no CPRNG). [cratespecs] ignored.
  tiny                    Precursor tiny image. For testing with services built out-of-tree.
- baosec                  Baosec application target image.
+ baosec                  Baosec application target image (no CCID; same as upstream dev).
+ baosec-ccid             Baosec with ccid-openpgp transport + provisioning (no ccid-echo).
  dabao                   Dabao application target image.
  bao1x-baremetal-baosec  Baremetal image for baosec boards.
  bao1x-baremetal-dabao   Baremetal image for dabao boards.
@@ -1208,10 +1215,10 @@ fn baosec_common(builder: &mut Builder) -> std::io::Result<()> {
         "xous-ticktimer",
         "xous-log",
         "xous-names",
+        "pddb",
         "usb-bao1x",
         "bao1x-hal-service",
         "modals",
-        "pddb",
         "bao-video",
     ]
     .to_vec();
@@ -1240,7 +1247,6 @@ fn baosec_common(builder: &mut Builder) -> std::io::Result<()> {
     // builder.add_kernel_feature("debug-swap-verbose");
     // builder.add_feature("quantum-timer"); // this isn't in bao1x..
     builder.add_kernel_feature("v2p");
-    builder.add_feature("ccid-openpgp");
     builder.target_bao1x_soc();
 
     // It is important that this is the first service added, because the swapper *must* be in PID 2

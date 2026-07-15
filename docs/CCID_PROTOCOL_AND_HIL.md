@@ -203,8 +203,9 @@ the handler is running.
 
 | Build target | Features | CCID behavior | Intended use |
 |--------------|----------|---------------|--------------|
-| `cargo xtask baosec` | `ccid-openpgp` | Frames go to IPC handler only | Production / field images |
-| `cargo xtask ccid-hil` | `ccid-openpgp` + **`ccid-echo`** | IRQ path **echoes host frames on bulk IN** without handler | Lab / CI HIL only |
+| `cargo xtask baosec` | none (default) | No CCID interface; unchanged vs upstream `dev` | Default production image |
+| `cargo xtask baosec-ccid` | `ccid-openpgp` | Frames go to IPC handler only | CCID transport + provisioning |
+| `cargo xtask ccid-hil` | `ccid-openpgp` + **`ccid-echo`** | IRQ path **echoes host frames on bulk IN** without handler | Lab / bench HIL only |
 
 **`ccid-echo` must never ship in production images.**
 
@@ -217,8 +218,8 @@ bytes back on bulk IN. That:
 - Must not be combined with tools (`pcscd`, GnuPG) that interpret responses as
   genuine card replies.
 
-Production builds use `baosec_common()` which adds `ccid-openpgp` but **does
-not** add `ccid-echo`. Only the dedicated `ccid-hil` xtask target enables echo.
+Production CCID builds use the dedicated `baosec-ccid` xtask target, which adds
+`ccid-openpgp` but **does not** add `ccid-echo`. Only `ccid-hil` enables echo.
 
 **Release checklist:** verify the flashed image was built with `ccid-hil` only on
 test benches; confirm `ccid-echo` is absent from production feature sets.
@@ -387,12 +388,20 @@ Defined in `services/usb-bao1x/Cargo.toml`:
 Build commands:
 
 ```bash
-# Production baosec image (transport + provisioning; handler must be added separately)
+# Default baosec image (no CCID; matches upstream dev)
 cargo xtask baosec
+
+# Production CCID transport + provisioning (handler must be added separately)
+cargo xtask baosec-ccid
 
 # HIL test image (adds ccid-echo; no external handler needed for USB tests)
 cargo xtask ccid-hil
 ```
+
+When `ccid-openpgp` is enabled, the provisioning CDC interface is created only
+while PDDB lacks `usb.ccid/provisioned=OKV1`. After provisioning, two bulk
+endpoints are freed so the composite gadget stays within the Corigine endpoint
+budget (`CRG_EP_NUM = 8`).
 
 Compile-only checks without flashing:
 
