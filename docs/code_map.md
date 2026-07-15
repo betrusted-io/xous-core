@@ -2,33 +2,140 @@
 SPDX-License-Identifier: Apache-2.0
 -->
 
-# CCID code map
+# CCID and USB code map
 
 Navigation guide for code-proficient developers who need to locate, debug, or fix
-CCID and provisioning behavior in `usb-bao1x` ([PR #890](https://github.com/betrusted-io/xous-core/pull/890)).
+USB enumeration and CCID/provisioning behavior in `usb-bao1x`
+([PR #890](https://github.com/betrusted-io/xous-core/pull/890)).
 
-**Related docs:** protocol, security, and testing —
+**Related docs:** protocol, security, HIL setup —
 [`CCID_PROTOCOL_AND_HIL.md`](CCID_PROTOCOL_AND_HIL.md);
 verification status — [`CCID_TEST_REPORT.md`](CCID_TEST_REPORT.md).
 
-Start from a **symptom** in [Symptom to code](#symptom-to-code-self-service-debug), then
-open the listed file and function.
+**Start here:** [Debug decision tree](#debug-decision-tree) (one host check, then
+symptom table). Do not paste code snippets into the PR until the tree step
+identifies the layer.
 
 ## Table of contents
 
-1. [Runtime data flow (device)](#runtime-data-flow-device)
-2. [Source files (device firmware)](#source-files-device-firmware)
-3. [Key functions by concern](#key-functions-by-concern)
-4. [Symptom to code (self-service debug)](#symptom-to-code-self-service-debug)
-5. [Host-side test code](#host-side-test-code)
-6. [CI and build entry points](#ci-and-build-entry-points)
-7. [Compile-time feature branches](#compile-time-feature-branches)
-8. [Out-of-tree (not in this repo)](#out-of-tree-not-in-this-repo)
-9. [Related paths quick index](#related-paths-quick-index)
+1. [Debug decision tree](#debug-decision-tree)
+2. [USB enumeration flow (base stack)](#usb-enumeration-flow-base-stack)
+3. [Runtime data flow (CCID layer)](#runtime-data-flow-ccid-layer)
+4. [Source files (device firmware)](#source-files-device-firmware)
+5. [Key functions by concern](#key-functions-by-concern)
+6. [Symptom to code (self-service debug)](#symptom-to-code-self-service-debug)
+7. [Host checks (copy-paste)](#host-checks-copy-paste)
+8. [Host-side test code](#host-side-test-code)
+9. [CI and build entry points](#ci-and-build-entry-points)
+10. [Compile-time feature branches](#compile-time-feature-branches)
+11. [Out-of-tree (not in this repo)](#out-of-tree-not-in-this-repo)
+12. [Related paths quick index](#related-paths-quick-index)
 
 ---
 
-## Runtime data flow (device)
+## Debug decision tree
+
+Work top to bottom. Each step names the firmware layer and the doc section to
+open next.
+
+```
+Flashed image?
+  |
+  +-- Unknown / wrong target
+  |     --> Confirm: cargo xtask baosec | baosec-ccid | ccid-hil
+  |         (see CCID_TEST_REPORT.md "Image targets")
+  |         baosec = no CCID (upstream dev parity)
+  |         baosec-ccid / ccid-hil = CCID transport enabled
+  |
+  +-- Known target --> Host: lsusb -d 1d50:6198
+        |
+        +-- NO LINE (device not visible at all)
+        |     --> BASE USB LAYER — not CCID-specific
+        |         1. Flash cargo xtask baosec (baseline). Still nothing?
+        |            Problem is pre-CCID: board power, cable, SE0, Corigine driver.
+        |         2. If baosec works but baosec-ccid/ccid-hil does not:
+        |            Endpoint budget or CCID boot path — see symptom table rows
+        |            "Nothing enumerates" and "CCID image breaks enumeration".
+        |         Files: main.rs boot, hw.rs init/poll, driver.rs handle_event_inner
+        |
+        +-- DEVICE VISIBLE, lsusb -v shows HID + serial, NO interface class 0x0B
+        |     --> Wrong image (baosec) OR ccid-openpgp not in feature set
+        |         Fix: cargo xtask baosec-ccid or ccid-hil
+        |         Files: xtask/src/main.rs, usb-bao1x/Cargo.toml
+        |
+        +-- DEVICE VISIBLE, class 0x0B (CCID) present
+              |
+              +-- ccid_smoke.py / HIL echo fails
+              |     --> CCID transport layer (framing, echo, configured state)
+              |         Files: ccid_transport.rs, ccid_framing.rs, main.rs IrqCcidRx
+              |
+              +-- Echo OK, OpenPGP / pcscd fails
+                    --> Out-of-tree handler not connected to CcidRxDeferred / CcidTx
+                        See protocol doc handler skeleton
+```
+
+**Minimum PR report** (if still stuck after the tree): flashed `xtask` target,
+output of `lsusb -d 1d50:6198`, and whether stock `baosec` enumerates on the
+same board. No firmware source paste required if this table was followed.
+
+---
+
+## USB enumeration flow (base stack)
+
+Enumeration is **interrupt-driven**, not done in the `main.rs` IPC loop.
+
+```
+main_hw() boot (main.rs)
+  |
+  +-- Map Corigine USB MMIO + IFRAM + IRQ CSR
+  +-- CorigineUsb::new + reset
+  +-- Bao1xUsb::new — UsbDeviceBuilder + register UsbClass instances
+  |     (HID, debug serial, [optional prov CDC], [optional CCID])
+  +-- cu.init() — claim IRQ, core init/start, enable EV_ENABLE
+  +-- setup_usb_pins + SE0 released (Input) — host can see device
+  |
+  v
+main loop: reply_and_receive_next only (IPC). USB runs in IRQ.
+
+Corigine hardware IRQ
+  |
+  v
+composite_handler (hw.rs)
+  |
+  +-- handle_event_inner (libs/bao1x-hal/.../driver.rs)
+  |     Port reset, cable connect, EP0 setup/data, bulk completion
+  |     --> CrgEvent stored on CorigineWrapper
+  |
+  +-- device.poll(&mut [classes...])  (usb-device crate)
+  |     Host GET_DESCRIPTOR, SET_ADDRESS, SET_CONFIGURATION
+  |     State becomes UsbDeviceState::Configured
+  |
+  +-- Class I/O in same IRQ (serial read, HID reports, CCID bulk, prov CDC)
+```
+
+| Stage | File | Symbol / area |
+|-------|------|----------------|
+| Gadget assembly | `hw.rs` | `Bao1xUsb::new`, `UsbDeviceBuilder`, class list |
+| Controller start | `hw.rs` | `Bao1xUsb::init` |
+| SE0 / attach | `main.rs` | `setup_usb_pins`, `set_gpio_pin_dir(..., Input)` ~327 |
+| IRQ entry | `hw.rs` | `composite_handler` ~275 |
+| Low-level events | `libs/bao1x-hal/src/usb/driver.rs` | `handle_event_inner` ~2898 |
+| Bus poll adapter | `libs/bao1x-hal/src/usb/driver.rs` | `CorigineWrapper::poll`, `set_device_address`, `reset` |
+| Configured gate | `main.rs` | `cu.device.state() != Configured` on U2fTx, CcidTx, etc. |
+| Forced re-enumerate | `hw.rs` / `main.rs` | `Bao1xUsb::unplug`, PMIC `VbusIrq::Remove` |
+
+**Endpoint budget:** Corigine `CRG_EP_NUM = 8`. `hw.rs` comments warn that adding
+interfaces may require removing another. With `ccid-openpgp`, provisioning CDC is
+**omitted** when PDDB already has `usb.ccid/provisioned=OKV1` so two bulk
+endpoints stay free. `device.poll()` passes 3 or 4 classes to match.
+
+**Service boot order (CCID images):** `pddb` must start before `usb-bao1x` in
+`baosec_common()` because `main.rs` calls `pddb::Pddb::new()` before `cu.init()`
+when `ccid-openpgp` is enabled.
+
+---
+
+## Runtime data flow (CCID layer)
 
 ```
 USB IRQ (hw.rs: composite_handler)
@@ -65,15 +172,16 @@ Shared queues on `Bao1xUsb` (`hw.rs`):
 
 | File | What to change here |
 |------|---------------------|
+| [`libs/bao1x-hal/src/usb/driver.rs`](../libs/bao1x-hal/src/usb/driver.rs) | Corigine UDC: `handle_event_inner`, EP0, `set_device_address`, `PollResult`, port reset |
 | [`services/usb-bao1x/Cargo.toml`](../services/usb-bao1x/Cargo.toml) | Feature flags: `ccid-openpgp`, `ccid-echo`; optional `pddb` dep |
 | [`services/usb-bao1x/src/api.rs`](../services/usb-bao1x/src/api.rs) | IPC contract: `Opcode::{CcidRxDeferred,CcidTx,IrqCcidRx,IrqProvSerialRx}`, `CcidMsgIpc`, `CcidCode` |
 | [`services/usb-bao1x/src/ccid_framing.rs`](../services/usb-bao1x/src/ccid_framing.rs) | Wire math: `CCID_WIRE_MAX`, `append_bulk_out`, `drain_complete_frames`, `next_tx_chunk`; **unit tests** |
 | [`services/usb-bao1x/src/ccid_transport.rs`](../services/usb-bao1x/src/ccid_transport.rs) | USB class 0x0B descriptors, bulk OUT assembly, bulk IN chunking, `enqueue_response` |
 | [`services/usb-bao1x/src/ccid_store.rs`](../services/usb-bao1x/src/ccid_store.rs) | PDDB dict `usb.ccid`, keys `user_pin_line` / `admin_pin_line` / `provisioned` |
-| [`services/usb-bao1x/src/hw.rs`](../services/usb-bao1x/src/hw.rs) | Composite gadget registration, `make_ccid_transport`, `make_provisioning_serial`, IRQ provisioning capture |
-| [`services/usb-bao1x/src/main.rs`](../services/usb-bao1x/src/main.rs) | Boot: PDDB provision check, queue setup; loop: CCID IPC, echo branch, provisioning commit |
+| [`services/usb-bao1x/src/hw.rs`](../services/usb-bao1x/src/hw.rs) | Composite gadget, `composite_handler`, `device.poll` class list, prov CDC `Option` |
+| [`services/usb-bao1x/src/main.rs`](../services/usb-bao1x/src/main.rs) | Boot, SE0, PDDB provision check, IPC loop, `Configured` checks, `unplug` |
 | [`services/usb-bao1x/src/lib.rs`](../services/usb-bao1x/src/lib.rs) | Public `ccid_framing` module; U2F client API (template for handler IPC) |
-| [`xtask/src/main.rs`](../xtask/src/main.rs) | `baosec` = no CCID; `baosec-ccid` adds `ccid-openpgp`; `ccid-hil` adds echo + `oem-baosec-lite`; `pddb` before `usb-bao1x` in service order |
+| [`xtask/src/main.rs`](../xtask/src/main.rs) | `baosec` = no CCID; `baosec-ccid` adds `ccid-openpgp`; `ccid-hil` adds echo + `oem-baosec-lite`; `pddb` before `usb-bao1x` |
 
 ---
 
@@ -81,6 +189,12 @@ Shared queues on `Bao1xUsb` (`hw.rs`):
 
 | Concern | Location |
 |---------|----------|
+| Enumeration (control plane) | `driver.rs` `handle_event_inner`; `hw.rs` `composite_handler` + `device.poll` |
+| SE0 release for host attach | `main.rs` ~327 `set_gpio_pin_dir(..., Input)` |
+| SET_ADDRESS / EP enable | `driver.rs` `set_device_address` ~2524 |
+| Bus reset handling | `driver.rs` `EventPortStatusChange`; `hw.rs` reset branch in `composite_handler` |
+| Endpoint allocation limit | `driver.rs` `CRG_EP_NUM`; `hw.rs` `Bao1xUsb::new` comments |
+| Dynamic poll class count | `hw.rs` `composite_handler` — 3 classes (no prov CDC) or 4 (prov CDC present) |
 | CCID descriptor bytes | `ccid_transport.rs` — `ccid_class_descriptor_bytes`, `get_configuration_descriptors` |
 | Reject oversize host frames | `ccid_framing.rs` — `append_bulk_out` returns `Overflow`, clears buffer |
 | Frame ready notification | `ccid_transport.rs` — `drain_complete_messages` sends `IrqCcidRx` |
@@ -88,10 +202,11 @@ Shared queues on `Bao1xUsb` (`hw.rs`):
 | Handler sends reply | `main.rs` — `Opcode::CcidTx` (~601) calls `enqueue_response` |
 | HIL echo (non-production) | `main.rs` — `#[cfg(feature = "ccid-echo")]` inside `IrqCcidRx` |
 | Second listener rejected | `main.rs` — `CcidRxDeferred` sets `CcidCode::Denied` for other PIDs |
-| Provisioning line parse | `hw.rs` — `composite_handler` prov CDC loop (~397) |
+| Provisioning line parse | `hw.rs` — `composite_handler` prov CDC loop (~408) |
 | Provisioning PDDB write | `main.rs` — `IrqProvSerialRx` (~574); `ccid_store::save_provisioned_pins` |
 | USB reset after provision | `main.rs` — `cu.unplug()` (baosec) or `force_reset` |
-| Already provisioned? | `ccid_store.rs` — `is_ccid_provisioned`; called at boot in `main.rs` (~159) |
+| Already provisioned? | `ccid_store.rs` — `is_ccid_provisioned`; boot in `main.rs` ~159 |
+| PMIC unplug reset | `main.rs` — `Opcode::PmicIrq`, `cu.unplug()` |
 
 ---
 
@@ -99,21 +214,48 @@ Shared queues on `Bao1xUsb` (`hw.rs`):
 
 | Symptom | First places to inspect |
 |---------|-------------------------|
-| No CCID interface in `lsusb` | Built `baosec` (no CCID) instead of `baosec-ccid` / `ccid-hil`; `hw.rs` composite class list; missing `ccid-openpgp` |
+| **Nothing enumerates** (`lsusb` empty for `1d50:6198`) | **Layer 1:** `main.rs` boot order, `cu.init()`, SE0 GPIO ~327. **Layer 2:** `composite_handler` running? `driver.rs` `handle_event_inner`. **Layer 3:** CCID image only — `pddb` before `usb-bao1x` in `xtask`; PDDB hang in `main.rs` ~157. **Baseline:** flash `baosec`; if that also fails, not CCID-specific. |
+| **CCID image breaks enumeration; `baosec` works** | Endpoint budget: count classes in `hw.rs` `device.poll`; prov CDC should be `None` when `OKV1`. Boot: `pddb` service order in `baosec_common()`. Compare feature sets `baosec` vs `baosec-ccid`. |
+| Device visible but **stuck at "new full-speed USB"** / never configured | `driver.rs` EP0 / `set_device_address`; `composite_handler` double-lock (`double_lock_detected` in main loop). Host `dmesg` for STALL. |
+| **Double lock** log in main loop | `hw.rs` `composite_handler` ~306 `try_lock` failure path |
+| No CCID interface in `lsusb -v` | Built `baosec` (no CCID) instead of `baosec-ccid` / `ccid-hil`; missing `ccid-openpgp` feature |
 | `echo mismatch` / smoke test fail | Image has `ccid-echo`? `main.rs` `IrqCcidRx` echo branch; host timing (`ccid_smoke.py`) |
-| Handler never receives frames | Handler connected to `_Xous USB device driver_`? `CcidRxDeferred` with `RxWait`; production image must **not** use `ccid-echo` |
-| `CcidCode::Denied` on receive | Only one listener PID; second process blocked in `main.rs` `CcidRxDeferred` |
+| Handler never receives frames | Handler on `_Xous USB device driver_`? `CcidRxDeferred` + `RxWait`; production must **not** use `ccid-echo` |
+| `CcidCode::Denied` on receive | Only one listener PID; `main.rs` `CcidRxDeferred` |
 | `CcidCode::Hangup` on send | USB not configured; `main.rs` `CcidTx` checks `UsbDeviceState::Configured` |
 | Partial / truncated CCID frames | `ccid_framing.rs` `drain_complete_frames`; host sending before configured |
-| Oversize frame / silent drop | `append_bulk_out` overflow path in `ccid_transport.rs` `endpoint_out` |
+| Oversize frame / silent drop | `append_bulk_out` overflow in `ccid_transport.rs` `endpoint_out` |
 | Bulk IN stuck / no reply | `poll_bulk_in`, `tx_pending` in `ccid_transport.rs`; handler called `CcidTx`? |
-| Provisioning port missing | Already `OKV1` in PDDB (`is_ccid_provisioned` at boot); `hw.rs` skips `provision_serial` when provisioned |
+| Provisioning port missing | `OKV1` in PDDB; `hw.rs` skips `provision_serial` when provisioned |
 | Provisioning port won't accept lines | `prov_capture_enabled` false; non-printable bytes filtered in `hw.rs` |
-| Provisioning saved but no reset | `save_provisioned_pins` error path; `main.rs` `IrqProvSerialRx` |
-| PDDB keys wrong / missing | `ccid_store.rs` dict and key names; PDDB basis policy (out of tree) |
-| Board compile error in CI | `ccid-ci.yml` feature set; `RefCell`/`borrow` patterns in `hw.rs` / `main.rs` |
-| Fork CI `Can't sign swap image` | `.github/workflows/build.yml` upstream tag fetch step |
-| Unit test regression | `ccid_framing.rs` `mod tests`; run `cargo test -p usb-bao1x --lib ccid_framing` |
+| Provisioning saved but no reset | `save_provisioned_pins` error; `main.rs` `IrqProvSerialRx` |
+| PDDB keys wrong / missing | `ccid_store.rs`; PDDB basis policy (out of tree) |
+| Board compile error in CI | `ccid-ci.yml`; `RefCell`/`borrow` in `hw.rs` / `main.rs` |
+| Fork CI `Can't sign swap image` | `.github/workflows/build.yml` upstream tag fetch |
+| Unit test regression | `ccid_framing.rs` `mod tests`; `cargo test -p usb-bao1x --lib ccid_framing` |
+
+---
+
+## Host checks (copy-paste)
+
+Run on the machine with the device plugged in. Interpret via
+[Debug decision tree](#debug-decision-tree).
+
+```bash
+# Step 1 — is anything visible?
+lsusb -d 1d50:6198
+
+# Step 2 — interfaces (expect HID 0x03, CDC serial, CCID 0x0B on ccid images)
+lsusb -d 1d50:6198 -v 2>/dev/null | grep -E 'bInterfaceClass|iInterface|idProduct'
+
+# Step 3 — kernel view (stall, reset loops)
+dmesg -T | tail -30
+
+# Step 4 — CCID transport only (ccid-hil or baosec-ccid + ccid-echo image)
+python3 tools/ccid_smoke.py
+```
+
+Expected `idProduct` for baosec boards: `0x6198` (`hw.rs` `UsbVidPid(0x1d50, pid)`).
 
 ---
 
@@ -129,8 +271,8 @@ Shared queues on `Bao1xUsb` (`hw.rs`):
 | [`tools/ccid_hil/run_all.sh`](../tools/ccid_hil/run_all.sh) | Ordered suite driver |
 | [`tools/ccid_hil/wait_device.sh`](../tools/ccid_hil/wait_device.sh) | USB presence gate |
 
-To reproduce a HIL failure locally: run the exact script from the CI log, then
-match the failing step to the table above.
+To reproduce a HIL failure: run the failing script, then match the step to the
+symptom table above.
 
 ---
 
@@ -138,16 +280,18 @@ match the failing step to the table above.
 
 | Path | Runs |
 |------|------|
-| [`.github/workflows/ccid-ci.yml`](../.github/workflows/ccid-ci.yml) | Unit tests + hosted/board check + `ccid-hil` compile |
+| [`.github/workflows/ccid-ci.yml`](../.github/workflows/ccid-ci.yml) | Unit tests + hosted/board check + `baosec-ccid` + `ccid-hil` compile |
 | [`.github/workflows/build.yml`](../.github/workflows/build.yml) | Full `cargo xtask baosec` matrix (default image, no CCID) |
-| [`.github/workflows/ccid-hil.yml`](../.github/workflows/ccid-hil.yml) | Self-hosted `tools/ccid_hil/run_all.sh` |
+| [`.github/workflows/ccid-hil.yml`](../.github/workflows/ccid-hil.yml) | Self-hosted `tools/ccid_hil/run_all.sh` (scaffolding; no runner yet) |
 
 Local equivalents:
 
 ```bash
 cargo test -p usb-bao1x --lib ccid_framing
 cargo check -p usb-bao1x --features board-baosec,ccid-openpgp,bao1x --target riscv32imac-unknown-xous-elf
-cargo xtask ccid-hil --no-verify
+cargo xtask baosec --no-verify          # baseline USB (no CCID)
+cargo xtask baosec-ccid --no-verify     # CCID production transport
+cargo xtask ccid-hil --no-verify        # CCID + echo for bench
 python3 tools/ccid_smoke.py
 ```
 
@@ -159,7 +303,7 @@ When reading `main.rs`, note `cfg` gates:
 
 | `cfg` | Effect |
 |-------|--------|
-| `feature = "ccid-openpgp"` | All CCID + provisioning code compiled in |
+| `feature = "ccid-openpgp"` | CCID + provisioning + `pddb::Pddb::new()` at boot |
 | `feature = "ccid-echo"` | `IrqCcidRx` echoes frames; **disables** `CcidRxDeferred` handler path |
 | `not(feature = "ccid-echo")` | Production path: deferred listener + `CcidRxDeferred` opcodes |
 | `target_os = "xous"` | `ccid_transport` / `ccid_store` are device-only modules |
@@ -184,12 +328,15 @@ protocol doc and wire the process into the product's Xous service table.
 
 | Path | Purpose |
 |------|---------|
+| `libs/bao1x-hal/src/usb/driver.rs` | Corigine UDC, enumeration events, EP0 |
+| `services/usb-bao1x/src/hw.rs` | Composite gadget, IRQ handler, `device.poll` |
+| `services/usb-bao1x/src/main.rs` | Boot, SE0, IPC loop, configured gates |
 | `services/usb-bao1x/src/ccid_transport.rs` | USB CCID class driver |
 | `services/usb-bao1x/src/ccid_framing.rs` | Wire format helpers + unit tests |
 | `services/usb-bao1x/src/ccid_store.rs` | PDDB provisioning storage |
 | `services/usb-bao1x/src/api.rs` | IPC opcodes and `CcidMsgIpc` |
-| `services/usb-bao1x/src/main.rs` | Deferred listener, echo, provisioning |
+| `xtask/src/main.rs` | Image targets and service order |
 | `tools/ccid_smoke.py` | Host smoke test |
 | `tools/ccid_hil/` | HIL scripts and suite |
 | `.github/workflows/ccid-ci.yml` | CI compile + unit tests |
-| `.github/workflows/ccid-hil.yml` | Nightly Pi HIL |
+| `.github/workflows/ccid-hil.yml` | Nightly Pi HIL (scaffolding) |
