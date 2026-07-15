@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """
-rs_errata_check.py - Check and patch RISC-V assembly errata in Rust .rs files.
+erratum_check.py - Check and patch RISC-V assembly errata in Rust .rs files.
 
 Scans Rust source files for bio_code! and bio_code_aligned! macros, extracts
 the inline assembly strings, checks each instruction for known BIO coprocessor
 errata, and optionally patches the file in-place.
 
 Usage:
-    python3 rs_errata_check.py <file.rs> [file2.rs ...]   # check only (default)
-    python3 rs_errata_check.py --autopatch <file.rs> ...   # patch in-place
+    python3 erratum_check.py <file.rs> [file2.rs ...]   # check only (default)
+    python3 erratum_check.py --autopatch <file.rs> ...   # patch in-place
 
 Errata covered:
   BUG 1 ("phantom rs1"): For lui/auipc/jal, bits [19:15] of the instruction
@@ -515,6 +515,136 @@ def _check_jalr(mnemonic, operands, original_instr):
     return (f"B2:offset={offset}", patch)
 
 
+# ----------------------------------------------------------------------------
+# Hardware-mapped registers (x16-x31)
+#
+# In the BIO core, x16-x31 are not general-purpose registers: reads and writes
+# both have side effects (FIFO pop/push, quantum halt, GPIO, flag set/clear,
+# event wait). A pseudo-instruction like `li x28, 0x800` LOOKS like a single
+# write, but the assembler lowers it to `lui x28, 1; addi x28, x28, -2048`:
+# two writes plus a READ of x28. On a hardware-mapped register that is a
+# different program. We don't auto-patch these - the right fix (temp register,
+# different constant, restructured code) is a judgment call for the assembly
+# programmer - we just make the hidden expansion visible with a warning.
+# ----------------------------------------------------------------------------
+
+HW_REG_MIN = 16
+
+def _reg_number(name):
+    """Map a register name (ABI or xN form) to its number, or None."""
+    if name is None:
+        return None
+    n = name.strip().lower()
+    n = ABI_TO_X.get(n, n)
+    m = re.match(r'^x(\d+)$', n)
+    return int(m.group(1)) if m else None
+
+
+def _is_hw_reg(name):
+    """True if the register is a hardware-mapped BIO register (x16-x31)."""
+    num = _reg_number(name)
+    return num is not None and HW_REG_MIN <= num <= 31
+
+
+def _expand_li(rd, value):
+    """
+    Expand `li rd, value` into the concrete RV32I instruction sequence the
+    assembler would emit (standard hi/lo lowering). Returns a list of
+    instruction strings (unpatched).
+
+      - value fits in signed 12 bits        -> addi rd, zero, value
+      - low 12 bits are zero                 -> lui  rd, hi
+      - otherwise                            -> lui rd, hi ; addi rd, rd, lo
+
+    where lo is the sign-extended low 12 bits and hi absorbs the borrow.
+    """
+    value &= 0xFFFFFFFF
+    lo = value & 0xFFF
+    lo_signed = lo - 0x1000 if (lo & 0x800) else lo
+    hi = ((value - lo_signed) >> 12) & 0xFFFFF
+
+    if hi == 0:
+        # Fits in a single addi from zero (signed 12-bit range).
+        return [f"addi {rd}, zero, {lo_signed}"]
+
+    seq = [f"lui {rd}, 0x{hi:x}"]
+    if lo_signed != 0:
+        seq.append(f"addi {rd}, {rd}, {lo_signed}")
+    return seq
+
+
+def _check_li(mnemonic, operands, original_instr):
+    """
+    Check/patch the `li rd, imm` pseudo-instruction.
+
+    `li` is not a real instruction: the assembler lowers it to lui/addi long
+    after this script runs, so problems live in the *expansion*, invisible to
+    a mnemonic-level scan. Two distinct hazards:
+
+    1. rd is a hardware-mapped register (x16-x31) and the expansion is more
+       than one instruction: the lui+addi lowering is a read-modify-write of
+       rd, so the hardware sees an extra write and a read it was never meant
+       to see. We do NOT auto-patch this - the correct fix depends on what
+       the register does and what the program can tolerate - we emit a
+       warning and leave the instruction unchanged for the programmer.
+
+    2. rd is a normal register: we reproduce the expansion, route each
+       concrete instruction through the existing errata checkers, and patch
+       as usual if any piece triggers Bug 1 or Bug 2.
+    """
+    if len(operands) != 2:
+        return None
+    rd = operands[0]
+    imm = _imm_to_int(operands[1])
+    if imm is None:
+        return None  # symbolic li (label/relocation) - can't analyze statically
+
+    expanded = _expand_li(rd, imm)
+
+    if _is_hw_reg(rd):
+        expansion_str = " ; ".join(expanded)
+        if len(expanded) > 1:
+            return (
+                "WARNING: potential unwanted side-effect due to "
+                f"pseudo-instruction expansion: {original_instr} -> "
+                f"{expansion_str}",
+                [original_instr],
+            )
+        # Single-instruction expansion: no hidden read-modify-write. But if
+        # that one instruction has an encoding erratum, the standard errata
+        # patch would itself touch rd multiple times - also unsafe on a
+        # hardware register - so warn instead of auto-patching.
+        mn, ops = _parse_instruction(expanded[0])
+        sub_check = ERRATA_DISPATCH.get(mn)
+        if sub_check is not None and sub_check(mn, ops, expanded[0]) is not None:
+            return (
+                f"WARNING: errata in pseudo-instruction expansion of a "
+                f"hardware register ({rd}); auto-patch would add extra "
+                f"reads/writes, manual review needed: {original_instr} -> "
+                f"{expansion_str}",
+                [original_instr],
+            )
+        return None  # single-instruction, errata-free expansion: safe
+
+    patched = []
+    bug_descs = []
+    for instr in expanded:
+        mn, ops = _parse_instruction(instr)
+        sub_check = ERRATA_DISPATCH.get(mn)
+        result = sub_check(mn, ops, instr) if sub_check else None
+        if result is None:
+            patched.append(instr)
+        else:
+            sub_desc, sub_patch = result
+            bug_descs.append(sub_desc)
+            patched.extend(sub_patch)
+
+    if not bug_descs:
+        return None  # expansion is entirely safe
+
+    return (f"li-expansion[{'; '.join(bug_descs)}]", patched)
+
+
 # Fence/system instructions: safe
 def _check_fence_or_system(mnemonic, operands, original_instr):
     return None
@@ -543,6 +673,7 @@ ERRATA_DISPATCH = {
     'slti':   _check_i_type_alu,
     'sltiu':  _check_i_type_alu,
     'jalr':   _check_jalr,
+    'li':     _check_li,
     'sw':     _check_store,
     'sh':     _check_store,
     'sb':     _check_store,
