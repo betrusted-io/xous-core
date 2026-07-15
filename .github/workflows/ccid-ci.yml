@@ -47,5 +47,8 @@ jobs:
       - name: CCID board compile check
         run: cargo check -p usb-bao1x --features board-baosec,ccid-openpgp,bao1x --target riscv32imac-unknown-xous-elf
 
+      - name: CCID production image compile check
+        run: cargo xtask baosec-ccid --no-verify
+
       - name: CCID HIL image compile check
         run: cargo xtask ccid-hil --no-verify

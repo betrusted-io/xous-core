@@ -158,6 +158,11 @@ pub(crate) fn main_hw() -> ! {
     #[cfg(feature = "ccid-openpgp")]
     let need_pin_provision = !crate::ccid_store::is_ccid_provisioned(&pddb);
     #[cfg(feature = "ccid-openpgp")]
+    log::info!(
+        "CCID: provision CDC {}",
+        if need_pin_provision { "enabled" } else { "skipped (already provisioned)" }
+    );
+    #[cfg(feature = "ccid-openpgp")]
     let ccid_rx_q = Rc::new(RefCell::new(VecDeque::new()));
     #[cfg(feature = "ccid-openpgp")]
     let prov_lines_q = Rc::new(RefCell::new(VecDeque::new()));
@@ -170,7 +175,6 @@ pub(crate) fn main_hw() -> ! {
     #[cfg(feature = "ccid-openpgp")]
     let mut cu = Box::new({
         let ccid = hw::make_ccid_transport(&usb_alloc, ccid_rx_q.clone(), cid);
-        let provision_serial = hw::make_provisioning_serial(&usb_alloc);
         Bao1xUsb::new(
             usb.clone(),
             irq_csr.clone(),
@@ -179,7 +183,7 @@ pub(crate) fn main_hw() -> ! {
             &usb_alloc,
             &serial_number,
             ccid,
-            provision_serial,
+            need_pin_provision,
             ccid_rx_q,
             prov_lines_q,
             prov_capture.clone(),
