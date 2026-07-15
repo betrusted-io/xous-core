@@ -202,8 +202,9 @@ the handler is running.
 
 | Build target | Features | CCID behavior | Intended use |
 |--------------|----------|---------------|--------------|
-| `cargo xtask baosec` | `ccid-openpgp` | Frames go to IPC handler only | Production / field images |
-| `cargo xtask ccid-hil` | `ccid-openpgp` + **`ccid-echo`** | IRQ path **echoes host frames on bulk IN** without handler | Lab / CI HIL only |
+| `cargo xtask baosec` | none (default) | No CCID interface; unchanged vs upstream `dev` | Default production image |
+| `cargo xtask baosec-ccid` | `ccid-openpgp` | Frames go to IPC handler only | CCID transport + provisioning |
+| `cargo xtask ccid-hil` | `ccid-openpgp` + **`ccid-echo`** | IRQ path **echoes host frames on bulk IN** without handler | Lab / bench HIL only |
 
 **`ccid-echo` must never ship in production images.**
 
@@ -216,8 +217,8 @@ bytes back on bulk IN. That:
 - Must not be combined with tools (`pcscd`, GnuPG) that interpret responses as
   genuine card replies.
 
-Production builds use `baosec_common()` which adds `ccid-openpgp` but **does
-not** add `ccid-echo`. Only the dedicated `ccid-hil` xtask target enables echo.
+Production CCID builds use the dedicated `baosec-ccid` xtask target, which adds
+`ccid-openpgp` but **does not** add `ccid-echo`. Only `ccid-hil` enables echo.
 
 **Release checklist:** verify the flashed image was built with `ccid-hil` only on
 test benches; confirm `ccid-echo` is absent from production feature sets.
@@ -341,6 +342,54 @@ On the device, the composite USB gadget also exposes:
 | dabao   | 0x1d50 | 0x6197 | Dabao          |
 
 Manufacturer string: `Baochip`.
+
+On Linux, expect something like:
+
+```bash
+lsusb -d 1d50:6198
+# ...
+# iInterface 5 CCID Interface   # class 0x0B
+# iInterface 6 ...             # provisioning CDC (if unprovisioned)
+```
+
+---
+
+## Feature flags and firmware images
+
+Defined in `services/usb-bao1x/Cargo.toml`:
+
+| Feature | Depends on | Effect |
+|---------|------------|--------|
+| `ccid-openpgp` | `pddb` | CCID bulk transport + provisioning CDC + PDDB storage |
+| `ccid-echo` | `ccid-openpgp` | Echo every received `PC_to_RDR` frame on bulk IN (HIL only) |
+
+Build commands:
+
+```bash
+# Default baosec image (no CCID; matches upstream dev)
+cargo xtask baosec
+
+# Production CCID transport + provisioning (handler must be added separately)
+cargo xtask baosec-ccid
+
+# HIL test image (adds ccid-echo; no external handler needed for USB tests)
+cargo xtask ccid-hil
+```
+
+When `ccid-openpgp` is enabled, the provisioning CDC interface is created only
+while PDDB lacks `usb.ccid/provisioned=OKV1`. After provisioning, two bulk
+endpoints are freed so the composite gadget stays within the Corigine endpoint
+budget (`CRG_EP_NUM = 8`).
+
+Compile-only checks without flashing:
+
+```bash
+cargo check -p usb-bao1x --features hosted-baosec,ccid-openpgp
+cargo check -p usb-bao1x --features board-baosec,ccid-openpgp,bao1x \
+  --target riscv32imac-unknown-xous-elf
+```
+
+---
 
 ## CCID USB interface
 
