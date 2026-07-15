@@ -25,6 +25,9 @@ pub(crate) fn is_ccid_provisioned(pddb: &Pddb) -> bool {
     }
 }
 
+/// Write PIN lines + `OKV1` into PDDB. Not used by the USB path on Persona A CCID images
+/// (no provisioning CDC); kept for offline / factory tooling that seeds PDDB before flash.
+#[allow(dead_code)]
 pub(crate) fn save_provisioned_pins(pddb: &Pddb, user_line: &[u8], admin_line: &[u8]) -> std::io::Result<()> {
     {
         let mut k = pddb.get(CCID_DICT, KEY_USER_LINE, None, true, true, Some(256), None::<fn()>)?;

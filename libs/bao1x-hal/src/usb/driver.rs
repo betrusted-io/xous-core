@@ -1,7 +1,7 @@
 use core::convert::TryFrom;
 use core::mem::size_of;
 #[cfg(feature = "std")]
-use core::sync::atomic::AtomicBool;
+use core::sync::atomic::{AtomicBool, AtomicUsize};
 use core::sync::atomic::{AtomicPtr, Ordering, compiler_fence};
 #[cfg(feature = "std")]
 use std::sync::{Arc, Mutex};
@@ -2294,6 +2294,10 @@ pub struct CorigineWrapper {
     pub hw: Arc<Mutex<CorigineUsb>>,
     /// Tuple is (type of endpoint, max packet size)
     pub ep_meta: [Option<(EpType, usize)>; CRG_EP_NUM],
+    /// Running count of non-EP0 slots written into `ep_meta` via `alloc_ep`.
+    /// Shared across `clone()` so callers holding an outer wrapper can observe
+    /// allocations performed on the `UsbBusAllocator`-owned clone.
+    pub allocated_non_ep0: Arc<AtomicUsize>,
     pub ep_out_ready: Box<[Arc<AtomicBool>]>,
     pub address_is_set: Arc<AtomicBool>,
     pub event: Option<CrgEvent>,
@@ -2306,6 +2310,7 @@ impl CorigineWrapper {
         let c = Self {
             hw: Arc::new(Mutex::new(obj)),
             ep_meta: [None; CRG_EP_NUM],
+            allocated_non_ep0: Arc::new(AtomicUsize::new(0)),
             ep_out_ready: (0..CRG_EP_NUM + 1)
                 .map(|_| Arc::new(AtomicBool::new(false)))
                 .collect::<Vec<_>>()
@@ -2321,6 +2326,7 @@ impl CorigineWrapper {
         let mut c = Self {
             hw: self.hw.clone(),
             ep_meta: [None; CRG_EP_NUM],
+            allocated_non_ep0: self.allocated_non_ep0.clone(),
             ep_out_ready: self.ep_out_ready.clone(),
             event: None,
             address_is_set: self.address_is_set.clone(),
@@ -2331,6 +2337,18 @@ impl CorigineWrapper {
             dst.store(src.load(Ordering::SeqCst), Ordering::SeqCst);
         }
         c
+    }
+
+    /// Occupied entries in this instance's `ep_meta` snapshot.
+    /// Note: `UsbBusAllocator` owns a separate clone's array after `clone()` at
+    /// boot; prefer [`Self::allocated_non_ep0_count`] for a cross-clone total.
+    pub fn ep_meta_occupied_count(&self) -> usize {
+        self.ep_meta.iter().filter(|e| e.is_some()).count()
+    }
+
+    /// Authoritative non-EP0 allocation count shared across wrapper clones.
+    pub fn allocated_non_ep0_count(&self) -> usize {
+        self.allocated_non_ep0.load(Ordering::SeqCst)
     }
 
     pub fn core(&self) -> std::sync::MutexGuard<'_, CorigineUsb> {
@@ -2475,6 +2493,7 @@ impl UsbBus for CorigineWrapper {
         if allocated_ep != 0 {
             // also record metadata for non-0 EPs
             self.ep_meta[pei - 2] = Some((hw_ep_type, max_packet_size as usize));
+            self.allocated_non_ep0.fetch_add(1, Ordering::SeqCst);
             crate::println!("ep_meta[{}]: {:?}", pei - 2, self.ep_meta[pei - 2]);
         }
 

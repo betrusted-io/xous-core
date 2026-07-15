@@ -3,8 +3,6 @@ use std::cell::RefCell;
 use std::collections::VecDeque;
 #[cfg(feature = "ccid-openpgp")]
 use std::rc::Rc;
-#[cfg(feature = "ccid-openpgp")]
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicPtr, Ordering, compiler_fence};
 
 use bao1x_hal::usb::driver::*;
@@ -13,6 +11,7 @@ use num_traits::*;
 use usb_device::class_prelude::*;
 use usb_device::device::UsbDevice;
 use usb_device::prelude::*;
+#[cfg(not(feature = "ccid-openpgp"))]
 use usbd_serial::SerialPort;
 use utralib::{AtomicCsr, utra};
 use xous::Message;
@@ -29,23 +28,42 @@ use xous_usb_hid::prelude::*;
 use crate::api::Opcode;
 #[cfg(feature = "ccid-openpgp")]
 use crate::ccid_transport::CcidTransportClass;
+use crate::ep_budget::{EpBudgetLedger, assert_class_ep_budget};
+
+/// Unidirectional non-EP0 endpoints claimed by FIDO (interrupt IN+OUT).
+/// Cite: xous-usb-hid interface.rs `interrupt` IN + OUT (`device/fido.rs`).
+pub(crate) const EP_FIDO: usize = 2;
+/// Unidirectional non-EP0 endpoints claimed by NKRO keyboard (interrupt IN+OUT).
+/// Cite: xous-usb-hid `device/keyboard.rs` `in_endpoint` + `with_out_endpoint`.
+pub(crate) const EP_NKRO: usize = 2;
+/// Unidirectional non-EP0 endpoints claimed by CDC-ACM debug serial.
+/// Cite: usbd-serial `cdc_acm.rs` interrupt + bulk OUT + bulk IN.
+#[cfg(not(feature = "ccid-openpgp"))]
+pub(crate) const EP_DEBUG_CDC: usize = 3;
+/// Unidirectional non-EP0 endpoints claimed by CCID (bulk OUT+IN + interrupt IN).
+/// Cite: `ccid_transport.rs` `alloc.bulk` ×2 + `alloc.interrupt`.
+#[cfg(feature = "ccid-openpgp")]
+pub(crate) const EP_CCID: usize = 3;
+
+/// Per-class sanity check (kept). Prefer [`EpBudgetLedger`] for cumulative totals.
+pub(crate) fn assert_composite_ep_budget(label: &str, claimed: usize) {
+    assert_class_ep_budget(label, claimed);
+}
 
 #[cfg(feature = "ccid-openpgp")]
 pub(crate) fn make_ccid_transport<'a>(
     alloc: &'a UsbBusAllocator<CorigineWrapper>,
     complete_rx: Rc<RefCell<VecDeque<Vec<u8>>>>,
     notify_cid: xous::CID,
+    ledger: &mut EpBudgetLedger,
 ) -> CcidTransportClass<'a, CorigineWrapper> {
+    // Construction order (CCID image), alloc sites in CcidTransportClass::new:
+    //   1) alloc.bulk OUT
+    //   2) alloc.bulk IN
+    //   3) alloc.interrupt IN
+    assert_class_ep_budget("CCID", EP_CCID);
+    ledger.reserve_before_alloc("CCID", EP_CCID);
     CcidTransportClass::new(alloc, complete_rx, notify_cid)
-}
-
-#[cfg(feature = "ccid-openpgp")]
-pub(crate) fn make_provisioning_serial<'a>(
-    alloc: &'a UsbBusAllocator<CorigineWrapper>,
-) -> SerialPort<'a, CorigineWrapper, [u8; 1024], [u8; 1024]> {
-    let rx_buf = [0u8; SERIAL_MAX_PACKET_SIZE * 2];
-    let tx_buf = [0u8; SERIAL_MAX_PACKET_SIZE * 2];
-    SerialPort::new_with_store(alloc, rx_buf, tx_buf)
 }
 
 /// Maximum packet size for serial - tied to the speed of the port (HS)
@@ -71,9 +89,11 @@ pub struct Bao1xUsb<'a> {
     >,
     // storage for hid_packets to expatriate from the interrupt handler
     pub hid_packet: VecDeque<[u8; 64]>,
+    #[cfg(not(feature = "ccid-openpgp"))]
     pub serial_port: SerialPort<'a, CorigineWrapper, [u8; 1024], [u8; 1024]>,
     // holds one HS packet - must be statically allocated in IRQ handler. Valid length is
     // passed as part of the interrupt recovery message.
+    #[cfg(not(feature = "ccid-openpgp"))]
     pub serial_rx: [u8; SERIAL_MAX_PACKET_SIZE],
     // an error reporter for the double lock condition, which we need to figure out how to handle still.
     // used for debugging, the idea is to query this in userspace to try and pick up the double-lock problem
@@ -83,19 +103,8 @@ pub struct Bao1xUsb<'a> {
     pub irq_serviced: AtomicBool,
     #[cfg(feature = "ccid-openpgp")]
     pub ccid: CcidTransportClass<'a, CorigineWrapper>,
-    /// Present only while PDDB `usb.ccid` / `provisioned` is not `OKV1` (saves 2 bulk endpoints).
-    #[cfg(feature = "ccid-openpgp")]
-    pub provision_serial: Option<SerialPort<'a, CorigineWrapper, [u8; 1024], [u8; 1024]>>,
     #[cfg(feature = "ccid-openpgp")]
     pub ccid_rx: Rc<RefCell<VecDeque<Vec<u8>>>>,
-    #[cfg(feature = "ccid-openpgp")]
-    pub prov_lines: Rc<RefCell<VecDeque<Vec<u8>>>>,
-    #[cfg(feature = "ccid-openpgp")]
-    pub prov_capture_enabled: Arc<AtomicBool>,
-    #[cfg(feature = "ccid-openpgp")]
-    pub prov_serial_rx: [u8; SERIAL_MAX_PACKET_SIZE],
-    #[cfg(feature = "ccid-openpgp")]
-    pub prov_line_acc: RefCell<Vec<u8>>,
 }
 
 impl<'a> Bao1xUsb<'a> {
@@ -106,20 +115,33 @@ impl<'a> Bao1xUsb<'a> {
         cw: CorigineWrapper,
         usb_alloc: &'a UsbBusAllocator<CorigineWrapper>,
         serial_number: &'a String,
+        ledger: &mut EpBudgetLedger,
         #[cfg(feature = "ccid-openpgp")] ccid: CcidTransportClass<'a, CorigineWrapper>,
-        #[cfg(feature = "ccid-openpgp")] enable_provision_serial: bool,
         #[cfg(feature = "ccid-openpgp")] ccid_rx: Rc<RefCell<VecDeque<Vec<u8>>>>,
-        #[cfg(feature = "ccid-openpgp")] prov_lines: Rc<RefCell<VecDeque<Vec<u8>>>>,
-        #[cfg(feature = "ccid-openpgp")] prov_capture_enabled: Arc<AtomicBool>,
     ) -> Self {
+        // Cumulative plan: reserve every remaining class BEFORE its allocating constructors.
+        // Per-class assert_class_ep_budget is invoked inside reserve_before_alloc.
+        //
+        // HID builder (xous-usb-hid) order in .build(): NKRO then FIDO — each interrupt IN+OUT.
+        assert_class_ep_budget("NKRO", EP_NKRO);
+        ledger.reserve_before_alloc("NKRO", EP_NKRO);
+        assert_class_ep_budget("FIDO", EP_FIDO);
+        ledger.reserve_before_alloc("FIDO", EP_FIDO);
+
         let class = UsbHidClassBuilder::new()
             .add_device(NKROBootKeyboardConfig::default())
             .add_device(RawFidoConfig::default())
             .build(usb_alloc);
 
-        let rx_buf = [0u8; SERIAL_MAX_PACKET_SIZE * 2];
-        let tx_buf = [0u8; SERIAL_MAX_PACKET_SIZE * 2];
-        let serial_port = SerialPort::new_with_store(&usb_alloc, rx_buf, tx_buf);
+        #[cfg(not(feature = "ccid-openpgp"))]
+        let serial_port = {
+            // usbd-serial CdcAcmClass: interrupt + bulk OUT + bulk IN
+            assert_class_ep_budget("debug CDC", EP_DEBUG_CDC);
+            ledger.reserve_before_alloc("debug CDC", EP_DEBUG_CDC);
+            let rx_buf = [0u8; SERIAL_MAX_PACKET_SIZE * 2];
+            let tx_buf = [0u8; SERIAL_MAX_PACKET_SIZE * 2];
+            SerialPort::new_with_store(&usb_alloc, rx_buf, tx_buf)
+        };
         // HACK ALERT: due to a shortcoming in the usb-device implementation, inside the interrupt handler we
         // have to catch and parse SETUP-OUT sequences. Basically the driver assumes that the OUT endpoint is
         // always configured to trigger, but in our stack every time we have an OUT on EP0, we have to
@@ -130,6 +152,13 @@ impl<'a> Bao1xUsb<'a> {
         // interface, this hack has to be dealt with (and btw, there are not enough endpoints availbale
         // to concurrently add that in - you have to kick out one of the interfaces above to add mass
         // storage!)
+        //
+        // Persona A (ccid-openpgp): Corigine CRG_EP_NUM=8 leaves no room for CDC serial alongside
+        // CCID+FIDO+NKRO. Debug goes through xous-log UART / DUART instead.
+
+        ledger.finalize();
+        // Live counter is shared across CorigineWrapper clones (UsbBusAllocator vs outer cw).
+        ledger.assert_matches_live(cw.allocated_non_ep0_count());
 
         #[cfg(feature = "oem-baosec-lite")]
         let product = "Baosec-lite";
@@ -162,7 +191,9 @@ impl<'a> Bao1xUsb<'a> {
             kbd_tx_queue: RefCell::new(VecDeque::new()),
             irq_req: None,
             hid_packet: VecDeque::with_capacity(4),
+            #[cfg(not(feature = "ccid-openpgp"))]
             serial_port,
+            #[cfg(not(feature = "ccid-openpgp"))]
             serial_rx: [0u8; SERIAL_MAX_PACKET_SIZE],
             double_lock: AtomicBool::new(false),
             led_state: KeyboardLedsReport::default(),
@@ -170,21 +201,7 @@ impl<'a> Bao1xUsb<'a> {
             #[cfg(feature = "ccid-openpgp")]
             ccid,
             #[cfg(feature = "ccid-openpgp")]
-            provision_serial: if enable_provision_serial {
-                Some(make_provisioning_serial(usb_alloc))
-            } else {
-                None
-            },
-            #[cfg(feature = "ccid-openpgp")]
             ccid_rx,
-            #[cfg(feature = "ccid-openpgp")]
-            prov_lines,
-            #[cfg(feature = "ccid-openpgp")]
-            prov_capture_enabled,
-            #[cfg(feature = "ccid-openpgp")]
-            prov_serial_rx: [0u8; SERIAL_MAX_PACKET_SIZE],
-            #[cfg(feature = "ccid-openpgp")]
-            prov_line_acc: RefCell::new(Vec::new()),
         }
     }
 
@@ -240,9 +257,6 @@ impl<'a> Bao1xUsb<'a> {
         #[cfg(feature = "ccid-openpgp")]
         {
             self.ccid.reset();
-            if let Some(prov) = &mut self.provision_serial {
-                prov.reset();
-            }
         }
         self.fido_tx_queue = RefCell::new(VecDeque::new());
         self.kbd_tx_queue = RefCell::new(VecDeque::new());
@@ -394,33 +408,23 @@ pub(crate) fn composite_handler(_irq_no: usize, arg: *mut usize) {
                         #[cfg(feature = "ccid-openpgp")]
                         {
                             usb.ccid.reset();
-                            if let Some(prov) = &mut usb.provision_serial {
-                                prov.reset();
-                            }
                         }
                     }
                 }
 
                 let device = usb.device.borrow_mut();
                 let class = usb.class.borrow_mut();
+                #[cfg(not(feature = "ccid-openpgp"))]
                 let serial = usb.serial_port.borrow_mut();
                 #[cfg(not(feature = "ccid-openpgp"))]
                 let polled = device.poll(&mut [class, serial as &mut dyn UsbClass<_>]);
                 #[cfg(feature = "ccid-openpgp")]
                 let polled = {
                     let ccid = &mut usb.ccid as &mut dyn UsbClass<_>;
-                    if let Some(prov) = &mut usb.provision_serial {
-                        device.poll(&mut [
-                            class,
-                            serial as &mut dyn UsbClass<_>,
-                            prov as &mut dyn UsbClass<_>,
-                            ccid,
-                        ])
-                    } else {
-                        device.poll(&mut [class, serial as &mut dyn UsbClass<_>, ccid])
-                    }
+                    device.poll(&mut [class, ccid])
                 };
                 if polled {
+                    #[cfg(not(feature = "ccid-openpgp"))]
                     if let Ok(count) = serial.read(&mut usb.serial_rx) {
                         xous::try_send_message(
                             usb.conn,
@@ -455,41 +459,6 @@ pub(crate) fn composite_handler(_irq_no: usize, arg: *mut usize) {
                             UsbError::WouldBlock => {}
                             _ => crate::println!("U2F ERR: {:?}", e),
                         },
-                    }
-
-                    #[cfg(feature = "ccid-openpgp")]
-                    {
-                        if usb.prov_capture_enabled.load(Ordering::SeqCst) {
-                            if let Some(prov_serial) = &mut usb.provision_serial {
-                                if let Ok(n) = prov_serial.read(&mut usb.prov_serial_rx) {
-                                    for &b in &usb.prov_serial_rx[..n] {
-                                        if b == b'\n' || b == b'\r' {
-                                            let line: Vec<u8> = {
-                                                let mut acc = usb.prov_line_acc.borrow_mut();
-                                                if acc.is_empty() {
-                                                    continue;
-                                                }
-                                                std::mem::take(&mut *acc)
-                                            };
-                                            RefCell::borrow_mut(&*Rc::clone(&usb.prov_lines)).push_back(line);
-                                            xous::try_send_message(
-                                                usb.conn,
-                                                Message::new_scalar(
-                                                    Opcode::IrqProvSerialRx.to_usize().unwrap(),
-                                                    0,
-                                                    0,
-                                                    0,
-                                                    0,
-                                                ),
-                                            )
-                                            .ok();
-                                        } else if b >= 0x20 {
-                                            usb.prov_line_acc.borrow_mut().push(b);
-                                        }
-                                    }
-                                }
-                            }
-                        }
                     }
                 }
                 {

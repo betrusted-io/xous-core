@@ -17,6 +17,10 @@ APDU handler, and anyone setting up hardware-in-the-loop (HIL) regression tests.
 USB enumeration flow, symptom-to-source map, and host `lsusb` checks (start here
 for "device not visible" or CCID issues).
 
+**Enumeration deep-dive (community):** [`docs/CCID_USB_ENUMERATION_DEBUG.md`](CCID_USB_ENUMERATION_DEBUG.md)
+— worked example of Corigine endpoint-budget overflow, static diagnostic method,
+Persona A trade-offs; not official support.
+
 ## Table of contents
 
 1. [Background: smart cards, CCID, and OpenPGP](#background-smart-cards-ccid-and-openpgp)
@@ -31,7 +35,7 @@ for "device not visible" or CCID issues).
 9. [APDUs, T=1, and XfrBlock](#apdus-t1-and-xfrblock)
 10. [Xous IPC API and handler integration](#xous-ipc-api-and-handler-integration)
    - [Handler skeleton (Rust)](#handler-skeleton-rust)
-11. [First-boot provisioning (CDC serial)](#first-boot-provisioning-cdc-serial)
+11. [PIN provisioning (offline / non-USB on CCID images)](#pin-provisioning-offline--non-usb-on-ccid-images)
 12. [HIL test personality (`ccid-echo`)](#hil-test-personality-ccid-echo)
 13. [Host software path (pcscd / GnuPG)](#host-software-path-pcscd--gnupg)
 14. [Testing guide](#testing-guide)
@@ -94,7 +98,7 @@ OpenPGP application logic runs in a **separate Xous service** on the device.
 |-------|----------------|---------------|
 | USB CCID descriptors, bulk IN/OUT, frame assembly | Transport | **Yes** (`ccid_transport.rs`, `ccid_framing.rs`) |
 | Deferred IPC for complete host frames | Transport API | **Yes** (`CcidRxDeferred` / `CcidTx`) |
-| First-boot capture of two opaque PIN lines into PDDB | Provisioning | **Yes** (`ccid_store.rs`, provisioning CDC) |
+| Persist / read opaque PIN lines in PDDB (`OKV1`) | Provisioning storage | **Yes** (`ccid_store.rs`); **no USB CDC capture** on CCID images (Persona A) |
 | Parse `PC_to_RDR_*` message types | Protocol | **No** |
 | T=1 block protocol, APDU parsing | Card protocol | **No** |
 | OpenPGP card emulation, key storage, crypto | Application | **No** (external service, e.g. `baochip-openpgp`) |
@@ -113,10 +117,10 @@ images are unaffected when the feature is disabled.
 ## Security considerations
 
 This section is for merge review of [PR #890](https://github.com/betrusted-io/xous-core/pull/890).
-The PR adds a **potentially security-sensitive USB surface** (CCID + first-boot
-provisioning). It does **not** deliver OpenPGP security by itself; it exposes
-transport and storage primitives that a handler and factory process must use
-correctly.
+The PR adds a **potentially security-sensitive USB surface** (CCID bulk transport)
+plus PDDB helpers for opaque PIN blobs. It does **not** deliver OpenPGP security
+by itself; it exposes transport and storage primitives that a handler and factory
+process must use correctly.
 
 ### Threat model and non-goals
 
@@ -125,8 +129,8 @@ correctly.
 - Present a USB CCID bulk interface to a connected host.
 - Reassemble and forward complete `PC_to_RDR` frames to one deferred IPC listener.
 - Accept complete `RDR_to_PC` reply blobs from that listener and stream them on bulk IN.
-- Optionally expose a one-time provisioning CDC port until PDDB marks provisioning complete.
-- Persist two opaque byte lines and a completion marker in PDDB.
+- Read PDDB `usb.ccid/provisioned` at boot (log if not `OKV1`); helpers to store PIN lines remain for offline seeding.
+- **Persona A:** CCID images do **not** expose USB CDC for debug or PIN provisioning (Corigine 8-endpoint budget).
 
 **Explicit non-goals (must be provided elsewhere):**
 
@@ -205,7 +209,7 @@ the handler is running.
 | Build target | Features | CCID behavior | Intended use |
 |--------------|----------|---------------|--------------|
 | `cargo xtask baosec` | none (default) | No CCID interface; unchanged vs upstream `dev` | Default production image |
-| `cargo xtask baosec-ccid` | `ccid-openpgp` | Frames go to IPC handler only | CCID transport + provisioning |
+| `cargo xtask baosec-ccid` | `ccid-openpgp` | Frames go to IPC handler only | CCID transport (no USB CDC) |
 | `cargo xtask ccid-hil` | `ccid-openpgp` + **`ccid-echo`** | IRQ path **echoes host frames on bulk IN** without handler | Lab / bench HIL only |
 
 **`ccid-echo` must never ship in production images.**
@@ -225,46 +229,25 @@ Production CCID builds use the dedicated `baosec-ccid` xtask target, which adds
 **Release checklist:** verify the flashed image was built with `ccid-hil` only on
 test benches; confirm `ccid-echo` is absent from production feature sets.
 
-### Provisioning trust model
+### Provisioning trust model (Persona A)
 
-First-boot provisioning exposes an **extra CDC ACM serial port** when PDDB
-`usb.ccid` / `provisioned` is not `OKV1`.
+CCID firmware images **do not** expose a USB provisioning CDC port. An untrusted
+USB host therefore **cannot** write PIN lines through `usb-bao1x` on these images.
 
-#### Who may write the two PIN lines?
+**What is implemented:**
 
-**Any party that can open the provisioning serial port on USB** while the device
-is in the unprovisioned state. xous-core performs **no authentication** of the
-host or tool:
+| Path | Status |
+|------|--------|
+| (a) Offline / pre-flash PDDB already containing `usb.ccid` keys + `OKV1` | Supported operationally; boot logs "already provisioned" |
+| (b) Separate non-CCID image that exposes USB PIN provisioning | **Not implemented** in this tree (stock `baosec` has debug CDC but no PIN provision CDC) |
+| (c) Skip USB provision if PDDB is already `OKV1` | **Implemented** (no-op for USB; continue as CCID+FIDO+NKRO) |
+| Unprovisioned CCID image (`OKV1` missing) | **Fail closed:** log warn on UART/`xous-log`, continue **without** USB provisioning capability |
 
-- No pairing code
-- No physical button confirmation in this layer
-- No certificate or factory credential check
+`ccid_store::save_provisioned_pins` remains in-tree for factory tools that seed
+PDDB offline; it is **not** wired to any USB RX path on CCID builds.
 
-The intended trust model is **controlled factory or owner setup**:
-
-- Device is provisioned in a trusted environment before untrusted USB exposure, **or**
-- The first host to reach the provisioning port during the provisioning window
-  defines the stored lines (similar to many "setup over USB" flows).
-
-Operators should treat an **unprovisioned device on a hostile USB bus** as
-vulnerable to provisioning capture: an attacker could write their own two lines
-before the legitimate operator.
-
-#### Attacker reaches provisioning CDC before factory setup
-
-If an attacker connects first on an unprovisioned device:
-
-1. They can send two lines and commit provisioning (`save_provisioned_pins`).
-2. PDDB stores `user_pin_line`, `admin_pin_line`, and sets `provisioned = OKV1`.
-3. USB resets; the provisioning port **disappears permanently** until factory reset.
-4. The legitimate factory tool later sees an already-provisioned device and cannot
-   overwrite lines through this USB path without reset.
-
-**Mitigation is operational, not cryptographic in xous-core:** keep devices
-unprovisioned only in trusted physical custody; use factory-reset before
-re-provisioning; consider shipping pre-provisioned from factory.
-
-There is **no rollback** of provisioning via the CCID/USB path once `OKV1` is written.
+**Mitigation:** ship images with PDDB already provisioned, or seed PDDB before
+enabling a CCID image. There is **no** USB path to overwrite `OKV1` after flash.
 
 #### Why no format validation in xous-core?
 
@@ -272,17 +255,12 @@ PIN lines are **opaque blobs** to `usb-bao1x`:
 
 - Format, entropy, and derivation are defined by the OpenPGP / product layer
   (out of tree), not the transport crate.
-- xous-core only filters wire bytes to printable ASCII (`>= 0x20`) and line
-  delimiters (`\r`/`\n`), rejecting control characters on the serial path.
-- Semantic validation (length, KDF input structure, forbidden patterns) belongs
-  in the handler or factory tool where the format is defined.
-
-This keeps the USB layer small and avoids duplicating policy that the handler
-must enforce anyway when reading PDDB.
+- Semantic validation belongs in the handler or factory tool that seeds PDDB.
 
 #### What is stored in PDDB and who can read it later?
 
-Written by `ccid_store.rs` into dictionary **`usb.ccid`**:
+Written by `ccid_store.rs` into dictionary **`usb.ccid`** (typically offline /
+factory seed; not via USB on Persona A images):
 
 | Key | Max size | Content |
 |-----|----------|---------|
@@ -293,17 +271,12 @@ Written by `ccid_store.rs` into dictionary **`usb.ccid`**:
 **Who can read:** any Xous process that can open these PDDB keys through the
 normal PDDB API for the active basis. xous-core does not add a separate ACL on
 top of PDDB; access follows [PDDB basis and dictionary
-policy](https://betrusted.io/xous-book/ch09-00-pddb-overview.html). In
-practice, the OpenPGP handler and other privileged services in the product TCB
-should read these keys; unprivileged apps must not receive PDDB handles for
-`usb.ccid`.
+policy](https://betrusted.io/xous-book/ch09-00-pddb-overview.html).
 
-**Who can write after provisioning:** not via the provisioning CDC (port removed).
-Further updates require factory reset or a product-specific PDDB update path
-defined outside this PR.
+**Who can write:** not over USB on CCID images. Further updates require factory
+reset or a product-specific PDDB update path outside this PR.
 
-**Host visibility:** lines are **not** exposed over CCID bulk. They travel only
-on the provisioning CDC during the one-time window, then live in PDDB on device.
+**Host visibility:** lines are **not** exposed over CCID bulk.
 
 ---
 
@@ -345,17 +318,31 @@ Data flow for a normal (non-echo) production image:
 
 ## USB composite device
 
-Baosec already exposes a composite USB gadget (HID keyboard, FIDO, debug
-serial, etc.). With `ccid-openpgp` enabled, two more interfaces may appear:
+Corigine UDC exposes **8 unidirectional non-EP0 endpoint slots** (`CRG_EP_NUM`).
+That hardware budget is why CCID images drop USB CDC.
+
+| Image / feature set | Classes | Unidirectional EPs | Fits? |
+|---------------------|---------|--------------------|-------|
+| `baosec` (no `ccid-openpgp`) | FIDO (2) + NKRO (2) + debug CDC (3) | **7 / 8** | yes |
+| `baosec-ccid` / `ccid-hil` (`ccid-openpgp`) | CCID (3) + FIDO (2) + NKRO (2) | **7 / 8** | yes |
+| (rejected) CCID + FIDO + NKRO + debug CDC | 3+2+2+3 | **10 / 8** | no |
+| (rejected) above + provision CDC | +3 | **13 / 8** | no |
+
+**Persona A (`ccid-openpgp`):** composite is **CCID + FIDO + NKRO only**. Debug
+CDC and provisioning CDC are **not** allocated. Debug/`log` output uses the
+existing **`xous-log` UART / DUART** path (`services/xous-log/.../bao1x`), same
+as pre-USB-serial and non-CDC platforms — not a new UART driver in `usb-bao1x`.
+`EpBudgetLedger` verifies the **cumulative** class total (with per-class sanity
+checks kept) before each allocating constructor and against
+`allocated_non_ep0` after build — see `ep_budget` tests /
+`tools/test_ep_budget_cumulative.py`.
 
 | Interface | When present | Purpose |
 |-----------|--------------|---------|
-| CCID bulk (`0x0B`) | Always (feature enabled) | Smart-card transport |
-| Provisioning CDC ACM | **Only until provisioned** | First-boot two-line PIN capture |
-
-After provisioning succeeds (`usb.ccid` / `provisioned` = `OKV1`), the device
-resets USB and re-enumerates **without** the provisioning serial port. The CCID
-interface remains.
+| CCID bulk (`0x0B`) | `ccid-openpgp` | Smart-card transport |
+| FIDO + NKRO HID | Always (baosec USB) | Existing HID |
+| Debug CDC ACM | **Not** on CCID images | Use UART / `xous-log` instead |
+| Provisioning CDC ACM | **Never** on CCID images | Offline PDDB seed only |
 
 ### USB identification
 
@@ -371,8 +358,8 @@ On Linux, expect something like:
 ```bash
 lsusb -d 1d50:6198
 # ...
-# iInterface 5 CCID Interface   # class 0x0B
-# iInterface 6 ...             # provisioning CDC (if unprovisioned)
+# class 0x0B CCID Interface on baosec-ccid / ccid-hil
+# no second CDC ACM for debug or provisioning on those images
 ```
 
 ---
@@ -383,26 +370,21 @@ Defined in `services/usb-bao1x/Cargo.toml`:
 
 | Feature | Depends on | Effect |
 |---------|------------|--------|
-| `ccid-openpgp` | `pddb` | CCID bulk transport + provisioning CDC + PDDB storage |
+| `ccid-openpgp` | `pddb` | CCID bulk + PDDB helpers; **no USB CDC** (Persona A) |
 | `ccid-echo` | `ccid-openpgp` | Echo every received `PC_to_RDR` frame on bulk IN (HIL only) |
 
 Build commands:
 
 ```bash
-# Default baosec image (no CCID; matches upstream dev)
+# Default baosec image (no CCID; FIDO+NKRO+debug CDC)
 cargo xtask baosec
 
-# Production CCID transport + provisioning (handler must be added separately)
+# Production CCID transport (handler must be added separately; UART debug)
 cargo xtask baosec-ccid
 
 # HIL test image (adds ccid-echo; no external handler needed for USB tests)
 cargo xtask ccid-hil
 ```
-
-When `ccid-openpgp` is enabled, the provisioning CDC interface is created only
-while PDDB lacks `usb.ccid/provisioned=OKV1`. After provisioning, two bulk
-endpoints are freed so the composite gadget stays within the Corigine endpoint
-budget (`CRG_EP_NUM = 8`).
 
 Compile-only checks without flashing:
 
@@ -635,7 +617,6 @@ Opcodes:
 | `CcidRxTimeout` | 641 | Timeout pump (reserved) |
 | `CcidTx` | 642 | Enqueue raw `RDR_to_PC` bytes for bulk IN |
 | `IrqCcidRx` | 770 | IRQ notification: frame ready |
-| `IrqProvSerialRx` | 771 | Provisioning CDC line ready |
 
 Pattern mirrors the existing U2F deferred API (`U2fRxDeferred` / `U2fTx`).
 
@@ -674,9 +655,9 @@ Steps for an external service:
 5. Send `CcidTx` with `CcidCode::Tx` and response bytes; wait for `TxAck`.
 6. Loop to step 2.
 
-Provisioning lines are **not** delivered over CCID. They arrive on the separate
-CDC serial interface during first boot (see below). The OpenPGP handler reads
-stored lines from PDDB if needed.
+Provisioning lines are **not** delivered over CCID or USB CDC on Persona A
+images. The OpenPGP handler reads stored lines from PDDB if they were seeded
+offline (see [PIN provisioning](#pin-provisioning-offline--non-usb-on-ccid-images)).
 
 ### Handler skeleton (Rust)
 
@@ -827,28 +808,22 @@ fn main() -> ! {
 
 ---
 
-## First-boot provisioning (CDC serial)
+## PIN provisioning (offline / non-USB on CCID images)
 
-See [Security considerations — Provisioning trust model](#provisioning-trust-model)
-for factory trust, attacker-first scenarios, and PDDB access policy.
+See [Provisioning trust model](#provisioning-trust-model-persona-a).
 
 Before OpenPGP operation, the device may need two opaque **PIN lines**
-(user and admin). xous-core only **stores** them; it does not validate format,
-derive keys, or interpret content.
+(user and admin) in PDDB. xous-core only **stores/reads** them; it does not
+validate format, derive keys, or interpret content.
 
-### When it runs
+### Boot behavior (`ccid-openpgp`)
 
-At boot, `usb-bao1x` checks PDDB dict `usb.ccid` / key `provisioned`. If the
-value is not `OKV1`, a **second CDC ACM serial port** is exposed alongside CCID.
+At boot, `usb-bao1x` checks PDDB dict `usb.ccid` / key `provisioned`:
 
-### Protocol
-
-1. Host (or factory tool) opens the provisioning serial port.
-2. Send **first line** + newline (`\r` or `\n`) — user PIN line (opaque).
-3. Send **second line** + newline — admin PIN line (opaque).
-4. Device writes PDDB, logs success, and **resets USB** (PMIC unplug on baosec).
-
-After re-enumeration, the provisioning port is gone; CCID remains.
+- If `OKV1`: log that PDDB is provisioned; USB composite is CCID+FIDO+NKRO.
+- If not: **log a warning** (UART / `xous-log`) and continue **without** any USB
+  provisioning interface (fail closed for USB capture; matches logger
+  "prefer discard" style rather than panicking the USB stack).
 
 ### PDDB keys
 
@@ -858,13 +833,18 @@ After re-enumeration, the provisioning port is gone; CCID remains.
 | `usb.ccid` / `admin_pin_line` | Second line (opaque bytes) |
 | `usb.ccid` / `provisioned` | Marker `OKV1` |
 
-Printable bytes (>= 0x20) are accepted on the wire. Maximum line length is
-governed by PDDB key size (256 bytes per key in `ccid_store.rs`).
+Maximum key size is 256 bytes per PIN line in `ccid_store.rs`.
+`save_provisioned_pins` can seed these offline; nothing in the USB IRQ/IPC path
+calls it on Persona A images.
 
-### Factory reset
+### HIL follow-up
 
-To re-run provisioning HIL tests, the device must be factory-reset or flashed
-fresh so `provisioned` is not `OKV1`.
+`tools/ccid_hil/test_provision.py` (HIL-02) was **rewritten for Persona A**:
+it asserts the device presents **no CDC ACM** interfaces (and the shared
+Persona A composite checks). It does **not** send PIN lines over USB.
+`--legacy-usb-provision` exits 2. `run_all.sh` always runs HIL-02.
+`CCID_HIL_PROVISION` is ignored. Offline PDDB / UART OKV1 boot text remain
+out of host automated coverage until UART is wired into the harness.
 
 ---
 
@@ -913,12 +893,12 @@ How to run every tier: developer machine, Linux USB host, and CI.
 
 | Test | Device image | Host | Required tools |
 |------|--------------|------|----------------|
-| Unit tests | none | Linux/macOS + Rust | `cargo` |
+| Unit tests (`ccid_framing`, `ep_budget`) | none | Linux/macOS + Rust | `cargo` |
+| EP arithmetic / mock Persona A | none | Python 3 | `check_ep_budget.py`, `test_ep_budget_cumulative.py`, `sim_persona_a_composite.py` |
 | Compile gates | none | Linux (CI: Ubuntu) | `cargo xtask install-toolkit` for board target |
 | Smoke test | `ccid-hil` (`ccid-echo`) | Linux USB host | `pyusb` |
-| HIL suite | `ccid-hil` | Linux USB host | `pyusb`, `pyserial`, `lsusb` |
-| Provisioning HIL | unprovisioned device | Linux USB host | `pyserial` + above |
-| Production CCID | `baosec` + `ccid-openpgp` | Linux + handler | OpenPGP service (out of tree) |
+| HIL suite | `ccid-hil` | Linux USB host | `pyusb`, `lsusb` (no `pyserial`) |
+| Production CCID | `baosec-ccid` + handler | Linux + handler | OpenPGP service (out of tree) |
 
 Build the HIL test image:
 
@@ -933,11 +913,15 @@ tests below.
 
 ```bash
 cargo test -p usb-bao1x --lib ccid_framing
+cargo test -p usb-bao1x --lib ep_budget
+python3 tools/check_ep_budget.py
+python3 tools/test_ep_budget_cumulative.py
+python3 tools/sim_persona_a_composite.py
 ```
 
-Expected: **7 passed**. Covers partial-frame handling, oversize rejection,
-multi-packet reassembly, TX chunking, and PDDB marker `OKV1`.
-
+- `ccid_framing`: partial-frame handling, oversize rejection, reassembly, TX chunking, `OKV1` marker.
+- `ep_budget`: cumulative ledger + proof that independent subtotals miss 7+2 overflow.
+- Python scripts: static EP totals per xtask image; mock Persona A composite asserts.
 ### Tier 2: Compile gates (no hardware)
 
 ```bash
@@ -986,18 +970,18 @@ python3 tools/ccid_smoke.py --vid 0x1d50 --pid 0x6197   # dabao
 ### Tier 4: Full HIL suite (~2 minutes)
 
 ```bash
-pip install pyusb pyserial
+pip install pyusb
 chmod +x tools/ccid_hil/*.sh
 tools/ccid_hil/run_all.sh
 ```
 
-| Step | Script | Checks | Pass line |
-|------|--------|--------|-----------|
-| 00 | `wait_device.sh` | Device `1d50:6198` present | `Device 1d50:6198 present` |
-| 01 | `test_enumerate.py` | CCID class 0x0B, descriptor fields | `HIL-01 PASS` |
-| 02 | `test_provision.py` | Optional (`CCID_HIL_PROVISION=1`) | `HIL-02 PASS` |
-| 03 | `test_echo.py` | GetSlotStatus round-trip | `HIL-03 PASS` |
-| 04 | `test_echo.py --stress N` | Random XfrBlock frames | `HIL-05 PASS` |
+| Step | Script | Checks | Pass line | Why |
+|------|--------|--------|-----------|-----|
+| 00 | `wait_device.sh` | Device `1d50:6198` present | `Device … present` | Gate before USB I/O |
+| 01 | `test_enumerate.py` | CCID fields + Persona A composite | `HIL-01 PASS` | Wrong image / CDC or EP drift |
+| 02 | `test_provision.py` | **Zero CDC**; no USB PIN path | `HIL-02 PASS (Persona A)` | Persona A surface; CDC return = fail |
+| 03 | `test_echo.py` | GetSlotStatus echo | `HIL-03 PASS` | Transport without OpenPGP handler |
+| 04 | `test_echo.py --stress N` | Random XfrBlock | `HIL-05 PASS` | Stress bulk / reassembly |
 
 Environment variables:
 
@@ -1006,22 +990,16 @@ Environment variables:
 | `CCID_VID` | `1d50` | USB vendor (hex, no `0x` prefix) |
 | `CCID_PID` | `6198` | USB product ID |
 | `CCID_WAIT_TIMEOUT` | `60` | Seconds to wait for device |
-| `CCID_HIL_PROVISION` | `0` | Set `1` to run provisioning test |
+| `CCID_HIL_PROVISION` | `0` | **Obsolete** — ignored; HIL-02 always runs CDC-absence check |
 | `CCID_HIL_STRESS` | `100` | Random echo iterations |
 | `CCID_HIL_OUT` | `/tmp/ccid-hil-out` | Log directory |
 
-Provisioning test (unprovisioned device only):
-
-```bash
-CCID_HIL_PROVISION=1 tools/ccid_hil/run_all.sh
-python3 tools/ccid_hil/test_provision.py --port /dev/ttyACM1
-```
-
+OPEN: suite does not capture UART; OKV1 boot warn is manual-only.
 ### Tier 5: CI (automated)
 
 | Workflow | Runner | Scope |
 |----------|--------|-------|
-| `ccid-ci.yml` | GitHub-hosted | Unit tests + compile gates |
+| `ccid-ci.yml` | GitHub-hosted | `ccid_framing` + `ep_budget` + compile gates |
 | `build.yml` | GitHub-hosted | Full `baosec` image build (includes CCID) |
 | `ccid-hil.yml` | Self-hosted (`baosec-hil`) | USB HIL on Raspberry Pi |
 
@@ -1036,7 +1014,8 @@ Trigger Pi workflow manually: Actions -> CCID HIL -> Run workflow.
 | `echo mismatch` | Missing `ccid-echo`; host sent before configured |
 | `pyusb` permission error | udev rules / group membership |
 | `Can't sign swap image` (CI on fork) | Missing upstream git tags; see fork note above |
-| Provisioning: no re-enumeration | Wrong serial port; device already provisioned |
+| HIL-02 FAIL: CDC present | Persona A violated — debug/provision CDC must not be on CCID images |
+| HIL-02 PASS but no UART OKV1 check | Expected — harness has no UART capture yet |
 
 ---
 
@@ -1097,7 +1076,7 @@ cargo xtask ccid-hil    # build HIL image; flash separately
 
 python3 -m venv ~/ccid-venv
 source ~/ccid-venv/bin/activate
-pip install pyusb pyserial
+pip install pyusb
 
 python3 tools/ccid_smoke.py
 tools/ccid_hil/run_all.sh
@@ -1119,9 +1098,10 @@ Logs: `/tmp/ccid-hil-out/`
 
 | Tier | Where | What |
 |------|-------|------|
-| Unit tests | GitHub-hosted | `ccid_framing` (7 tests) |
+| Unit tests | GitHub-hosted | `ccid_framing` + `ep_budget` (`ccid-ci.yml`) |
+| EP arithmetic (optional local) | Developer machine | `check_ep_budget.py`, `test_ep_budget_cumulative.py`, `sim_persona_a_composite.py` |
 | Compile + image | GitHub-hosted | `ccid-ci.yml`, `build.yml` / `baosec` |
-| HIL transport | Pi self-hosted | Enumeration, echo, stress |
+| HIL transport | Pi self-hosted | Enum, no-CDC (HIL-02), echo, stress |
 | OpenPGP E2E | Out of tree | `gpg --card-status` with handler service |
 
 See also [`docs/CCID_TEST_REPORT.md`](CCID_TEST_REPORT.md) for recorded

@@ -78,7 +78,7 @@ usbd-debug = ["usb-device/baochip-debug", "debug-print-usb"]
 prototyping = [
 ] # temporary feature-out for figuring out the code; remove this if you don't recognize it anymore
 
-# Generic USB CCID bulk transport + provisioning CDC (PDDB only). No Galdralag/OpenPGP crates.
+# Generic USB CCID bulk transport + PDDB helpers (Persona A: no USB CDC on CCID images).
 ccid-openpgp = ["dep:pddb"]
 # HIL personality: echo PC_to_RDR frames on bulk IN (requires ccid-openpgp).
 ccid-echo = ["ccid-openpgp"]

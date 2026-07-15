@@ -4,6 +4,7 @@ mod ccid_store;
 #[cfg(all(feature = "ccid-openpgp", target_os = "xous"))]
 mod ccid_transport;
 mod debug;
+mod ep_budget;
 #[cfg(target_os = "xous")]
 mod hw;
 #[cfg(not(target_os = "xous"))]
@@ -19,7 +20,7 @@ enum TimeoutOp {
 }
 
 #[derive(Debug)]
-#[cfg(target_os = "xous")]
+#[cfg(all(target_os = "xous", not(feature = "ccid-openpgp")))]
 enum SerialListenMode {
     // this just causes data incoming to be printed to the debug log; it is the default
     NoListener,
@@ -146,6 +147,7 @@ pub(crate) fn main_hw() -> ! {
     }
     let cw = CorigineWrapper::new(corigine_usb);
     let usb_alloc = UsbBusAllocator::new(cw.clone());
+    let mut ep_ledger = crate::ep_budget::EpBudgetLedger::new("bao1x USB composite");
 
     // Notes:
     //  - Most drivers would `Box()` the hardware management structure to make sure the compiler doesn't move
@@ -153,28 +155,39 @@ pub(crate) fn main_hw() -> ! {
     //    another crate that implements the USB stack which can't handle Box'd structures.
     //  - It is safe to call `.init()` repeatedly because within `init()` we have an atomic bool that tracks
     //    if the interrupt handler has been hooked, and ignores further requests to hook it.
+    // Persona A: CCID images allocate CCID+FIDO+NKRO only (7/8 Corigine slots). USB CDC (debug and
+    // provisioning) is not present — console/log mirroring stays on xous-log UART/DUART
+    // (services/xous-log/.../bao1x). PIN lines in PDDB are offline-only on these images.
     #[cfg(feature = "ccid-openpgp")]
     let pddb = pddb::Pddb::new();
     #[cfg(feature = "ccid-openpgp")]
-    let need_pin_provision = !crate::ccid_store::is_ccid_provisioned(&pddb);
-    #[cfg(feature = "ccid-openpgp")]
-    log::info!(
-        "CCID: provision CDC {}",
-        if need_pin_provision { "enabled" } else { "skipped (already provisioned)" }
-    );
+    if crate::ccid_store::is_ccid_provisioned(&pddb) {
+        log::info!("CCID: PDDB already provisioned (OKV1); USB composite is CCID+FIDO+NKRO (no CDC)");
+    } else {
+        // Fail closed for USB provisioning (matches LogString "prefer discard" style): continue without
+        // a provisioning interface rather than exceeding the endpoint budget.
+        log::warn!(
+            "CCID: PDDB not OKV1-provisioned; USB PIN provisioning CDC is unavailable on CCID images \
+             (endpoint budget). Provision offline / with a non-CCID image, then reflash. Debug: UART."
+        );
+    }
     #[cfg(feature = "ccid-openpgp")]
     let ccid_rx_q = Rc::new(RefCell::new(VecDeque::new()));
-    #[cfg(feature = "ccid-openpgp")]
-    let prov_lines_q = Rc::new(RefCell::new(VecDeque::new()));
-    #[cfg(feature = "ccid-openpgp")]
-    let prov_capture = Arc::new(core::sync::atomic::AtomicBool::new(need_pin_provision));
 
     #[cfg(not(feature = "ccid-openpgp"))]
-    let mut cu = Box::new(Bao1xUsb::new(usb.clone(), irq_csr.clone(), cid, cw, &usb_alloc, &serial_number));
+    let mut cu = Box::new(Bao1xUsb::new(
+        usb.clone(),
+        irq_csr.clone(),
+        cid,
+        cw,
+        &usb_alloc,
+        &serial_number,
+        &mut ep_ledger,
+    ));
 
     #[cfg(feature = "ccid-openpgp")]
     let mut cu = Box::new({
-        let ccid = hw::make_ccid_transport(&usb_alloc, ccid_rx_q.clone(), cid);
+        let ccid = hw::make_ccid_transport(&usb_alloc, ccid_rx_q.clone(), cid, &mut ep_ledger);
         Bao1xUsb::new(
             usb.clone(),
             irq_csr.clone(),
@@ -182,19 +195,21 @@ pub(crate) fn main_hw() -> ! {
             cw,
             &usb_alloc,
             &serial_number,
+            &mut ep_ledger,
             ccid,
-            need_pin_provision,
             ccid_rx_q,
-            prov_lines_q,
-            prov_capture.clone(),
         )
     });
     cu.init();
 
-    // Serial driver variables
+    // Serial driver variables (USB CDC debug — not allocated on Persona A ccid-openpgp images)
+    #[cfg(not(feature = "ccid-openpgp"))]
     let mut serial_listener: Option<xous::MessageEnvelope> = None;
+    #[cfg(not(feature = "ccid-openpgp"))]
     let mut serial_listen_mode: SerialListenMode = SerialListenMode::NoListener;
+    #[cfg(not(feature = "ccid-openpgp"))]
     let mut serial_buf = Vec::<u8>::new();
+    #[cfg(not(feature = "ccid-openpgp"))]
     let mut serial_rx_trigger = false; // when true, the condition was met to pass data to the listener (but the listener was not yet installed)
 
     // under the theory that PIDs cannot be forged.
@@ -208,9 +223,6 @@ pub(crate) fn main_hw() -> ! {
     let mut ccid_listener_pid: Option<NonZeroU8> = None;
     #[cfg(all(feature = "ccid-openpgp", not(feature = "ccid-echo")))]
     let mut ccid_listener: Option<xous::MessageEnvelope> = None;
-    #[cfg(feature = "ccid-openpgp")]
-    // First provisioning line (user), when awaiting second line (admin).
-    let mut prov_user_line: Option<Vec<u8>> = None;
 
     let mut autotype_delay_ms = 30;
 
@@ -575,33 +587,6 @@ pub(crate) fn main_hw() -> ! {
                 }
             }
             #[cfg(feature = "ccid-openpgp")]
-            Opcode::IrqProvSerialRx => {
-                let line = cu.prov_lines.borrow_mut().pop_front();
-                if let Some(l) = line {
-                    if prov_user_line.is_none() {
-                        log::info!("CCID provision: first line stored (len {}), send second line", l.len());
-                        prov_user_line = Some(l);
-                    } else if let Some(u) = prov_user_line.take() {
-                        match crate::ccid_store::save_provisioned_pins(&pddb, &u, &l) {
-                            Ok(()) => {
-                                log::info!("CCID provision: saved to PDDB, resetting USB");
-                                prov_capture.store(false, Ordering::SeqCst);
-                                #[cfg(feature = "board-baosec")]
-                                cu.unplug();
-                                #[cfg(not(feature = "board-baosec"))]
-                                {
-                                    let _ = cu.device.force_reset();
-                                }
-                            }
-                            Err(e) => {
-                                log::error!("CCID provision store failed: {:?}", e);
-                                prov_user_line = Some(u);
-                            }
-                        }
-                    }
-                }
-            }
-            #[cfg(feature = "ccid-openpgp")]
             Opcode::CcidTx => {
                 let mut buffer =
                     unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
@@ -739,6 +724,7 @@ pub(crate) fn main_hw() -> ! {
                     LogLevel::Err => log::set_max_level(log::LevelFilter::Error),
                 }
             }),
+            #[cfg(not(feature = "ccid-openpgp"))]
             Opcode::IrqSerialRx => {
                 if let Some(scalar) = msg.body.scalar_message() {
                     let valid_bytes = scalar.arg1;
@@ -821,6 +807,7 @@ pub(crate) fn main_hw() -> ! {
                     }
                 }
             }
+            #[cfg(not(feature = "ccid-openpgp"))]
             Opcode::SerialHookAscii => {
                 let maybe_delimiter = {
                     let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
@@ -830,10 +817,12 @@ pub(crate) fn main_hw() -> ! {
                 serial_listen_mode = SerialListenMode::AsciiListener(maybe_delimiter);
                 serial_listener = msg_opt.take();
             }
+            #[cfg(not(feature = "ccid-openpgp"))]
             Opcode::SerialHookBinary => {
                 serial_listen_mode = SerialListenMode::BinaryListener;
                 serial_listener = msg_opt.take();
             }
+            #[cfg(not(feature = "ccid-openpgp"))]
             Opcode::SerialHookConsole => msg_scalar_unpack!(msg, _, _, _, _, {
                 let log_conn = xous::connect(xous::SID::from_bytes(b"xous-log-server ").unwrap()).unwrap();
                 match xous::send_message(
@@ -860,6 +849,7 @@ pub(crate) fn main_hw() -> ! {
                     }
                 }
             }),
+            #[cfg(not(feature = "ccid-openpgp"))]
             Opcode::SerialClearHooks => {
                 let log_conn = xous::connect(xous::SID::from_bytes(b"xous-log-server ").unwrap()).unwrap();
                 // it is never harmful to double-unhook this
@@ -878,6 +868,7 @@ pub(crate) fn main_hw() -> ! {
                 serial_listen_mode = SerialListenMode::NoListener;
                 serial_listener.take();
             }
+            #[cfg(not(feature = "ccid-openpgp"))]
             Opcode::SerialFlush => msg_scalar_unpack!(msg, _, _, _, _, {
                 if cu.device.state() != usb_device::device::UsbDeviceState::Configured {
                     continue;
@@ -924,6 +915,7 @@ pub(crate) fn main_hw() -> ! {
                     _ => {}
                 }
             }),
+            #[cfg(not(feature = "ccid-openpgp"))]
             Opcode::SerialSendData => {
                 if cu.device.state() != usb_device::device::UsbDeviceState::Configured {
                     continue;
@@ -977,6 +969,7 @@ pub(crate) fn main_hw() -> ! {
                 request.sent = Some(total_sent as u32);
                 buffer.replace(request).unwrap();
             }
+            #[cfg(not(feature = "ccid-openpgp"))]
             Opcode::LogString => {
                 // the logger API is "best effort" only. Because retries and response codes can cause problems
                 // in the logger API, if anything goes wrong, we prefer to discard characters rather than get
@@ -994,6 +987,20 @@ pub(crate) fn main_hw() -> ! {
                         _ => {} // silent errors
                     }
                 }
+            }
+            // Persona A: no USB CDC on CCID images — discard LogString (logger "prefer discard" convention);
+            // prefer xous-log UART/DUART for console output.
+            #[cfg(feature = "ccid-openpgp")]
+            Opcode::LogString => {}
+            #[cfg(feature = "ccid-openpgp")]
+            Opcode::SerialHookAscii
+            | Opcode::SerialHookBinary
+            | Opcode::SerialHookConsole
+            | Opcode::SerialClearHooks
+            | Opcode::SerialFlush
+            | Opcode::SerialSendData
+            | Opcode::IrqSerialRx => {
+                log::warn!("USB serial unavailable on CCID Persona A image (use UART / xous-log)");
             }
             Opcode::LinkStatus => {
                 if let Some(scalar) = msg.body.scalar_message_mut() {

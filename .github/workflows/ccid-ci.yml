@@ -41,6 +41,9 @@ jobs:
       - name: CCID framing unit tests
         run: cargo test -p usb-bao1x --lib ccid_framing
 
+      - name: CCID endpoint-budget unit tests
+        run: cargo test -p usb-bao1x --lib ep_budget
+
       - name: CCID hosted compile check
         run: cargo check -p usb-bao1x --features hosted-baosec,ccid-openpgp
 

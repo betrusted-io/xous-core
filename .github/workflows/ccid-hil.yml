@@ -11,7 +11,7 @@ jobs:
     runs-on: [self-hosted, baosec-hil]
     steps:
       - name: Install Python dependencies
-        run: pip install --user pyusb pyserial
+        run: pip install --user pyusb
 
       - name: Checkout sources
         uses: actions/checkout@v4
