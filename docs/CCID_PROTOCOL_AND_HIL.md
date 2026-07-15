@@ -13,6 +13,9 @@ Raspberry Pi or desktop Linux host.
 **Audience:** reviewers who are not CCID experts, firmware developers wiring an
 APDU handler, and anyone setting up hardware-in-the-loop (HIL) regression tests.
 
+**Code navigation:** [`docs/code_map.md`](code_map.md) — symptom-to-source map
+for debugging and fixing CCID/provisioning issues.
+
 ## Table of contents
 
 1. [Background: smart cards, CCID, and OpenPGP](#background-smart-cards-ccid-and-openpgp)
@@ -33,7 +36,6 @@ APDU handler, and anyone setting up hardware-in-the-loop (HIL) regression tests.
 14. [Testing guide](#testing-guide)
 15. [Raspberry Pi HIL setup](#raspberry-pi-hil-setup)
 16. [CI summary](#ci-summary)
-17. [Related files](#related-files)
 
 ---
 
@@ -1113,20 +1115,4 @@ Logs: `/tmp/ccid-hil-out/`
 | OpenPGP E2E | Out of tree | `gpg --card-status` with handler service |
 
 See also [`docs/CCID_TEST_REPORT.md`](CCID_TEST_REPORT.md) for recorded
-verification results.
-
----
-
-## Related files
-
-| Path | Purpose |
-|------|---------|
-| `services/usb-bao1x/src/ccid_transport.rs` | USB CCID class driver |
-| `services/usb-bao1x/src/ccid_framing.rs` | Wire format helpers + unit tests |
-| `services/usb-bao1x/src/ccid_store.rs` | PDDB provisioning storage |
-| `services/usb-bao1x/src/api.rs` | IPC opcodes and `CcidMsgIpc` |
-| `services/usb-bao1x/src/main.rs` | Deferred listener, echo, provisioning |
-| `tools/ccid_smoke.py` | Host smoke test |
-| `tools/ccid_hil/` | HIL scripts |
-| `.github/workflows/ccid-ci.yml` | CI compile + unit tests |
-| `.github/workflows/ccid-hil.yml` | Nightly Pi HIL |
+verification results and [`docs/code_map.md`](code_map.md) for source navigation.

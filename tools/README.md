@@ -152,7 +152,7 @@ python3 tools/ccid_smoke.py
 tools/ccid_hil/run_all.sh
 ```
 
-See `tools/ccid_hil/README.md` and `docs/CCID_PROTOCOL_AND_HIL.md` for protocol
+See `tools/ccid_hil/README.md`, `docs/CCID_PROTOCOL_AND_HIL.md`, and `docs/code_map.md` for protocol
 details and Raspberry Pi HIL setup.
 
 ## Contribution Guidelines
