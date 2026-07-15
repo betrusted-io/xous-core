@@ -439,6 +439,7 @@ pub(crate) fn composite_handler(_irq_no: usize, arg: *mut usize) {
                             }
                         }
                     }
+                }
                 {
                     // scoping on the hardware lock to manipulate pointer states
                     let mut hw_lock = usb.wrapper.core();
