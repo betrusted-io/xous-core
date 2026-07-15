@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::io::{Read, Write};
 use std::path::Path;
+use std::str::FromStr;
 
 use bao1x_api::signatures::{
     FunctionCode, PADDING_LEN, Pubkey, SIGBLOCK_LEN, SealedFields, SignatureInFlash, UNSIGNED_LEN,
@@ -69,6 +70,41 @@ pub fn load_pem(src: &str) -> Result<pem::Pem, Box<dyn std::error::Error>> {
     Ok(pem::parse(input)?)
 }
 
+/// Resolves the semver block embedded in signed images. Uses `git describe` via
+/// [`SemVer::from_git`]. In CI (`CI` / `GITHUB_ACTIONS`), if that fails (e.g. fork
+/// without annotated tags), falls back to `v0.0.0-0-g` + first 8 hex digits of
+/// `GITHUB_SHA` so `xous-sign-image` does not abort.
+fn semver_for_sign_embed(explicit: Option<[u8; 16]>) -> Result<[u8; 16], Box<dyn std::error::Error>> {
+    if let Some(bytes) = explicit {
+        return Ok(bytes);
+    }
+    match SemVer::from_git() {
+        Ok(s) => Ok(s.into()),
+        Err(git_err) => {
+            let ci = matches!(std::env::var("CI").as_deref(), Ok("true") | Ok("1"))
+                || matches!(std::env::var("GITHUB_ACTIONS").as_deref(), Ok("true"));
+            if !ci {
+                return Err(format!("SemVer::from_git: {}", git_err).into());
+            }
+            let hex8: String = std::env::var("GITHUB_SHA")
+                .ok()
+                .and_then(|s| {
+                    let h: String = s.chars().take(8).collect();
+                    if h.len() == 8 && h.chars().all(|c| c.is_ascii_hexdigit()) {
+                        Some(h.to_ascii_lowercase())
+                    } else {
+                        None
+                    }
+                })
+                .unwrap_or_else(|| "00000000".into());
+            let fb = format!("v0.0.0-0-g{}", hex8);
+            SemVer::from_str(&fb).map(Into::into).map_err(|e| -> Box<dyn std::error::Error> {
+                format!("CI semver fallback ({}): {}", fb, e).into()
+            })
+        }
+    }
+}
+
 pub fn sign_image(
     source: &[u8],
     private_key: &pem::Pem,
@@ -87,10 +123,7 @@ pub fn sign_image(
     // Append version information to the binary. Appending it here means it is part
     // of the signed bundle.
     let minver_bytes = if let Some(mv) = minver { mv.into() } else { [0u8; 16] };
-    let semver: [u8; 16] = match semver {
-        Some(semver) => semver,
-        None => SemVer::from_git()?.into(),
-    };
+    let semver: [u8; 16] = semver_for_sign_embed(semver)?;
 
     match version {
         Version::Loader | Version::LoaderPrehash => {
