@@ -72,7 +72,6 @@ pub enum Opcode {
     /// CCID transport (raw PC_to_RDR frame queued for external handler)
     IrqCcidRx = 770,
     // IrqProvSerialRx (771) removed: Persona A CCID images do not allocate a USB provisioning CDC.
-
     #[cfg(all(feature = "ccid-openpgp", target_os = "xous"))]
     /// CCID: block until a frame is available (mirrors U2F deferred pattern)
     CcidRxDeferred = 640,

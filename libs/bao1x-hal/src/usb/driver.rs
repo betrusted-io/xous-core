@@ -2342,14 +2342,10 @@ impl CorigineWrapper {
     /// Occupied entries in this instance's `ep_meta` snapshot.
     /// Note: `UsbBusAllocator` owns a separate clone's array after `clone()` at
     /// boot; prefer [`Self::allocated_non_ep0_count`] for a cross-clone total.
-    pub fn ep_meta_occupied_count(&self) -> usize {
-        self.ep_meta.iter().filter(|e| e.is_some()).count()
-    }
+    pub fn ep_meta_occupied_count(&self) -> usize { self.ep_meta.iter().filter(|e| e.is_some()).count() }
 
     /// Authoritative non-EP0 allocation count shared across wrapper clones.
-    pub fn allocated_non_ep0_count(&self) -> usize {
-        self.allocated_non_ep0.load(Ordering::SeqCst)
-    }
+    pub fn allocated_non_ep0_count(&self) -> usize { self.allocated_non_ep0.load(Ordering::SeqCst) }
 
     pub fn core(&self) -> std::sync::MutexGuard<'_, CorigineUsb> {
         /*
