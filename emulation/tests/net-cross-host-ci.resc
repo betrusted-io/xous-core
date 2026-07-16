@@ -1,0 +1,164 @@
+# std::net Cross-host CI machine definition: the headless SoC + EC pair plus a real
+# Linux peer (emulation/linux-server.resc) on one Ethernet switch, so the DUT
+# exchanges genuine packets with an independent stack instead of looping back
+# inside itself.
+#
+# Derived from emulation/tests/net-ci.resc (SoC + EC + WF200) with the peer
+# added. Key differences from loopback:
+# - the peer's smc91x NIC and the EC's WF200 attach to the same Renode switch;
+#   the peer's rcS brings up eth0 (192.168.0.1) and starts udhcpd, so the DUT
+#   gets a REAL DHCP lease (the image is built with net/renode-peer, no static
+#   seed). No host TAP -- still no host networking.
+# - the peer's serial console is exposed on a pty so the driver
+#   (tools/std-net-cross-host-ci.py) can bring up its test services (nc echo, dnsd);
+#   the SoC console/kernel UARTs stay file-backed for sentinel parsing.
+# - the peer's rootfs must be a per-run scratch copy: its CFI flash writes back
+#   into the backing file, so $peer_rootfs points at a throwaway.
+#
+# All three machines start together; the driver (tools/std-net-cross-host-ci.py)
+# drives the peer console to provision its services (nc echo, dnsd) and rewrite
+# its udhcpd DNS option before the DUT boots far enough to take a lease.
+
+# Overridable parameters; the driver sets these before including this file.
+$image_dir?=$ORIGIN/../../target/riscv32imac-unknown-xous-elf/release
+$flash_file?=$ORIGIN/../../target/std-net-cross-host-ci/flash.bin
+$console_log?=$ORIGIN/../../target/std-net-cross-host-ci/console.log
+$kernel_log?=$ORIGIN/../../target/std-net-cross-host-ci/kernel.log
+$peer_bin?=$ORIGIN/../versatile-vmlinux
+$peer_rootfs?=$ORIGIN/../../target/std-net-cross-host-ci/peer-rootfs.jffs2
+$peer_pty?=$ORIGIN/../../target/std-net-cross-host-ci/peer.pty
+
+path add $ORIGIN/..
+
+using sysbus
+
+# Deterministic runs: fixed emulation seed (feeds the TRNG models).
+emulation SetSeed 0x0
+
+# Betrusted peripherals defined in C# (identical set to net-ci.resc).
+i @peripherals/ABRTCMC.cs
+i @peripherals/BetrustedEcI2C.cs
+i @peripherals/BetrustedSocI2C.cs
+i @peripherals/BetrustedSpinor.cs
+i @peripherals/BetrustedWatchdog.cs
+i @peripherals/BQ24157.cs
+i @peripherals/BQ27421.cs
+i @peripherals/BtEvents.cs
+i @peripherals/ComConnector.cs
+EnsureTypeIsLoaded "Antmicro.Renode.Peripherals.SPI.Betrusted.IComPeripheral"
+EnsureTypeIsLoaded "Antmicro.Renode.Peripherals.SPI.Betrusted.IComController"
+i @peripherals/ComEc.cs
+i @peripherals/ComSoC.cs
+i @peripherals/EcPower.cs
+i @peripherals/EcWifi.cs
+i @peripherals/engine.cs
+i @peripherals/Jtag.cs
+i @peripherals/keyboard.cs
+i @peripherals/keyrom.cs
+i @peripherals/LiteX_Timer_32.cs
+i @peripherals/LM3509.cs
+i @peripherals/LSM6DS3.cs
+i @peripherals/memlcd.cs
+i @peripherals/MXIC_MX66UM1G45G.cs
+i @peripherals/sha512.cs
+i @peripherals/spinor_soft_int.cs
+i @peripherals/ticktimer.cs
+i @peripherals/trng_kernel.cs
+i @peripherals/trng_server.cs
+i @peripherals/TLV320AIC3100.cs
+i @peripherals/TUSB320LAI.cs
+i @peripherals/WF200.cs
+i @peripherals/wfi.cs
+
+EnsureTypeIsLoaded "Antmicro.Renode.Peripherals.CPU.VexRiscv"
+i @peripherals/vexriscv-aes.cs
+
+EnsureTypeIsLoaded "Antmicro.Renode.Peripherals.Timers.Betrusted.TickTimer"
+i @peripherals/susres.cs
+
+# Shared COM SPI bus and the Ethernet switch that carries the wifi <-> peer link
+emulation CreateComConnector "com"
+emulation CreateSwitch "switch"
+
+############### The Linux peer (ARM Versatile) ###############
+mach create "peer"
+machine LoadPlatformDescription @platforms/boards/versatile.repl
+sysbus Redirect 0xC0000000 0x0 0x10000000
+machine CFIFlashFromFile $peer_rootfs 0x34000000 "flash"
+# Silence the PS2 mouse
+logLevel 3 kmi1.mouse
+# The peer NIC joins the switch
+connector Connect smc91x switch
+# Expose the peer's serial console on a pty for the driver (the trailing `true`
+# creates the pty symlink at $peer_pty).
+emulation CreateUartPtyTerminal "peerterm" $peer_pty true
+connector Connect sysbus.uart0 peerterm
+
+macro reset
+"""
+    sysbus.cpu SetRegisterUnsafe 0 0x0
+    sysbus.cpu SetRegisterUnsafe 1 0x183     # board id
+    sysbus.cpu SetRegisterUnsafe 2 0x100     # atags
+    sysbus LoadELF $peer_bin false
+    sysbus LoadAtags "console=ttyAMA0,115200 root=/dev/mtdblock0 ro rootfstype=jffs2 mtdparts=armflash.0:64m@0x0 earlyprintk mem=256M" 0x10000000 0x100
+    cpu PC 0x8000
+"""
+logLevel 3
+runMacro $reset
+mach clear
+
+############### The Betrusted SoC ###############
+mach create "SoC"
+machine LoadPlatformDescription @soc/betrusted-soc.repl
+
+sysbus Tag <0xB0000000, 0xB0006000> "Framebuffer"
+sysbus SilenceRange <0xf0003000, 0xF0003FFF>
+sysbus SilenceRange <0xF0014000 100>
+sysbus.spinor.flash BackingFile $flash_file
+sysbus LoadBinary $ORIGIN/../../utralib/renode/soc_csr.bin 0x20000000
+connector Connect sysbus.com com
+
+macro reset
+"""
+    sysbus LoadBinary $image_dir/loader.bin 0x20500000
+    sysbus LoadBinary $image_dir/xous.img 0x20980000
+    cpu SetRegisterUnsafe 10 0x20980000
+    cpu PC 0x20501000
+"""
+
+uart CreateFileBackend $kernel_log true
+console CreateFileBackend $console_log true
+
+runMacro $reset
+mach clear
+
+############### The Betrusted EC ###############
+mach create "EC"
+machine LoadPlatformDescription @ec/betrusted-ec.repl
+connector Connect sysbus.com com
+connector Connect sysbus.wifi.wf200 switch
+
+macro reset
+"""
+    sysbus LoadBinary @ec/bt-ec.bin 0x20000000
+    sysbus LoadBinary @ec/wf200_fw.bin 0x2009C000
+    sysbus LoadBinary @ec/loader.bin 0x00000000
+    cpu PC 0
+    cpu SP 0x1001FFFC
+"""
+runMacro $reset
+mach clear
+
+# Suppress the per-access GetRegisterUnsafe obsolete-API warning on both xous
+# CPUs (net-ci.resc rationale: it grows the run log to tens of GB).
+mach set "SoC"
+logLevel 3 sysbus.cpu
+mach set "EC"
+logLevel 3 sysbus.cpu
+mach clear
+
+# Start all machines. The peer boots and is provisioned by the driver before
+# the DUT's slower boot reaches wlan join + DHCP, so the DUT's lease sees the
+# finished peer config; the driver provisions the udhcpd/DNS options first to
+# widen that margin.
+start

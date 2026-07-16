@@ -176,3 +176,41 @@ watches the console for the boot banner and the net-ready marker, then the per-t
 result lines. It exits non-zero if any test fails. `--loglevel DEBUG` shows the
 milestone waits; `--help` lists the timeout flags.
 
+### Running `std-net-cross-host-ci.py` (cross-host `std::net` tests under Renode)
+
+The Cross-host counterpart: it boots the SoC + EC pair alongside a real Linux peer
+(`emulation/linux-server.resc`) on one Ethernet switch, so the DUT exchanges
+genuine packets with an independent stack instead of looping back inside itself.
+The DUT takes a real DHCP lease from the peer, and the cross-host theme exercises
+cross-host TCP/UDP echo, a real connect-refused RST, and DNS resolved by the
+peer's `dnsd`.
+
+```sh
+# From the repository root
+cargo xtask std-net-cross-host-ci --no-verify   # build the cross-host image
+python3 tools/std-net-cross-host-ci.py          # start all machines, provision the peer, run
+```
+
+Beyond the loopback driver's job, this one drives the peer's serial console (on a
+pty) to a passwordless root shell and starts its services — `dnsd`, a rewritten
+`udhcpd` advertising the peer as the resolver, and `nc` TCP/UDP echo servers —
+before the DUT boots far enough to take its lease. It copies the peer rootfs to
+a per-run scratch file (the peer's flash writes back). Exits non-zero on any
+failure.
+
+## Contribution Guidelines
+
+[![Contributor Covenant](https://img.shields.io/badge/Contributor%20Covenant-v2.0%20adopted-ff69b4.svg)](../CODE_OF_CONDUCT.md)
+
+Please see [CONTRIBUTING](../CONTRIBUTING.md) for details on
+how to make a contribution.
+
+Please note that this project is released with a
+[Contributor Code of Conduct](../CODE_OF_CONDUCT.md).
+By participating in this project you agree to abide its terms.
+
+## License
+
+Copyright © 2020
+
+Licensed under the [Apache License 2.0](http://opensource.org/licenses/Apache-2.0) [LICENSE](LICENSE)

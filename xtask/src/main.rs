@@ -310,6 +310,30 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .add_feature("gam/renode")
                 .add_feature("modals/renode");
         }
+        Some("std-net-cross-host-ci") => {
+            // Same image as std-net-ci, plus the cross-host test themes, built
+            // against a REAL DHCP peer (emulation/linux-server.resc) on the
+            // switch: `net/renode-peer` skips the renode-minimal static seed so
+            // the DUT takes a real lease, and `net-tests/cross-host` compiles in the
+            // cross-host themes that talk to the peer.
+            builder.target_renode().add_services(&base_pkgs).add_services(&get_cratespecs());
+            builder.add_loader_feature("renode-bypass");
+            builder
+                .add_service("net", LoaderRegion::Ram)
+                .add_service("com", LoaderRegion::Ram)
+                .add_service("llio", LoaderRegion::Ram)
+                .add_service("trng", LoaderRegion::Ram)
+                .add_service("dns", LoaderRegion::Ram)
+                .add_service("net-tests", LoaderRegion::Ram);
+            builder
+                .add_feature("net/renode-minimal")
+                .add_feature("net/renode-peer")
+                .add_feature("net-tests/cross-host")
+                .add_feature("dns/minimal-testing")
+                .add_feature("pddb/renode")
+                .add_feature("gam/renode")
+                .add_feature("modals/renode");
+        }
         Some("renode-aes-test") => {
             builder.target_renode().add_services(&aes_test_pkgs).add_services(&get_cratespecs());
         }
@@ -1060,6 +1084,7 @@ Renode emulation:
                          Bypasses sig checks, keys locked out.
  libstd-net              Renode test image for testing network functions. Bypasses sig checks, keys locked out.
  std-net-ci              libstd-net image plus the net-tests runner (on-target std::net CI suite).
+ std-net-cross-host-ci        std-net-ci plus the cross-host themes (real DHCP peer on the switch).
  ffi-test                builds an image for testing C-FFI bindings and integration. [cratespecs] are services
  renode-aes-test         Renode image for AES emulation development. Extremely minimal.
 
