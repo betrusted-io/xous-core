@@ -64,4 +64,7 @@ precursor = ["utralib/precursor"]
 hosted = ["utralib/hosted"]
 renode = ["utralib/renode"]
 renode-minimal = []
+# Tier-2 test images: a real DHCP peer (emulation/linux-server.resc) is on the
+# switch, so skip the renode-minimal static-config seed and take a real lease.
+renode-peer = []
 default = []
