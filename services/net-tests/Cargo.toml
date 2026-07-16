@@ -1,0 +1,43 @@
+[package]
+name = "net-tests"
+version = "0.1.0"
+authors = ["Xous contributors"]
+edition = "2018"
+description = "std::net test runner for Renode CI"
+
+# Dependency versions enforced by Cargo.lock.
+[dependencies]
+xous = "0.9.70"
+log-server = { package = "xous-api-log", version = "0.1.69" }
+ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.70" }
+xous-names = { package = "xous-api-names", version = "0.9.71" }
+log = "0.4.14"
+com = { path = "../com" }
+net = { path = "../net" }
+
+# Feature plumbing only (these already ride in net's and dns's dependency
+# trees): a standalone `cargo check -p net-tests` must enable the target
+# features that whole-image feature unification provides in `xtask` builds.
+dns = { path = "../dns" }
+pddb = { path = "../pddb" }
+gam = { path = "../gam" }
+modals = { path = "../modals" }
+susres = { path = "../../api/xous-api-susres", package = "xous-api-susres" }
+
+[features]
+renode = [
+    "net/renode",
+    "net/renode-minimal",
+    "com/renode",
+    "dns/renode",
+    "dns/minimal-testing",
+    "pddb/renode",
+    "gam/renode",
+    "modals/renode",
+    "susres/renode",
+]
+# Compile in the cross-host themes (peer at PEER_IP on the switch). The
+# cross-host image (xtask std-net-cross-host-ci) sets this; the the loopback suite image
+# does not, so loopback and cross-host share one crate but different registered sets.
+cross-host = []
+default = []
