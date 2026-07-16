@@ -1,0 +1,154 @@
+# std::net CI machine definition (headless SoC + EC pair + wifi switch).
+#
+# Derived from emulation/tests/pddb-ci.resc (see its header for the rationale
+# behind the headless choices); differences for the net suite:
+# - an Ethernet `Switch` is created and the EC's WF200 wifi model attaches to
+#   it (the same wiring as emulation/xous-release-tap.resc, minus the host TAP:
+#   CI must never touch host networking). Additional in-emulation peers (e.g.
+#   emulation/linux-server.resc) can attach to the same switch.
+# - the flash backing file is still per-run scratch, but the net image carries
+#   no PDDB, so nothing in it persists run state; a blank file is fine.
+#
+# The EC machine is MANDATORY here twice over: the SoC's first COM transaction
+# null-derefs in ComConnector without a peer, and the whole point of the net
+# suite is the COM -> EC -> WF200 path.
+#
+# Driven by tools/std-net-ci.py (local loop) or emulation/tests/std-net.robot
+# (renode-test).
+
+# Overridable parameters; defaults resolve relative to this script. Callers
+# (driver/robot) set these before including this file.
+$image_dir?=$ORIGIN/../../target/riscv32imac-unknown-xous-elf/release
+$flash_file?=$ORIGIN/../../target/std-net-ci/flash.bin
+$console_log?=$ORIGIN/../../target/std-net-ci/console.log
+$kernel_log?=$ORIGIN/../../target/std-net-ci/kernel.log
+
+# Add emulation/ to the global path, so @peripherals/..., @soc/... and
+# @ec/... resolve exactly as they do for emulation/betrusted.resc.
+path add $ORIGIN/..
+
+using sysbus
+
+# Deterministic runs: fixed emulation seed (feeds the TRNG models).
+emulation SetSeed 0x0
+
+# Add peripherals that are defined in C#.  You must restart Renode
+# if you modify these files.
+i @peripherals/ABRTCMC.cs
+i @peripherals/BetrustedEcI2C.cs
+i @peripherals/BetrustedSocI2C.cs
+i @peripherals/BetrustedSpinor.cs
+i @peripherals/BetrustedWatchdog.cs
+i @peripherals/BQ24157.cs
+i @peripherals/BQ27421.cs
+i @peripherals/BtEvents.cs
+i @peripherals/ComConnector.cs
+EnsureTypeIsLoaded "Antmicro.Renode.Peripherals.SPI.Betrusted.IComPeripheral"
+EnsureTypeIsLoaded "Antmicro.Renode.Peripherals.SPI.Betrusted.IComController"
+i @peripherals/ComEc.cs
+i @peripherals/ComSoC.cs
+i @peripherals/EcPower.cs
+i @peripherals/EcWifi.cs
+i @peripherals/engine.cs
+i @peripherals/Jtag.cs
+i @peripherals/keyboard.cs
+i @peripherals/keyrom.cs
+i @peripherals/LiteX_Timer_32.cs
+i @peripherals/LM3509.cs
+i @peripherals/LSM6DS3.cs
+i @peripherals/memlcd.cs
+i @peripherals/MXIC_MX66UM1G45G.cs
+i @peripherals/sha512.cs
+i @peripherals/spinor_soft_int.cs
+i @peripherals/ticktimer.cs
+i @peripherals/trng_kernel.cs
+i @peripherals/trng_server.cs
+i @peripherals/TLV320AIC3100.cs
+i @peripherals/TUSB320LAI.cs
+i @peripherals/WF200.cs
+i @peripherals/wfi.cs
+
+EnsureTypeIsLoaded "Antmicro.Renode.Peripherals.CPU.VexRiscv"
+i @peripherals/vexriscv-aes.cs
+
+EnsureTypeIsLoaded "Antmicro.Renode.Peripherals.Timers.Betrusted.TickTimer"
+i @peripherals/susres.cs
+
+# Create the COM SPI bus and the wifi switch
+emulation CreateComConnector "com"
+emulation CreateSwitch "switch"
+
+############### Define the Betrusted SoC ###############
+mach create "SoC"
+machine LoadPlatformDescription @soc/betrusted-soc.repl
+
+sysbus Tag <0xB0000000, 0xB0006000> "Framebuffer"
+
+# Silence GPIO
+sysbus SilenceRange <0xf0003000, 0xF0003FFF>
+# Silence POWER
+sysbus SilenceRange <0xF0014000 100>
+
+# Attach the flash backing to the per-run scratch file (writes persist!)
+sysbus.spinor.flash BackingFile $flash_file
+
+# Load the SPI flash into RAM
+sysbus LoadBinary $ORIGIN/../../utralib/renode/soc_csr.bin 0x20000000
+
+# Connect the SoC to the SPI bus
+connector Connect sysbus.com com
+
+# The macro `reset` gets called implicitly when running `machine Reset`
+macro reset
+"""
+    sysbus LoadBinary $image_dir/loader.bin 0x20500000
+    sysbus LoadBinary $image_dir/xous.img 0x20980000
+    # Set $a0 to point at the args binary
+    cpu SetRegisterUnsafe 10 0x20980000
+    cpu PC 0x20501000
+"""
+
+# File-backed UART capture with immediate flush (xous-swap.resc idiom).
+# All CI markers/sentinels appear on `console` (the log-server UART);
+# `uart` carries kernel debug only.
+uart CreateFileBackend $kernel_log true
+console CreateFileBackend $console_log true
+
+runMacro $reset
+
+mach clear
+
+############### Define the Betrusted EC ###############
+mach create "EC"
+machine LoadPlatformDescription @ec/betrusted-ec.repl
+
+# Connect the EC to the SPI bus
+connector Connect sysbus.com com
+
+# Connect the WF200 to the wifi switch (cf. emulation/xous-release-tap.resc,
+# minus the TAP: no host networking in CI)
+connector Connect sysbus.wifi.wf200 switch
+
+macro reset
+"""
+    sysbus LoadBinary @ec/bt-ec.bin 0x20000000
+    sysbus LoadBinary @ec/wf200_fw.bin 0x2009C000
+    sysbus LoadBinary @ec/loader.bin 0x00000000
+    cpu PC 0
+    cpu SP 0x1001FFFC
+"""
+runMacro $reset
+
+mach clear
+
+# Renode 1.16.1 logs a per-access "Using `GetRegisterUnsafe` API is obsolete"
+# WARNING from each cpu (the wfi/idle path hits it continuously), which can
+# balloon the run log to tens of GB. Suppress cpu messages below Error on both
+# machines; everything else keeps its level.
+mach set "SoC"
+logLevel 3 sysbus.cpu
+mach set "EC"
+logLevel 3 sysbus.cpu
+mach clear
+
+start

@@ -84,6 +84,7 @@ members = [
   "apps/hidv2",
   "services/libstd-test",
   "services/pddb-fs-tests",
+  "services/net-tests",
   "services/ffi-test",
   "services/tts",
   "services/cram-console",

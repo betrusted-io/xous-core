@@ -157,19 +157,22 @@ image offline with `pddbdbg.py`. It exits non-zero if any test fails. A cold run
 ~15 minutes on a fast host. `--loglevel DEBUG` shows the boot choreography;
 `--help` lists the timeout flags. See `services/pddb-fs-tests/README.md`.
 
-## Contribution Guidelines
+### Running `std-net-ci.py` (on-target `std::net` tests under Renode)
 
-[![Contributor Covenant](https://img.shields.io/badge/Contributor%20Covenant-v2.0%20adopted-ff69b4.svg)](../CODE_OF_CONDUCT.md)
+The sibling of `pddb-fs-ci.py`: `std-net-ci.py` runs the `services/net-tests` suite
+against the real riscv32 xous libstd inside Renode, exercising the actual
+`std::net`-over-`net`-service code path (smoltcp, over an emulated WF200 wifi link
+to the betrusted-ec). Requires Renode on the `PATH`; unlike the fs suite there is no
+`pddbdbg.py` analysis step and no PIN/format UX to drive.
 
-Please see [CONTRIBUTING](../CONTRIBUTING.md) for details on
-how to make a contribution.
+```sh
+# From the repository root
+cargo xtask std-net-ci --no-verify     # build the Renode test image (slow first time)
+python3 tools/std-net-ci.py            # boot, wait for net-ready, run the suite
+```
 
-Please note that this project is released with a
-[Contributor Code of Conduct](../CODE_OF_CONDUCT.md).
-By participating in this project you agree to abide its terms.
+The driver boots the emulator headless (no keyboard, no PDDB, fully unattended),
+watches the console for the boot banner and the net-ready marker, then the per-test
+result lines. It exits non-zero if any test fails. `--loglevel DEBUG` shows the
+milestone waits; `--help` lists the timeout flags.
 
-## License
-
-Copyright © 2020
-
-Licensed under the [Apache License 2.0](http://opensource.org/licenses/Apache-2.0) [LICENSE](LICENSE)
