@@ -11,27 +11,35 @@
 use digest::const_oid::{AssociatedOid, ObjectIdentifier};
 pub use digest::{self, Digest};
 use digest::{
-    consts::{U32, U64},
-    core_api::{CoreWrapper, CtVariableCoreWrapper},
-    impl_oid_carrier,
+    block_api::CtOutWrapper,
+    consts::{U28, U32, U48, U64},
 };
 
-mod core_api;
+/// Block-level types
+pub mod block_api;
+
 #[cfg(feature = "debug")]
 mod debug;
 mod sha256;
 mod sha512;
 
-pub use core_api::{Sha256VarCore, Sha512VarCore};
+pub use block_api::{Sha256VarCore, Sha512VarCore};
 #[cfg(feature = "compress")]
 pub use sha256::compress256;
 #[cfg(feature = "compress")]
 pub use sha512::compress512;
 
-impl_oid_carrier!(OidSha256, "2.16.840.1.101.3.4.2.1");
-impl_oid_carrier!(OidSha512, "2.16.840.1.101.3.4.2.3");
-
-/// SHA-256 hasher.
-pub type Sha256 = CoreWrapper<CtVariableCoreWrapper<Sha256VarCore, U32, OidSha256>>;
-/// SHA-512 hasher.
-pub type Sha512 = CoreWrapper<CtVariableCoreWrapper<Sha512VarCore, U64, OidSha512>>;
+digest::buffer_fixed!(
+    /// SHA-256 hasher.
+    pub struct Sha256(CtOutWrapper<block_api::Sha256VarCore, U32>);
+    oid: "2.16.840.1.101.3.4.2.1";
+    impl: BaseFixedTraits AlgorithmName Default Clone HashMarker
+        Reset FixedOutputReset ZeroizeOnDrop;
+);
+digest::buffer_fixed!(
+    /// SHA-512 hasher.
+    pub struct Sha512(CtOutWrapper<block_api::Sha512VarCore, U64>);
+    oid: "2.16.840.1.101.3.4.2.3";
+    impl: BaseFixedTraits AlgorithmName Default Clone HashMarker
+        Reset FixedOutputReset ZeroizeOnDrop;
+);
