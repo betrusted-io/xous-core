@@ -124,6 +124,11 @@ impl<P: ForsParams> ForsSignature<P> {
     }
 }
 
+// Method signatures mention crate-internal types (SkSeed, PkSeed, ADRS, ...).
+// They are technically pub-reachable through the sealed `ParameterSet`
+// supertrait chain (see the `private_bounds` allow there) but not usable
+// externally, since the internal types cannot be named or constructed.
+#[allow(private_interfaces)]
 pub(crate) trait ForsParams: HypertreeParams {
     type K: ArraySize + Eq + Debug;
     type A: ArraySize + Eq + Debug;
@@ -156,8 +161,30 @@ pub(crate) trait ForsParams: HypertreeParams {
             adrs.tree_index.set(i);
             self.f(&adrs, &sk)
         } else {
-            let lnode = self.fors_node(sk_seed, 2 * i, z - 1, &adrs);
-            let rnode = self.fors_node(sk_seed, 2 * i + 1, z - 1, &adrs);
+            // FORS leaves are cheap (~2 compressions: PRF + F), so the
+            // sequential cutoff is higher than the XMSS one: a height-12
+            // subtree is 4096 leaves (~12k compressions) per rayon task.
+            // With the feature disabled this is the original sequential code.
+            #[cfg(feature = "parallel")]
+            let (lnode, rnode) = {
+                const PAR_HEIGHT_CUTOFF: u32 = 12;
+                if z > PAR_HEIGHT_CUTOFF {
+                    rayon::join(
+                        || self.fors_node(sk_seed, 2 * i, z - 1, &adrs),
+                        || self.fors_node(sk_seed, 2 * i + 1, z - 1, &adrs),
+                    )
+                } else {
+                    (
+                        self.fors_node(sk_seed, 2 * i, z - 1, &adrs),
+                        self.fors_node(sk_seed, 2 * i + 1, z - 1, &adrs),
+                    )
+                }
+            };
+            #[cfg(not(feature = "parallel"))]
+            let (lnode, rnode) = (
+                self.fors_node(sk_seed, 2 * i, z - 1, &adrs),
+                self.fors_node(sk_seed, 2 * i + 1, z - 1, &adrs),
+            );
             adrs.tree_height.set(z);
             adrs.tree_index.set(i);
             self.h(&adrs, &lnode, &rnode)
