@@ -75,7 +75,7 @@ impl VariableOutputCore for Sha256VarCore {
         buffer.len64_padding_be(bit_len, |b| compress256(&mut self.csr, &[b.0]));
 
         for (chunk, v) in out.chunks_exact_mut(4).zip(self.state.iter()) {
-            chunk.copy_from_slice(&v.to_be_bytes());
+            chunk.copy_from_slice(&v.to_le_bytes());
         }
     }
 }
