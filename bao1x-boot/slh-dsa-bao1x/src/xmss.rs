@@ -1,3 +1,4 @@
+#![cfg_attr(rustfmt, rustfmt_skip)]
 use crate::{SkSeed, address, wots::WotsParams, wots::WotsSig};
 use core::fmt::Debug;
 use hybrid_array::{Array, ArraySize};
@@ -59,6 +60,11 @@ impl<P: XmssParams> TryFrom<&[u8]> for XmssSig<P> {
     }
 }
 
+// Method signatures mention crate-internal types (SkSeed, PkSeed, ADRS, ...).
+// They are technically pub-reachable through the sealed `ParameterSet`
+// supertrait chain (see the `private_bounds` allow there) but not usable
+// externally, since the internal types cannot be named or constructed.
+#[allow(private_interfaces)]
 pub(crate) trait XmssParams: WotsParams + Sized {
     type HPrime: ArraySize + Debug + Eq;
 
@@ -76,8 +82,32 @@ pub(crate) trait XmssParams: WotsParams + Sized {
             adrs.key_pair_adrs.set(node);
             self.wots_pk_gen(sk_seed, &adrs)
         } else {
-            let lnode = self.xmss_node(sk_seed, 2 * node, height - 1, adrs);
-            let rnode = self.xmss_node(sk_seed, 2 * node + 1, height - 1, adrs);
+            // Subtrees at or below the cutoff height are built sequentially even
+            // with the `parallel` feature: a height-8 subtree is 256 WOTS leaves
+            // (~75k compressions for the -24 sets), ample work per rayon task,
+            // while heights above it fork into independent halves. With the
+            // feature disabled this compiles to exactly the original sequential
+            // recursion.
+            #[cfg(feature = "parallel")]
+            let (lnode, rnode) = {
+                const PAR_HEIGHT_CUTOFF: u32 = 8;
+                if height > PAR_HEIGHT_CUTOFF {
+                    rayon::join(
+                        || self.xmss_node(sk_seed, 2 * node, height - 1, adrs),
+                        || self.xmss_node(sk_seed, 2 * node + 1, height - 1, adrs),
+                    )
+                } else {
+                    (
+                        self.xmss_node(sk_seed, 2 * node, height - 1, adrs),
+                        self.xmss_node(sk_seed, 2 * node + 1, height - 1, adrs),
+                    )
+                }
+            };
+            #[cfg(not(feature = "parallel"))]
+            let (lnode, rnode) = (
+                self.xmss_node(sk_seed, 2 * node, height - 1, adrs),
+                self.xmss_node(sk_seed, 2 * node + 1, height - 1, adrs),
+            );
             let mut adrs = adrs.tree_adrs();
             adrs.tree_height.set(height);
             adrs.tree_index.set(node);
