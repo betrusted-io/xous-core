@@ -25,7 +25,8 @@ hmac = "0.13"
 hybrid-array = { version = "0.4", features = ["extra-sizes"] }
 pkcs8 = { version = "0.11", default-features = false }
 rand_core = "0.10"
-sha2 = { package = "sha2-bao1x-pq", path = "../sha2-bao1x-pq", default-features = false }
+# sha2 = { package = "sha2-bao1x-pq", path = "../sha2-bao1x-pq", default-features = false }
+sha2 = "0.11.0"
 shake = { version = "0.1", default-features = false }
 signature = { version = "3", features = ["rand_core"] }
 typenum = { version = "1.20", features = ["const-generics"] }
@@ -62,3 +63,8 @@ harness = false
 alloc = []
 default = ["alloc", "pkcs8/alloc"]
 zeroize = ["dep:zeroize", "hybrid-array/zeroize"]
+# NIST SP 800-230 (ipd) L3/L5 limited-signature sets (SLH-DSA-*-192-24 / -256-24).
+# Requires a `hybrid-array` that provides `ArraySize` impls for U7752 and U14944
+# (the published crate does not yet — see README "hybrid-array sizes"). The L1
+# sets (SLH-DSA-*-128-24, sig size 3856) are always available and need no patch.
+sp800-230-highsec = []
