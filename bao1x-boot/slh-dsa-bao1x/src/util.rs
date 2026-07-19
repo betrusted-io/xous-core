@@ -2,6 +2,24 @@
 use crate::fors::ForsParams;
 use hybrid_array::{Array, ArraySize, typenum::Unsigned};
 
+/// A bound that is `Sync` when the `parallel` feature is enabled and empty
+/// otherwise.
+///
+/// Used as a supertrait of `HashSuite` so the rayon fork-join Merkle tree
+/// builds (see `xmss_node` / `fors_node`) can share `&self` across worker
+/// threads, without imposing any `Sync` requirement on sequential / `no_std`
+/// builds. The blanket impls make this invisible to implementors either way:
+/// every hash suite is a plain-data struct and is automatically `Sync`.
+#[cfg(feature = "parallel")]
+pub(crate) trait MaybeSync: Sync {}
+#[cfg(feature = "parallel")]
+impl<T: Sync> MaybeSync for T {}
+
+#[cfg(not(feature = "parallel"))]
+pub(crate) trait MaybeSync {}
+#[cfg(not(feature = "parallel"))]
+impl<T> MaybeSync for T {}
+
 // Algorithm 3
 //
 // Returns `u32` chunks (not `u16`). The SP 800-230 limited-signature parameter
