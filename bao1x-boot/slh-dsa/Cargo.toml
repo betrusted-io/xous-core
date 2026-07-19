@@ -1,0 +1,59 @@
+[package]
+name = "slh-dsa"
+description = """
+Pure Rust implementation of SLH-DSA (aka SPHINCS+) as described in the
+FIPS-205 standard
+"""
+version = "0.2.0-rc.5"
+edition = "2024"
+rust-version = "1.85"
+license = "Apache-2.0 OR MIT"
+homepage = "https://github.com/RustCrypto/signatures/tree/master/slh-dsa"
+repository = "https://github.com/RustCrypto/signatures"
+readme = "README.md"
+categories = ["cryptography"]
+keywords = ["crypto", "signature"]
+exclude = ["tests"]
+
+[dependencies]
+const-oid = { version = "0.10", features = ["db"] }
+digest = "0.11"
+hmac = "0.13"
+hybrid-array = { version = "0.4", features = ["extra-sizes"] }
+pkcs8 = { version = "0.11", default-features = false }
+rand_core = "0.10"
+sha2 = { version = "0.11", default-features = false }
+shake = { version = "0.1", default-features = false }
+signature = { version = "3", features = ["rand_core"] }
+typenum = { version = "1.20", features = ["const-generics"] }
+zerocopy = { version = "0.8", features = ["derive"] }
+
+# optional dependencies
+zeroize = { version = "1.8.1", optional = true, default-features = false }
+
+[dev-dependencies]
+aes = "0.9.0-rc.2"
+criterion = "0.7"
+cipher = "0.5"
+ctr = "0.10.0-rc.3"
+hex = { version = "0.4.1", features = ["serde"] }
+hex-literal = "1"
+crypto-bigint = { version = "0.7", default-features = false, features = ["alloc"] }
+paste = "1.0.15"
+pkcs8 = { version = "0.11", features = ["pem"] }
+proptest = "1.11.0"
+rand = "0.10"
+serde_json = "1.0.124"
+serde = { version = "1.0.207", features = ["derive"] }
+
+[lib]
+bench = false
+
+[[bench]]
+name = "sign_verify"
+harness = false
+
+[features]
+alloc = []
+default = ["alloc", "pkcs8/alloc"]
+zeroize = ["dep:zeroize", "hybrid-array/zeroize"]
