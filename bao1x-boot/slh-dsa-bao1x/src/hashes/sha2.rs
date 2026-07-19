@@ -1,3 +1,4 @@
+#![cfg_attr(rustfmt, rustfmt_skip)]
 // TODO(tarcieri): fix `hybrid-array` deprecation warnings
 #![allow(deprecated)]
 
@@ -14,7 +15,7 @@ use digest::{Digest, KeyInit, Mac};
 use hmac::Hmac;
 use hybrid_array::{Array, ArraySize};
 use sha2::{Sha256, Sha512};
-use typenum::{Diff, Sum, U, U16, U24, U30, U32, U34, U39, U42, U47, U49, U64, U128};
+use typenum::{Diff, Sum, U, U16, U21, U24, U30, U32, U34, U39, U41, U42, U47, U49, U64, U128};
 
 /// Implementation of the MGF1 XOF
 fn mgf1<H: Digest, L: ArraySize>(seed: &[u8]) -> Array<u8, L> {
@@ -156,6 +157,8 @@ pub type Sha2_128s = Sha2L1<U16, U30>;
 impl WotsParams for Sha2_128s {
     type WotsMsgLen = U<32>;
     type WotsSigLen = U<35>;
+    type LgW = U<4>;
+    type CkLen = U<3>;
 }
 impl XmssParams for Sha2_128s {
     type HPrime = U<9>;
@@ -179,6 +182,8 @@ pub type Sha2_128f = Sha2L1<U16, U34>;
 impl WotsParams for Sha2_128f {
     type WotsMsgLen = U<32>;
     type WotsSigLen = U<35>;
+    type LgW = U<4>;
+    type CkLen = U<3>;
 }
 impl XmssParams for Sha2_128f {
     type HPrime = U<3>;
@@ -327,6 +332,8 @@ pub type Sha2_192s = Sha2L35<U24, U39>;
 impl WotsParams for Sha2_192s {
     type WotsMsgLen = U<{ 24 * 2 }>;
     type WotsSigLen = U<{ 24 * 2 + 3 }>;
+    type LgW = U<4>;
+    type CkLen = U<3>;
 }
 impl XmssParams for Sha2_192s {
     type HPrime = U<9>;
@@ -350,6 +357,8 @@ pub type Sha2_192f = Sha2L35<U24, U42>;
 impl WotsParams for Sha2_192f {
     type WotsMsgLen = U<{ 24 * 2 }>;
     type WotsSigLen = U<{ 24 * 2 + 3 }>;
+    type LgW = U<4>;
+    type CkLen = U<3>;
 }
 impl XmssParams for Sha2_192f {
     type HPrime = U<3>;
@@ -373,6 +382,8 @@ pub type Sha2_256s = Sha2L35<U32, U47>;
 impl WotsParams for Sha2_256s {
     type WotsMsgLen = U<{ 32 * 2 }>;
     type WotsSigLen = U<{ 32 * 2 + 3 }>;
+    type LgW = U<4>;
+    type CkLen = U<3>;
 }
 impl XmssParams for Sha2_256s {
     type HPrime = U<8>;
@@ -396,6 +407,8 @@ pub type Sha2_256f = Sha2L35<U32, U49>;
 impl WotsParams for Sha2_256f {
     type WotsMsgLen = U<{ 32 * 2 }>;
     type WotsSigLen = U<{ 32 * 2 + 3 }>;
+    type LgW = U<4>;
+    type CkLen = U<3>;
 }
 impl XmssParams for Sha2_256f {
     type HPrime = U<4>;
@@ -412,4 +425,105 @@ impl ForsParams for Sha2_256f {
 impl ParameterSet for Sha2_256f {
     const NAME: &'static str = "SLH-DSA-SHA2-256f";
     const ALGORITHM_OID: pkcs8::ObjectIdentifier = fips205::ID_SLH_DSA_SHA_2_256_F;
+}
+
+// ---------------------------------------------------------------------------
+// NIST SP 800-230 (ipd) limited-signature parameter sets (2^24 signatures max).
+// See the corresponding note in shake.rs. w = 4 (L1/L5), w = 8 (L3); d = 1.
+// OIDs are PROVISIONAL placeholders (SP 800-230 is a draft) and MUST be updated
+// with the official identifiers before use in interoperable contexts.
+// ---------------------------------------------------------------------------
+
+/// SHA2 at L1 security, SP 800-230 limited-signature (2^24) variant
+pub type Sha2_128_24 = Sha2L1<U16, U21>;
+impl WotsParams for Sha2_128_24 {
+    type WotsMsgLen = U<64>;
+    type WotsSigLen = U<68>;
+    type LgW = U<2>;
+    type CkLen = U<4>;
+}
+impl XmssParams for Sha2_128_24 {
+    type HPrime = U<22>;
+}
+impl HypertreeParams for Sha2_128_24 {
+    type D = U<1>;
+    type H = U<22>;
+}
+impl ForsParams for Sha2_128_24 {
+    type K = U<6>;
+    type A = U<24>;
+    type MD = U<{ (6 * 24usize).div_ceil(8) }>;
+}
+impl ParameterSet for Sha2_128_24 {
+    const NAME: &'static str = "SLH-DSA-SHA2-128-24";
+    // TODO: this number is fake, replace once an OID is ratified. PE is 0 (which is invalid);
+    // the 9999 arc is meant to call attention to the fact that this is a non-sense code.
+    const ALGORITHM_OID: pkcs8::ObjectIdentifier =
+        pkcs8::ObjectIdentifier::new_unwrap("1.3.6.1.4.1.0.9999.800.230.1.1");
+}
+
+/// SHA2 at L3 security, SP 800-230 limited-signature (2^24) variant
+#[cfg(feature = "sp800-230-highsec")]
+pub type Sha2_192_24 = Sha2L35<U24, U32>;
+#[cfg(feature = "sp800-230-highsec")]
+impl WotsParams for Sha2_192_24 {
+    type WotsMsgLen = U<64>;
+    type WotsSigLen = U<67>;
+    type LgW = U<3>;
+    type CkLen = U<3>;
+}
+#[cfg(feature = "sp800-230-highsec")]
+impl XmssParams for Sha2_192_24 {
+    type HPrime = U<21>;
+}
+#[cfg(feature = "sp800-230-highsec")]
+impl HypertreeParams for Sha2_192_24 {
+    type D = U<1>;
+    type H = U<21>;
+}
+#[cfg(feature = "sp800-230-highsec")]
+impl ForsParams for Sha2_192_24 {
+    type K = U<9>;
+    type A = U<25>;
+    type MD = U<{ (9 * 25usize).div_ceil(8) }>;
+}
+#[cfg(feature = "sp800-230-highsec")]
+impl ParameterSet for Sha2_192_24 {
+    const NAME: &'static str = "SLH-DSA-SHA2-192-24";
+    // TODO: this number is fake, replace once an OID is ratified
+    const ALGORITHM_OID: pkcs8::ObjectIdentifier =
+        pkcs8::ObjectIdentifier::new_unwrap("1.3.6.1.4.1.0.9999.800.230.1.2");
+}
+
+/// SHA2 at L5 security, SP 800-230 limited-signature (2^24) variant
+#[cfg(feature = "sp800-230-highsec")]
+pub type Sha2_256_24 = Sha2L35<U32, U41>;
+#[cfg(feature = "sp800-230-highsec")]
+impl WotsParams for Sha2_256_24 {
+    type WotsMsgLen = U<128>;
+    type WotsSigLen = U<133>;
+    type LgW = U<2>;
+    type CkLen = U<5>;
+}
+#[cfg(feature = "sp800-230-highsec")]
+impl XmssParams for Sha2_256_24 {
+    type HPrime = U<21>;
+}
+#[cfg(feature = "sp800-230-highsec")]
+impl HypertreeParams for Sha2_256_24 {
+    type D = U<1>;
+    type H = U<21>;
+}
+#[cfg(feature = "sp800-230-highsec")]
+impl ForsParams for Sha2_256_24 {
+    type K = U<12>;
+    type A = U<25>;
+    type MD = U<{ (12 * 25usize).div_ceil(8) }>;
+}
+#[cfg(feature = "sp800-230-highsec")]
+impl ParameterSet for Sha2_256_24 {
+    const NAME: &'static str = "SLH-DSA-SHA2-256-24";
+    // TODO: this number is fake, replace once an OID is ratified
+    const ALGORITHM_OID: pkcs8::ObjectIdentifier =
+        pkcs8::ObjectIdentifier::new_unwrap("1.3.6.1.4.1.0.9999.800.230.1.3");
 }
