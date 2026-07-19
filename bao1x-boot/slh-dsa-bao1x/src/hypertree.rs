@@ -1,3 +1,4 @@
+#![cfg_attr(rustfmt, rustfmt_skip)]
 use crate::signing_key::SkSeed;
 use crate::{
     address::WotsHash,
@@ -8,7 +9,7 @@ use hybrid_array::{Array, ArraySize};
 use typenum::Unsigned;
 
 #[derive(Clone, Debug)]
-pub(crate) struct HypertreeSig<P: HypertreeParams>(Array<XmssSig<P>, P::D>);
+pub(crate) struct HypertreeSig<P: HypertreeParams>(pub(crate) Array<XmssSig<P>, P::D>);
 
 impl<P: HypertreeParams> PartialEq for HypertreeSig<P> {
     fn eq(&self, other: &Self) -> bool {
@@ -57,6 +58,11 @@ impl<P: HypertreeParams> TryFrom<&[u8]> for HypertreeSig<P> {
     }
 }
 
+// Method signatures mention crate-internal types (SkSeed, PkSeed, ADRS, ...).
+// They are technically pub-reachable through the sealed `ParameterSet`
+// supertrait chain (see the `private_bounds` allow there) but not usable
+// externally, since the internal types cannot be named or constructed.
+#[allow(private_interfaces)]
 pub(crate) trait HypertreeParams: XmssParams + Sized {
     type D: ArraySize + Debug + Eq;
     type H: ArraySize; // HPrime * D
