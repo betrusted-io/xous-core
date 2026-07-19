@@ -1,3 +1,4 @@
+#![cfg_attr(rustfmt, rustfmt_skip)]
 use crate::{SkSeed, address, hypertree::HypertreeParams, util::base_2b};
 use core::fmt::Debug;
 use hybrid_array::{Array, ArraySize};
@@ -175,12 +176,12 @@ pub(crate) trait ForsParams: HypertreeParams {
             sig.0[i as usize].sk = self.fors_sk_gen(
                 sk_seed,
                 adrs,
-                (i << Self::A::U32) + u32::from(indices[i as usize]),
+                (i << Self::A::U32) + indices[i as usize],
             );
             for j in 0..Self::A::U32 {
                 let s = (indices[i as usize] >> j) ^ 1;
                 sig.0[i as usize].auth[j as usize] =
-                    self.fors_node(sk_seed, (i << (Self::A::U32 - j)) + u32::from(s), j, adrs);
+                    self.fors_node(sk_seed, (i << (Self::A::U32 - j)) + s, j, adrs);
             }
         }
         sig
@@ -199,7 +200,7 @@ pub(crate) trait ForsParams: HypertreeParams {
             let sk = &sig.0[i as usize].sk;
             adrs.tree_height.set(0);
             adrs.tree_index
-                .set((i << Self::A::U32) + u32::from(indices[i as usize]));
+                .set((i << Self::A::U32) + indices[i as usize]);
             let mut node = self.f(&adrs, sk);
             for j in 0..Self::A::U32 {
                 adrs.tree_height.set(j + 1);
