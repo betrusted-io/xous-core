@@ -15,7 +15,9 @@ use digest::{Digest, KeyInit, Mac};
 use hmac::Hmac;
 use hybrid_array::{Array, ArraySize};
 use sha2::{Sha256, Sha512};
-use typenum::{Diff, Sum, U, U16, U21, U24, U30, U32, U34, U39, U41, U42, U47, U49, U64, U128};
+use typenum::{Diff, Sum, U, U16, U21, U24, U30, U32, U34, U39, U42, U47, U49, U64, U128};
+#[cfg(feature = "sp800-230-highsec")]
+use typenum::U41;
 
 /// Implementation of the MGF1 XOF
 fn mgf1<H: Digest, L: ArraySize>(seed: &[u8]) -> Array<u8, L> {
@@ -54,8 +56,12 @@ where
     Sum<Sum<N, N>, U32>: ArraySize,
     U64: core::ops::Sub<N>,
     Diff<U64, N>: ArraySize,
-    N: Debug + PartialEq + Eq,
-    M: Debug + PartialEq + Eq,
+    // `Sync`: typenum size types are zero-sized and always Sync; the explicit
+    // bound is needed because this impl is generic, so the PhantomData<N/M>
+    // markers can't otherwise satisfy HashSuite's MaybeSync supertrait when the
+    // `parallel` feature is enabled. Sync is a core trait: no_std-safe.
+    N: Debug + PartialEq + Eq + Sync,
+    M: Debug + PartialEq + Eq + Sync,
 {
     type N = N;
     type M = M;
@@ -223,8 +229,9 @@ where
     Diff<U64, N>: ArraySize,
     U128: core::ops::Sub<N>,
     Diff<U128, N>: ArraySize,
-    N: core::fmt::Debug + PartialEq + Eq,
-    M: core::fmt::Debug + PartialEq + Eq,
+    // `Sync`: see the note on the Sha2L1 impl above.
+    N: core::fmt::Debug + PartialEq + Eq + Sync,
+    M: core::fmt::Debug + PartialEq + Eq + Sync,
 {
     type N = N;
     type M = M;
