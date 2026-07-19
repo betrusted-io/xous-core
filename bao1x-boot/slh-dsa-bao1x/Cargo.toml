@@ -33,6 +33,7 @@ typenum = { version = "1.20", features = ["const-generics"] }
 zerocopy = { version = "0.8", features = ["derive"] }
 
 # optional dependencies
+rayon = { version = "1.8", optional = true }
 zeroize = { version = "1.8.1", optional = true, default-features = false }
 
 [dev-dependencies]
@@ -68,3 +69,11 @@ zeroize = ["dep:zeroize", "hybrid-array/zeroize"]
 # (the published crate does not yet — see README "hybrid-array sizes"). The L1
 # sets (SLH-DSA-*-128-24, sig size 3856) are always available and need no patch.
 sp800-230-highsec = []
+# Rayon fork-join Merkle tree builds for *signing* (keygen and slh_sign paths).
+# Requires a std target; verification and all no_std embedded builds are
+# unaffected — with this feature off, rayon is absent from the dependency graph
+# and the compiled code is identical to the sequential original.
+parallel = ["dep:rayon"]
+# Turns on tree caching - computes the top part of the xmss tree, which does not
+# vary between messages, to further accelerate signing operations.
+tree-cache = []
