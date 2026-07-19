@@ -1,3 +1,4 @@
+#![cfg_attr(rustfmt, rustfmt_skip)]
 use crate::address::{ForsTree, WotsHash};
 use crate::signature_encoding::Signature;
 use crate::util::split_digest;
@@ -16,6 +17,9 @@ use typenum::{U, U16, U24, U32, Unsigned};
 
 #[cfg(feature = "zeroize")]
 use zeroize::{Zeroize, ZeroizeOnDrop};
+
+#[cfg(feature = "tree-cache")]
+use crate::{hypertree::HypertreeSig, tree_cache::XmssTreeCache, xmss::XmssSig};
 
 #[cfg(feature = "alloc")]
 use pkcs8::{
@@ -218,6 +222,131 @@ impl<P: ParameterSet> SigningKey<P> {
         P: VerifyingKeyLen,
     {
         self.to_bytes().to_vec()
+    }
+}
+
+/// Cached signing for `d = 1` (NIST SP 800-230 limited-signature) parameter
+/// sets. See the [`tree_cache`](crate::tree_cache) module docs for the design.
+#[cfg(feature = "tree-cache")]
+impl<P: ParameterSet> SigningKey<P> {
+    /// Build the message-independent XMSS tree cache for this key, at the
+    /// default time/memory point (`floor = h' - 12`: ~128 KiB stored for the
+    /// -24 sets, ~2^10 extra leaf computations per signature — negligible next
+    /// to FORS).
+    ///
+    /// One-time cost of one full tree build (the same work as a single
+    /// signature's XMSS portion; parallelized under the `parallel` feature).
+    /// Persist the result with [`XmssTreeCache::to_bytes`].
+    ///
+    /// # Panics
+    /// Panics if `P` is not a `d = 1` parameter set — the cache design relies
+    /// on the hypertree being a single, message-independent XMSS tree.
+    pub fn build_tree_cache(&self) -> XmssTreeCache<P> {
+        let default_floor = P::HPrime::U32.saturating_sub(crate::tree_cache::DEFAULT_CACHE_SPAN);
+        self.build_tree_cache_with_floor(default_floor)
+    }
+
+    /// [`build_tree_cache`](Self::build_tree_cache) with an explicit floor:
+    /// heights `floor..=h'` are stored (`(2^(h'-floor+1) - 1) * n` bytes) and
+    /// the height-`floor` subtree containing the leaf (`2^floor` WOTS leaves)
+    /// is recomputed per signature. `floor = 0` stores the full tree.
+    ///
+    /// # Panics
+    /// Panics if `P` is not a `d = 1` parameter set or `floor > h'`.
+    pub fn build_tree_cache_with_floor(&self, floor: u32) -> XmssTreeCache<P> {
+        assert_eq!(
+            P::D::USIZE,
+            1,
+            "XmssTreeCache requires a d = 1 parameter set (SP 800-230 -24 sets)"
+        );
+        assert!(
+            floor <= P::HPrime::U32,
+            "tree cache floor must not exceed the tree height h'"
+        );
+        let ht = P::new_from_pk_seed(&self.verifying_key.pk_seed);
+        XmssTreeCache::build(&ht, &self.sk_seed, floor)
+    }
+
+    /// Deterministic, empty-context signature using a prebuilt tree cache.
+    /// Produces output bit-identical to [`Signer::try_sign`].
+    ///
+    /// Validate untrusted cache bytes first with [`XmssTreeCache::validate`].
+    /// Additionally, every cached signing operation recomputes the
+    /// height-`floor` subtree for the selected leaf and panics if its root
+    /// disagrees with the cache (wrong key / corruption), rather than emitting
+    /// an invalid signature. A bad cache can never leak the key.
+    pub fn try_sign_with_tree_cache(
+        &self,
+        msg: &[u8],
+        cache: &XmssTreeCache<P>,
+    ) -> Result<Signature<P>, Error> {
+        // Mirrors raw_try_sign_with_context with an empty context.
+        let ctx_len_bytes = [0u8];
+        let prefix: [&[u8]; 3] = [&[0u8], &ctx_len_bytes, &[]];
+        let ctx_msg: [&[&[u8]]; 2] = [&prefix, &[msg]];
+        Ok(self.raw_slh_sign_internal_cached(&ctx_msg, None, cache))
+    }
+
+    #[doc(hidden)]
+    /// Cache-accelerated [`slh_sign_internal`](Self::slh_sign_internal):
+    /// identical output, published for KAT validation purposes.
+    pub fn slh_sign_internal_with_cache(
+        &self,
+        msg: &[&[u8]],
+        opt_rand: Option<&[u8]>,
+        cache: &XmssTreeCache<P>,
+    ) -> Signature<P> {
+        self.raw_slh_sign_internal_cached(&[msg], opt_rand, cache)
+    }
+
+    /// Mirror of `raw_slh_sign_internal`, with the hypertree signature
+    /// assembled from a fresh WOTS+ signature plus a cached auth path instead
+    /// of rebuilding the XMSS tree.
+    fn raw_slh_sign_internal_cached(
+        &self,
+        msg: &[&[&[u8]]],
+        opt_rand: Option<&[u8]>,
+        cache: &XmssTreeCache<P>,
+    ) -> Signature<P> {
+        let rand = opt_rand
+            .unwrap_or(&self.verifying_key.pk_seed.0)
+            .try_into()
+            .unwrap();
+
+        let sk_seed = &self.sk_seed;
+        let pk_seed = &self.verifying_key.pk_seed;
+        let ht = P::new_from_pk_seed(pk_seed);
+
+        let randomizer = P::prf_msg(&self.sk_prf, rand, msg);
+
+        let digest = P::h_msg(&randomizer, pk_seed, &self.verifying_key.pk_root, msg);
+        let (md, idx_tree, idx_leaf) = split_digest::<P>(&digest);
+        let adrs = ForsTree::new(idx_tree, idx_leaf);
+        let fors_sig = ht.fors_sign(md, sk_seed, &adrs);
+
+        let fors_pk = ht.fors_pk_from_sig(&fors_sig, md, &adrs);
+
+        // d = 1: the hypertree is a single XMSS layer and idx_tree is always 0
+        // (split_digest allocates zero bits to it). WOTS addressing mirrors
+        // ht_sign + xmss_sign exactly: layer 0, tree_adrs = idx_tree, key pair
+        // = idx_leaf.
+        debug_assert_eq!(idx_tree, 0, "d = 1 implies a single tree at index 0");
+        let mut wots_adrs = WotsHash::default();
+        wots_adrs.tree_adrs_low.set(idx_tree);
+        wots_adrs.key_pair_adrs.set(idx_leaf);
+        let wots_sig = ht.wots_sign(&fors_pk, sk_seed, &wots_adrs);
+
+        let xmss_sig = XmssSig {
+            sig: wots_sig,
+            auth: cache.auth_path(&ht, sk_seed, idx_leaf),
+        };
+        let ht_sig = HypertreeSig(Array::from_fn(|_| xmss_sig.clone()));
+
+        Signature {
+            randomizer,
+            fors_sig,
+            ht_sig,
+        }
     }
 }
 
