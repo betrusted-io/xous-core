@@ -39,6 +39,11 @@ serde_json = "1.0"
 # bao1x-api = { path = "../libs/bao1x-api" }
 bao1x-api = "0.1.0" # use crates.io to refer to this
 
+slh-dsa = { path = "../bao1x-boot/slh-dsa-bao1x", features = [
+    "parallel",
+    "tree-cache",
+] }
+
 # for remote resolution of github version in out-of-tree builds. Note that pulling
 # in this dependency tree *greatly* increases the attack surface of the SBOM. I don't
 # think the convenience is worth it. But these are noted here in case we need to revisit
@@ -67,6 +72,9 @@ name = "xous-create-detached-app"
 
 [[bin]]
 name = "xous-app-uf2"
+
+[[bin]]
+name = "xous-pq-sign-image"
 
 [features]
 precursor = []
