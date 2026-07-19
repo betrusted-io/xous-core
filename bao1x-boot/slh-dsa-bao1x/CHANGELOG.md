@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Fork to Xous
+## Changed
+- Implement NIST.SP.800-230 initial public draft SLH-DSA for limited signature use cases (sign few, verify-many)
+  - Hypetree is changed to a single layer. Signing is slow (one tall tree), verification is fast.
+  - Winternitz parameter `w` is now 4 or 8, instead of fixed at 16.
+  - Signature limit is 2**24. Publishing more than that number of signed binaries can lead to compromise of the private key.
+  - Changes in this fork are focused on *SHA2*. Shake changes are mainly side-effects where changes to types and structures that affect both have to be changed to facilitate compilation.
+- Changes to utils.rs:
+  - `base_2b` was a `u16`. This was OK because previously `a` would range from 6-14. It is now `u64` as `a` goes from 24-25 but `a+7` bits need to be stored and a 32-bit number would overflow.
+  - `WotsParams` is generalized to handle `w`. The original spec always fixes it at 16, now, it can be either 4 or 8.
+- Only `SLH-DSA-{SHA2,SHAKE}-128-24` is implemented by default. This is because `hybrid-array` currently only provides `U3856` types, and does not provide the `U7752`  / `U14944` types needed to implement the higher security modes. This is OK, because we only intend to use the -24 variant in this bootloader.
+
 ## 0.1.0 (2024-08-18)
 ### Changed
 - Implement changes from FIP 205 Initial Public Draft -> FIPS 205 Final ([#844])
