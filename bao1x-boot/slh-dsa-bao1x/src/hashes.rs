@@ -16,7 +16,13 @@ pub use shake::*;
 use crate::{PkSeed, SkPrf, SkSeed, address::Address};
 
 /// A trait specifying the hash functions described in FIPS-205 section 10
-pub(crate) trait HashSuite: Sized + Clone + Debug {
+// Method signatures mention crate-internal types (SkSeed, PkSeed, ADRS, ...).
+// They are technically pub-reachable through the sealed `ParameterSet`
+// supertrait chain (see the `private_bounds` allow there) but not usable
+// externally, since the internal types cannot be named or constructed.
+#[allow(private_interfaces)]
+pub(crate) trait HashSuite: Sized + Clone + Debug + crate::util::MaybeSync {
+
     type N: ArraySize + Debug + Clone + PartialEq + Eq;
     type M: ArraySize + Debug + Clone + PartialEq + Eq;
 
