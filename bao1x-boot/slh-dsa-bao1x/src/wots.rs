@@ -1,14 +1,17 @@
+#![cfg_attr(rustfmt, rustfmt_skip)]
 use crate::{SkSeed, address, hashes::HashSuite, util::base_2b};
 use core::fmt::Debug;
 use hybrid_array::{Array, ArraySize};
-use typenum::{Unsigned, generic_const_mappings::U};
+use typenum::Unsigned;
 
-// WOTS+ in general is parameterized on these values
-// But the FIPS standard uses the same values for all parameter sets
-// So we make these global consts for simplicity
-const LOG_W: usize = 4;
-const W: u32 = 16;
-const CK_LEN: usize = 3; // Length of a checksum in chunks
+// WOTS+ is parameterized on the Winternitz parameter `w = 2^lg_w`, the number of
+// message chunks `len1`, and the number of checksum chunks `len2`.
+//
+// FIPS-205 fixes `w = 16` (`lg_w = 4`, `len2 = 3`) for every parameter set, so
+// these were previously global constants. NIST SP 800-230 introduces parameter
+// sets with `w = 4` (`lg_w = 2`) and `w = 8` (`lg_w = 3`), so they now live on
+// the `WotsParams` trait as associated types (`LgW`, `CkLen`) with per-set
+// values, and the checksum bit-shift / byte-length are derived from them.
 
 #[derive(Clone, Debug)]
 pub(crate) struct WotsSig<P: WotsParams>(Array<Array<u8, P::N>, P::WotsSigLen>);
@@ -57,8 +60,20 @@ impl<P: WotsParams> TryFrom<&[u8]> for WotsSig<P> {
 }
 
 pub(crate) trait WotsParams: HashSuite {
-    type WotsMsgLen: ArraySize; // Number of chunks in a WOTS message. Must equal 2 * Self::N
-    type WotsSigLen: ArraySize + Debug + Eq; // Number of chunks in a WOTS signature. Must equal WotsSigLen + CK_LEN;
+    /// Number of base-`w` chunks in a WOTS+ message (`len1 = ceil(8*N / lg_w)`).
+    type WotsMsgLen: ArraySize;
+    /// Number of base-`w` chunks in a full WOTS+ signature (`len1 + len2`).
+    type WotsSigLen: ArraySize + Debug + Eq;
+    /// `lg_w = log2(w)`: 4 for FIPS-205, 2 (`w=4`) or 3 (`w=8`) for SP 800-230.
+    type LgW: Unsigned;
+    /// `len2`: the number of base-`w` chunks used by the WOTS+ checksum.
+    type CkLen: ArraySize;
+
+    /// The Winternitz parameter `w = 2^lg_w`.
+    #[inline]
+    fn wots_w() -> u32 {
+        1u32 << Self::LgW::U32
+    }
 
     /// Algorithm 4
     fn wots_chain(
@@ -68,7 +83,7 @@ pub(crate) trait WotsParams: HashSuite {
         s: u32,
         adrs: &address::WotsHash,
     ) -> Array<u8, Self::N> {
-        debug_assert!(i + s < 1 << LOG_W, "Invalid wots_chain index");
+        debug_assert!(i + s < Self::wots_w(), "Invalid wots_chain index");
 
         let mut tmp = x.clone(); //TODO: no clone
         let mut adrs = adrs.clone(); // TODO: no clone
@@ -93,7 +108,7 @@ pub(crate) trait WotsParams: HashSuite {
             sk_adrs.chain_adrs.set(i);
             adrs.chain_adrs.set(i);
             let sk = self.prf_sk(sk_seed, &sk_adrs);
-            self.wots_chain(&sk, 0, (1 << LOG_W) - 1, &adrs)
+            self.wots_chain(&sk, 0, Self::wots_w() - 1, &adrs)
         });
         let pk_adrs = adrs.pk_adrs();
         self.t(&pk_adrs, &tmp)
@@ -106,11 +121,7 @@ pub(crate) trait WotsParams: HashSuite {
         sk_seed: &SkSeed<Self::N>,
         adrs: &address::WotsHash,
     ) -> WotsSig<Self> {
-        let msg = base_2b::<Self::WotsMsgLen, U<LOG_W>>(m.as_slice());
-        let csum = msg.iter().map(|&x| (1 << LOG_W) - 1 - x).sum::<u16>() << 4; // Algorithm 6 Line 9
-
-        let csum_bytes = csum.to_be_bytes();
-        let csum_chunks = base_2b::<U<CK_LEN>, U<LOG_W>>(&csum_bytes);
+        let (msg, csum_chunks) = Self::wots_msg_and_checksum(m);
         let mut msg_csum = msg.iter().chain(csum_chunks.iter());
 
         let mut adrs = adrs.clone();
@@ -122,7 +133,7 @@ pub(crate) trait WotsParams: HashSuite {
             adrs.chain_adrs.set(i);
 
             let sk = self.prf_sk(sk_seed, &sk_adrs);
-            self.wots_chain(&sk, 0, u32::from(*msg_csum.next().unwrap()), &adrs)
+            self.wots_chain(&sk, 0, *msg_csum.next().unwrap(), &adrs)
         });
 
         WotsSig(sig)
@@ -134,20 +145,43 @@ pub(crate) trait WotsParams: HashSuite {
         m: &Array<u8, Self::N>,
         adrs: &address::WotsHash,
     ) -> Array<u8, Self::N> {
-        let msg = base_2b::<Self::WotsMsgLen, U<LOG_W>>(m.as_slice());
-        let csum = msg.iter().map(|&x| (1 << LOG_W) - 1 - x).sum::<u16>() << 4; // TODO: remove magic 4
-        let csum_bytes = csum.to_be_bytes();
-        let csum_chunks = base_2b::<U<CK_LEN>, U<LOG_W>>(&csum_bytes);
+        let (msg, csum_chunks) = Self::wots_msg_and_checksum(m);
         let mut msg_csum = msg.iter().chain(csum_chunks.iter());
+        let w = Self::wots_w();
 
         let mut adrs = adrs.clone();
         let tmp = Array::<Array<u8, Self::N>, Self::WotsSigLen>::from_fn(|i: usize| {
             adrs.chain_adrs
                 .set(i.try_into().expect("i is less than 2^32"));
-            let msg_i = u32::from(*msg_csum.next().unwrap());
-            self.wots_chain(&sig.0[i], msg_i, W - 1 - msg_i, &adrs)
+            let msg_i = *msg_csum.next().unwrap();
+            self.wots_chain(&sig.0[i], msg_i, w - 1 - msg_i, &adrs)
         });
         self.t(&adrs.pk_adrs(), &tmp)
+    }
+
+    /// Expands a WOTS+ message into its base-`w` message chunks and checksum
+    /// chunks (FIPS-205 Algorithm 7 lines 1-9 / Algorithm 8 lines 1-8),
+    /// generalized to arbitrary `w = 2^lg_w`.
+    fn wots_msg_and_checksum(
+        m: &Array<u8, Self::N>,
+    ) -> (
+        Array<u32, Self::WotsMsgLen>,
+        Array<u32, Self::CkLen>,
+    ) {
+        let w = Self::wots_w();
+        let msg = base_2b::<Self::WotsMsgLen, Self::LgW>(m.as_slice());
+
+        // csum = sum(w - 1 - msg[i]), then shift left so the meaningful bits are
+        // left-aligned within a ceil(len2*lg_w/8)-byte big-endian field.
+        let csum_shift = (8 - ((Self::CkLen::U32 * Self::LgW::U32) % 8)) % 8;
+        let csum: u32 = msg.iter().map(|&x| w - 1 - x).sum::<u32>() << csum_shift;
+
+        let csum_be = csum.to_be_bytes(); // 4 bytes, big-endian
+        let csum_byte_len = (Self::CkLen::USIZE * Self::LgW::USIZE).div_ceil(8);
+        // Take the low `csum_byte_len` bytes of the big-endian representation,
+        // i.e. toByte(csum, csum_byte_len) as in FIPS-205.
+        let csum_chunks = base_2b::<Self::CkLen, Self::LgW>(&csum_be[4 - csum_byte_len..]);
+        (msg, csum_chunks)
     }
 }
 #[cfg(test)]
