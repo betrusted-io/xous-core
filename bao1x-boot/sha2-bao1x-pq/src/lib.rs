@@ -33,13 +33,13 @@ digest::buffer_fixed!(
     /// SHA-256 hasher.
     pub struct Sha256(CtOutWrapper<block_api::Sha256VarCore, U32>);
     oid: "2.16.840.1.101.3.4.2.1";
-    impl: BaseFixedTraits AlgorithmName Default Clone HashMarker
+    impl: BaseFixedTraits AlgorithmName Default HashMarker
         Reset FixedOutputReset ZeroizeOnDrop;
 );
 digest::buffer_fixed!(
     /// SHA-512 hasher.
     pub struct Sha512(CtOutWrapper<block_api::Sha512VarCore, U64>);
     oid: "2.16.840.1.101.3.4.2.3";
-    impl: BaseFixedTraits AlgorithmName Default Clone HashMarker
+    impl: BaseFixedTraits AlgorithmName Default HashMarker
         Reset FixedOutputReset ZeroizeOnDrop;
 );
