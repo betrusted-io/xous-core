@@ -1,3 +1,4 @@
+#![cfg_attr(rustfmt, rustfmt_skip)]
 //! Hash functions used in the SLH-DSA signature scheme
 //!
 //! Each parameter set defines several functions derived from the core hash function (SHA2 or SHAKE)
