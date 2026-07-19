@@ -63,11 +63,13 @@ mod util;
 mod verifying_key;
 mod wots;
 mod xmss;
+mod tree_cache;
 
 pub use hashes::*;
 pub use signature_encoding::*;
 pub use signing_key::*;
 pub use verifying_key::*;
+pub use tree_cache::*;
 
 use fors::ForsParams;
 
