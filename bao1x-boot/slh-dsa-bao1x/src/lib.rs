@@ -1,3 +1,4 @@
+#![cfg_attr(rustfmt, rustfmt_skip)]
 #![no_std]
 #![doc = include_str!("../README.md")]
 #![warn(clippy::pedantic)] // Be pedantic by default
