@@ -2,7 +2,10 @@
 name = "slh-dsa"
 description = """
 Pure Rust implementation of SLH-DSA (aka SPHINCS+) as described in the
-FIPS-205 standard
+FIPS-205 standard.
+
+This is forked from Rust-crypto because we're tweaking parameters in accordance
+with NIST SP.800-230, and also, using hardware acceleration for the hashes.
 """
 version = "0.2.0-rc.5"
 edition = "2024"
@@ -22,7 +25,7 @@ hmac = "0.13"
 hybrid-array = { version = "0.4", features = ["extra-sizes"] }
 pkcs8 = { version = "0.11", default-features = false }
 rand_core = "0.10"
-sha2 = { version = "0.11", default-features = false }
+sha2 = { package = "sha2-bao1x-pq", path = "../sha2-bao1x-pq", default-features = false }
 shake = { version = "0.1", default-features = false }
 signature = { version = "3", features = ["rand_core"] }
 typenum = { version = "1.20", features = ["const-generics"] }
@@ -38,7 +41,9 @@ cipher = "0.5"
 ctr = "0.10.0-rc.3"
 hex = { version = "0.4.1", features = ["serde"] }
 hex-literal = "1"
-crypto-bigint = { version = "0.7", default-features = false, features = ["alloc"] }
+crypto-bigint = { version = "0.7", default-features = false, features = [
+    "alloc",
+] }
 paste = "1.0.15"
 pkcs8 = { version = "0.11", features = ["pem"] }
 proptest = "1.11.0"
