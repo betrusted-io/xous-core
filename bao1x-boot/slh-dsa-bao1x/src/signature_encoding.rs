@@ -1,17 +1,20 @@
+#![cfg_attr(rustfmt, rustfmt_skip)]
 use crate::ParameterSet;
 use crate::{
     Shake128s,
     fors::ForsSignature,
     hashes::{
-        Sha2_128f, Sha2_128s, Sha2_192f, Sha2_192s, Sha2_256f, Sha2_256s, Shake128f, Shake192f,
-        Shake192s, Shake256f, Shake256s,
+        Sha2_128_24, Sha2_128f, Sha2_128s, Sha2_192f, Sha2_192s, Sha2_256f, Sha2_256s,
+        Shake128_24, Shake128f, Shake192f, Shake192s, Shake256f, Shake256s,
     },
     hypertree::HypertreeSig,
 };
+#[cfg(feature = "sp800-230-highsec")]
+use crate::hashes::{Sha2_192_24, Sha2_256_24, Shake192_24, Shake256_24};
 use ::signature::{Error, SignatureEncoding};
 use hybrid_array::{
     Array, ArraySize,
-    sizes::{U7856, U16224, U17088, U29792, U35664, U49856},
+    sizes::{U3856, U7856, U16224, U17088, U29792, U35664, U49856},
 };
 use pkcs8::{AlgorithmIdentifierRef, der::AnyRef, spki::AssociatedAlgorithmIdentifier};
 use typenum::Unsigned;
@@ -196,6 +199,38 @@ impl SignatureLen for Sha2_256s {
 
 impl SignatureLen for Sha2_256f {
     type SigLen = U49856;
+}
+
+// NIST SP 800-230 limited-signature (2^24) parameter sets.
+// Sig sizes (FIPS-205 §11 formula): L1 = 3856, L3 = 7752, L5 = 14944.
+//
+// `hybrid-array` (with `extra-sizes`) provides an `ArraySize` impl for 3856, so
+// the L1 sets build against the published crate. It does NOT yet provide 7752 or
+// 14944, so the L3/L5 sets are gated behind the `sp800-230-highsec` feature,
+// which requires a `hybrid-array` exposing `U7752` and `U14944` (see README).
+impl SignatureLen for Sha2_128_24 {
+    type SigLen = U3856;
+}
+impl SignatureLen for Shake128_24 {
+    type SigLen = U3856;
+}
+// U7752 / U14944 are not in the published hybrid-array; add them to its
+// `extra_sizes` module (see README §2) and build with `sp800-230-highsec`.
+#[cfg(feature = "sp800-230-highsec")]
+impl SignatureLen for Sha2_192_24 {
+    type SigLen = hybrid_array::sizes::U7752;
+}
+#[cfg(feature = "sp800-230-highsec")]
+impl SignatureLen for Shake192_24 {
+    type SigLen = hybrid_array::sizes::U7752;
+}
+#[cfg(feature = "sp800-230-highsec")]
+impl SignatureLen for Sha2_256_24 {
+    type SigLen = hybrid_array::sizes::U14944;
+}
+#[cfg(feature = "sp800-230-highsec")]
+impl SignatureLen for Shake256_24 {
+    type SigLen = hybrid_array::sizes::U14944;
 }
 
 #[cfg(test)]
