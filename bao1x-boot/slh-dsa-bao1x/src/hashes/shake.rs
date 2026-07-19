@@ -1,3 +1,4 @@
+#![cfg_attr(rustfmt, rustfmt_skip)]
 use core::fmt::Debug;
 
 use crate::address::Address;
@@ -10,7 +11,7 @@ use crate::{ParameterSet, PkSeed, SkPrf, SkSeed};
 use ::shake::Shake256;
 use const_oid::db::fips205;
 use digest::{ExtendableOutput, Update};
-use hybrid_array::typenum::consts::{U16, U30, U32};
+use hybrid_array::typenum::consts::{U16, U21, U30, U32, U41};
 use hybrid_array::typenum::{U24, U34, U39, U42, U47, U49};
 use hybrid_array::{Array, ArraySize};
 use typenum::U;
@@ -136,6 +137,8 @@ pub type Shake128s = Shake<U16, U30>;
 impl WotsParams for Shake128s {
     type WotsMsgLen = U<32>;
     type WotsSigLen = U<35>;
+    type LgW = U<4>;
+    type CkLen = U<3>;
 }
 impl XmssParams for Shake128s {
     type HPrime = U<9>;
@@ -159,6 +162,8 @@ pub type Shake128f = Shake<U16, U34>;
 impl WotsParams for Shake128f {
     type WotsMsgLen = U<32>;
     type WotsSigLen = U<35>;
+    type LgW = U<4>;
+    type CkLen = U<3>;
 }
 impl XmssParams for Shake128f {
     type HPrime = U<3>;
@@ -182,6 +187,8 @@ pub type Shake192s = Shake<U24, U39>;
 impl WotsParams for Shake192s {
     type WotsMsgLen = U<{ 24 * 2 }>;
     type WotsSigLen = U<{ 24 * 2 + 3 }>;
+    type LgW = U<4>;
+    type CkLen = U<3>;
 }
 impl XmssParams for Shake192s {
     type HPrime = U<9>;
@@ -205,6 +212,8 @@ pub type Shake192f = Shake<U24, U42>;
 impl WotsParams for Shake192f {
     type WotsMsgLen = U<{ 24 * 2 }>;
     type WotsSigLen = U<{ 24 * 2 + 3 }>;
+    type LgW = U<4>;
+    type CkLen = U<3>;
 }
 impl XmssParams for Shake192f {
     type HPrime = U<3>;
@@ -228,6 +237,8 @@ pub type Shake256s = Shake<U32, U47>;
 impl WotsParams for Shake256s {
     type WotsMsgLen = U<{ 32 * 2 }>;
     type WotsSigLen = U<{ 32 * 2 + 3 }>;
+    type LgW = U<4>;
+    type CkLen = U<3>;
 }
 impl XmssParams for Shake256s {
     type HPrime = U<8>;
@@ -251,6 +262,8 @@ pub type Shake256f = Shake<U32, U49>;
 impl WotsParams for Shake256f {
     type WotsMsgLen = U<{ 32 * 2 }>;
     type WotsSigLen = U<{ 32 * 2 + 3 }>;
+    type LgW = U<4>;
+    type CkLen = U<3>;
 }
 impl XmssParams for Shake256f {
     type HPrime = U<4>;
@@ -267,6 +280,109 @@ impl ForsParams for Shake256f {
 impl ParameterSet for Shake256f {
     const NAME: &'static str = "SLH-DSA-SHAKE-256f";
     const ALGORITHM_OID: pkcs8::ObjectIdentifier = fips205::ID_SLH_DSA_SHAKE_256_F;
+}
+
+// ---------------------------------------------------------------------------
+// NIST SP 800-230 (ipd) limited-signature parameter sets (2^24 signatures max).
+// d = 1 (single hypertree layer) and adjusted Winternitz parameter:
+//   w = 4  (lg_w = 2) for security levels 1 and 5,
+//   w = 8  (lg_w = 3) for security level 3.
+// These are NOT approved for general use; the 2^24 per-key signature limit is a
+// strict security requirement (see SP 800-230 §3).
+//
+// NOTE: OIDs are PROVISIONAL placeholders — SP 800-230 is a draft and NIST has
+// not assigned object identifiers. They MUST be replaced with the official
+// values before these are used in any interoperable PKCS#8 / SPKI context.
+// ---------------------------------------------------------------------------
+
+/// SHAKE256 at L1 security, SP 800-230 limited-signature (2^24) variant
+pub type Shake128_24 = Shake<U16, U21>;
+impl WotsParams for Shake128_24 {
+    type WotsMsgLen = U<64>;
+    type WotsSigLen = U<68>;
+    type LgW = U<2>;
+    type CkLen = U<4>;
+}
+impl XmssParams for Shake128_24 {
+    type HPrime = U<22>;
+}
+impl HypertreeParams for Shake128_24 {
+    type D = U<1>;
+    type H = U<22>;
+}
+impl ForsParams for Shake128_24 {
+    type K = U<6>;
+    type A = U<24>;
+    type MD = U<{ (6 * 24usize).div_ceil(8) }>;
+}
+impl ParameterSet for Shake128_24 {
+    const NAME: &'static str = "SLH-DSA-SHAKE-128-24";
+    const ALGORITHM_OID: pkcs8::ObjectIdentifier =
+        pkcs8::ObjectIdentifier::new_unwrap("1.3.6.1.4.1.0.800.230.2.1");
+}
+
+/// SHAKE256 at L3 security, SP 800-230 limited-signature (2^24) variant
+#[cfg(feature = "sp800-230-highsec")]
+pub type Shake192_24 = Shake<U24, U32>;
+#[cfg(feature = "sp800-230-highsec")]
+impl WotsParams for Shake192_24 {
+    type WotsMsgLen = U<64>;
+    type WotsSigLen = U<67>;
+    type LgW = U<3>;
+    type CkLen = U<3>;
+}
+#[cfg(feature = "sp800-230-highsec")]
+impl XmssParams for Shake192_24 {
+    type HPrime = U<21>;
+}
+#[cfg(feature = "sp800-230-highsec")]
+impl HypertreeParams for Shake192_24 {
+    type D = U<1>;
+    type H = U<21>;
+}
+#[cfg(feature = "sp800-230-highsec")]
+impl ForsParams for Shake192_24 {
+    type K = U<9>;
+    type A = U<25>;
+    type MD = U<{ (9 * 25usize).div_ceil(8) }>;
+}
+#[cfg(feature = "sp800-230-highsec")]
+impl ParameterSet for Shake192_24 {
+    const NAME: &'static str = "SLH-DSA-SHAKE-192-24";
+    const ALGORITHM_OID: pkcs8::ObjectIdentifier =
+        pkcs8::ObjectIdentifier::new_unwrap("1.3.6.1.4.1.0.800.230.2.2");
+}
+
+/// SHAKE256 at L5 security, SP 800-230 limited-signature (2^24) variant
+#[cfg(feature = "sp800-230-highsec")]
+pub type Shake256_24 = Shake<U32, U41>;
+#[cfg(feature = "sp800-230-highsec")]
+impl WotsParams for Shake256_24 {
+    type WotsMsgLen = U<128>;
+    type WotsSigLen = U<133>;
+    type LgW = U<2>;
+    type CkLen = U<5>;
+}
+#[cfg(feature = "sp800-230-highsec")]
+impl XmssParams for Shake256_24 {
+    type HPrime = U<21>;
+}
+#[cfg(feature = "sp800-230-highsec")]
+impl HypertreeParams for Shake256_24 {
+    type D = U<1>;
+    type H = U<21>;
+}
+#[cfg(feature = "sp800-230-highsec")]
+impl ForsParams for Shake256_24 {
+    type K = U<12>;
+    type A = U<25>;
+    type MD = U<{ (12 * 25usize).div_ceil(8) }>;
+}
+#[cfg(feature = "sp800-230-highsec")]
+impl ParameterSet for Shake256_24 {
+    const NAME: &'static str = "SLH-DSA-SHAKE-256-24";
+    const ALGORITHM_OID: pkcs8::ObjectIdentifier =
+        pkcs8::ObjectIdentifier::new_unwrap("1.3.6.1.4.1.0.800.230.2.3");
 }
 
 #[cfg(test)]
