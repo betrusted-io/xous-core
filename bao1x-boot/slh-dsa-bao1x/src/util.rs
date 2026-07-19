@@ -1,25 +1,32 @@
+#![cfg_attr(rustfmt, rustfmt_skip)]
 use crate::fors::ForsParams;
 use hybrid_array::{Array, ArraySize, typenum::Unsigned};
 
 // Algorithm 3
-pub(crate) fn base_2b<OutLen: ArraySize, B: Unsigned>(x: &[u8]) -> Array<u16, OutLen> {
+//
+// Returns `u32` chunks (not `u16`). The SP 800-230 limited-signature parameter
+// sets use FORS tree heights `a` of 24 and 25, so a single base-`2^b` chunk no
+// longer fits in a `u16`. `b` is at most 25 across all supported parameter sets
+// (FORS `a`), well within `u32`; the accumulator is `u64` to hold up to `b + 7`
+// bits without overflow on 32-bit targets.
+pub(crate) fn base_2b<OutLen: ArraySize, B: Unsigned>(x: &[u8]) -> Array<u32, OutLen> {
     debug_assert!(x.len() >= (OutLen::USIZE * B::USIZE).div_ceil(8));
-    debug_assert!(B::USIZE <= 16);
+    debug_assert!(B::USIZE <= 25);
 
     let mut bits = 0usize;
     let mut i = 0;
-    let mut total = 0usize;
+    let mut total: u64 = 0;
 
-    Array::<u16, OutLen>::from_fn(|_: usize| {
+    Array::<u32, OutLen>::from_fn(|_: usize| {
         while bits < B::USIZE {
-            total = (total << 8) + x[i] as usize;
+            total = (total << 8) + u64::from(x[i]);
             bits += 8;
             i += 1;
         }
         bits -= B::USIZE;
-        let out = (total >> bits) & ((1 << B::U8) - 1);
-        total &= (1 << bits) - 1; // Deviation from spec pseudocode - clear used component to prevent usize overflow
-        out.try_into().expect("B is less than 16")
+        let out = (total >> bits) & ((1u64 << B::U8) - 1);
+        total &= (1u64 << bits) - 1; // Deviation from spec pseudocode - clear used component to prevent overflow
+        u32::try_from(out).expect("B is at most 25, so the chunk fits in u32")
     })
 }
 
@@ -81,6 +88,18 @@ pub(crate) mod macros {
             crate::gen_test!($name, Sha2_192s);
             crate::gen_test!($name, Sha2_256f);
             crate::gen_test!($name, Sha2_256s);
+
+            // NIST SP 800-230 limited-signature (2^24) parameter sets
+            crate::gen_test!($name, Shake128_24);
+            crate::gen_test!($name, Sha2_128_24);
+            #[cfg(feature = "sp800-230-highsec")]
+            crate::gen_test!($name, Shake192_24);
+            #[cfg(feature = "sp800-230-highsec")]
+            crate::gen_test!($name, Shake256_24);
+            #[cfg(feature = "sp800-230-highsec")]
+            crate::gen_test!($name, Sha2_192_24);
+            #[cfg(feature = "sp800-230-highsec")]
+            crate::gen_test!($name, Sha2_256_24);
         };
     }
 
@@ -157,6 +176,39 @@ mod tests {
         #[test]
         fn test_base_2b_35_9(x in prop::collection::vec(any::<u8>(), 0..100)){
             test_base_2b::<U<35>, U<9>>(&x);
+        }
+
+        // SP 800-230 FORS: k base-2^a chunks with a = 24 (L1) and a = 25 (L3/L5).
+        // These exercise the u32 output path (a > 16).
+        #[test]
+        fn test_base_2b_6_24(x in prop::collection::vec(any::<u8>(), 0..100)){
+            test_base_2b::<U<6>, U<24>>(&x);
+        }
+
+        #[test]
+        fn test_base_2b_9_25(x in prop::collection::vec(any::<u8>(), 0..100)){
+            test_base_2b::<U<9>, U<25>>(&x);
+        }
+
+        #[test]
+        fn test_base_2b_12_25(x in prop::collection::vec(any::<u8>(), 0..100)){
+            test_base_2b::<U<12>, U<25>>(&x);
+        }
+
+        // SP 800-230 WOTS+ checksum expansion: len2 base-2^lg_w chunks.
+        #[test]
+        fn test_base_2b_4_2(x in prop::collection::vec(any::<u8>(), 0..100)){
+            test_base_2b::<U<4>, U<2>>(&x);
+        }
+
+        #[test]
+        fn test_base_2b_5_2(x in prop::collection::vec(any::<u8>(), 0..100)){
+            test_base_2b::<U<5>, U<2>>(&x);
+        }
+
+        #[test]
+        fn test_base_2b_3_3(x in prop::collection::vec(any::<u8>(), 0..100)){
+            test_base_2b::<U<3>, U<3>>(&x);
         }
     }
 }
