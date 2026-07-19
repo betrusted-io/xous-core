@@ -11,7 +11,9 @@ use crate::{ParameterSet, PkSeed, SkPrf, SkSeed};
 use ::shake::Shake256;
 use const_oid::db::fips205;
 use digest::{ExtendableOutput, Update};
-use hybrid_array::typenum::consts::{U16, U21, U30, U32, U41};
+use hybrid_array::typenum::consts::{U16, U21, U30, U32};
+#[cfg(feature = "sp800-230-highsec")]
+use hybrid_array::typenum::consts::U41;
 use hybrid_array::typenum::{U24, U34, U39, U42, U47, U49};
 use hybrid_array::{Array, ArraySize};
 use typenum::U;
@@ -28,8 +30,12 @@ pub struct Shake<N, M> {
 
 impl<N: ArraySize, M: ArraySize> HashSuite for Shake<N, M>
 where
-    N: Debug + Clone + PartialEq + Eq,
-    M: Debug + Clone + PartialEq + Eq,
+    // `Sync`: typenum size types are zero-sized and always Sync; the explicit
+    // bound is needed because this impl is generic, so the PhantomData<N/M>
+    // markers can't otherwise satisfy HashSuite's MaybeSync supertrait when the
+    // `parallel` feature is enabled. Sync is a core trait: no_std-safe.
+    N: Debug + Clone + PartialEq + Eq + Sync,
+    M: Debug + Clone + PartialEq + Eq + Sync,
 {
     type N = N;
     type M = M;
