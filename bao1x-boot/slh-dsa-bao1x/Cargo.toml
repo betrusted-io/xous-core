@@ -25,7 +25,7 @@ hmac = "0.13"
 hybrid-array = { version = "0.4", features = ["extra-sizes"] }
 pkcs8 = { version = "0.11", default-features = false }
 rand_core = "0.10"
-# sha2 = { package = "sha2-bao1x-pq", path = "../sha2-bao1x-pq", default-features = false }
+sha2-bao1x = { package = "sha2-bao1x-pq", path = "../sha2-bao1x-pq", default-features = false, optional = true }
 sha2 = "0.11.0"
 shake = { version = "0.1", default-features = false }
 signature = { version = "3", features = ["rand_core"] }
@@ -77,3 +77,7 @@ parallel = ["dep:rayon"]
 # Turns on tree caching - computes the top part of the xmss tree, which does not
 # vary between messages, to further accelerate signing operations.
 tree-cache = []
+# Turns on bao1x hardware hasher for hashing the incoming message for verification.
+# Still relies on the software hasher for the actual signature, as the signature
+# implementation requires Clone.
+bao1x = ["sha2-bao1x"]

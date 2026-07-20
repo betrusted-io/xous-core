@@ -97,15 +97,31 @@ where
         pk_root: &Array<u8, Self::N>,
         msg: &[&[impl AsRef<[u8]>]],
     ) -> Array<u8, Self::M> {
-        let mut h = Sha256::new();
-        h.update(rand);
-        h.update(pk_seed);
-        h.update(pk_root);
-        msg.iter()
-            .copied()
-            .flatten()
-            .for_each(|msg_part| h.update(msg_part.as_ref()));
-        let result = Array(h.finalize().into());
+        #[cfg(feature = "bao1x")]
+        let result = {
+            let mut h = sha2_bao1x::Sha256::new();
+            h.update(rand);
+            h.update(pk_seed);
+            h.update(pk_root);
+            msg.iter()
+                .copied()
+                .flatten()
+                .for_each(|msg_part| h.update(msg_part.as_ref()));
+            Array(h.finalize().into())
+        };
+        #[cfg(not(feature = "bao1x"))]
+        let result = {
+            let mut h = Sha256::new();
+            h.update(rand);
+            h.update(pk_seed);
+            h.update(pk_root);
+            msg.iter()
+                .copied()
+                .flatten()
+                .for_each(|msg_part| h.update(msg_part.as_ref()));
+            Array(h.finalize().into())
+        };
+
         let seed = rand.clone().concat(pk_seed.0.clone()).concat(result);
         mgf1::<Sha256, Self::M>(&seed)
     }
