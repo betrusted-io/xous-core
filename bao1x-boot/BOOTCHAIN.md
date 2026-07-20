@@ -1,6 +1,6 @@
 # Bao1x Boot Chain
 
-The Bao1x boot chain is as follows:
+The Bao1x boot chain is documented here.
 
 ## Boot 0
 
@@ -67,21 +67,6 @@ In the console mode, files may be sent to the boot1 loader for writing to any of
 In USB-serial mode, data is transferred to the device using a custom base64 encoded serialization protocol, where the memory offset and type of block are encoded in each base64 packet. This takes advantage of the 32-byte erase block size of RRAM to give highly flexible chip programming.
 
 In USB-mass storage mode, data is transferred as UF2 formatted objects, which are then unpacked and programmed into memory.
-
-#### Side-Quest: App translation layer
-
-*This is a to-do note inserted in the docs because it made sense to think of it here. Eventually, this needs to be implemented and cleaned up into a more sensible location.*
-
-Because applications can be installed in any order, memory fragmentation is a problem. In order to address this, the app space is passed through a translation lookup layer.
-
-- App area is organized into 64-kiB remap blocks
-- An index of which program ID each block maps to is included at the top of swap memory. The size of the index varies with the size of the disk, and is encoded into the structure format.
-  - For a 16MiB partition, that would correspond to 256 entries in the index.
-  - The loader would read this index in and create a hash table that allows the efficient mapping of a program ID + remap offset to a physical offset
-  - In each 32-bit entry in the index:
-    - An 8-bit program ID uniquely identifies up to 256 programs
-    - 16 bits identify the offset of the block in the memory
-    - The remaining 8 bits are reserved
 
 ### Building Boot 1
 
