@@ -339,7 +339,7 @@ pub unsafe extern "C" fn rust_entry() -> ! {
             reseed_skipping(csprng.get_u32());
         }
         match bao1x_hal::sigcheck::validate_image(configuration, None, Some(&mut csprng)) {
-            Ok((key, key_inv, tag, target)) => {
+            Ok((key, key_inv, tag, target, _pq)) => {
                 if key != !key_inv {
                     die();
                 }

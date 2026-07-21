@@ -18,6 +18,9 @@ hex-literal = "0.4"
 sha2-bao1x = { path = "../sha2-bao1x", default-features = false }
 digest = "0.10.7"
 
+slh-dsa = { path = "../slh-dsa-bao1x" }
+hex = { version = "0.4.3", default-features = false }
+
 [features]
 # Baochip feature tree below
 bao1x = [
