@@ -1,3 +1,4 @@
+#![cfg_attr(rustfmt, rustfmt_skip)]
 use crate::ParameterSet;
 use crate::Sha2L1;
 use crate::Sha2L35;
@@ -136,6 +137,121 @@ impl<P: ParameterSet + VerifyingKeyLen> VerifyingKey<P> {
     }
 }
 
+/// Output of the fault-hardened verification API (`hardened-verify` feature).
+///
+/// Contains the candidate hypertree root computed from the signature — with
+/// its bytes masked under a caller-supplied random `mask` — together with the
+/// expected root from the verifying key. **This type deliberately makes no
+/// accept/reject decision**: the caller must unmask and compare byte-by-byte
+/// (see [`VerifyingKey::slh_verify_hardened`] for the recommended
+/// comparison loop), so that a single instruction glitch cannot skip the
+/// entire check the way it could a returned `Result`.
+///
+/// Masking rule: byte `i` of the candidate root is XORed with `0xFF` iff bit
+/// `i` of `mask` is set (`n <= 32` for all SLH-DSA parameter sets, so `u32`
+/// covers every byte). Because `mask` is a runtime random value, the compiler
+/// cannot fold the caller's per-byte comparisons back into a single `memcmp`.
+#[cfg(feature = "hardened-verify")]
+pub struct HardenedVerifyOutput<P: ParameterSet> {
+    masked_root: Array<u8, P::N>,
+    expected_root: Array<u8, P::N>,
+    mask: u32,
+}
+
+#[cfg(feature = "hardened-verify")]
+impl<P: ParameterSet> HardenedVerifyOutput<P> {
+    /// The candidate root implied by the signature, masked under `mask`.
+    pub fn masked_root(&self) -> &[u8] {
+        self.masked_root.as_slice()
+    }
+
+    /// The expected root (`pk_root` from the verifying key), unmasked.
+    pub fn expected_root(&self) -> &[u8] {
+        self.expected_root.as_slice()
+    }
+
+    /// The mask this output was created with (echoed back for convenience;
+    /// callers should prefer their own copy of the value they passed in).
+    pub fn mask(&self) -> u32 {
+        self.mask
+    }
+}
+
+/// Fault-hardened verification (`hardened-verify` feature).
+///
+/// Performs all the signature computation but **no final comparison**; returns
+/// masked byte material for the caller to compare externally, one byte at a
+/// time, so that defeating the check requires glitching every byte comparison
+/// rather than a single branch or return value.
+#[cfg(feature = "hardened-verify")]
+impl<P: ParameterSet> VerifyingKey<P> {
+    /// Compute the masked candidate root for `signature` over `msg`.
+    ///
+    /// Mirrors the internal path
+    /// ([`slh_verify_internal`](Self::slh_verify_internal): raw message, no
+    /// context prefix, matching the KAT vectors), so signatures must be
+    /// produced by `slh_sign_internal` (as the `slh-sign` tool does), NOT by
+    /// `Signer::try_sign`, which prepends the FIPS-205 context bytes
+    /// (`0x00 0x00` even for an empty context).
+    ///
+    /// In the intended deployment `msg` is a short **pre-hash** of the actual
+    /// payload (e.g. `SHA-256(image)`), computed by the caller — possibly on
+    /// a hardware hasher, streamed from external storage — so this crate only
+    /// ever hashes a few dozen bytes. Trade-off note: SLH-DSA proper is
+    /// collision-*resilient* (its randomized message digest avoids relying on
+    /// plain collision resistance of the hash), whereas signing a pre-hash
+    /// makes forgery reducible to offline collisions in the pre-hash
+    /// function. FIPS-205 sanctions this shape as HashSLH-DSA and rates
+    /// SHA-256 sufficient for security category 1.
+    ///
+    /// This function cannot fail: a wrong signature, wrong key, or wrong
+    /// message simply yields a candidate root that will not match, which the
+    /// caller's comparison detects. There is deliberately no internal
+    /// accept/reject decision to glitch.
+    ///
+    /// # Recommended caller-side comparison
+    ///
+    /// ```ignore
+    /// let out = vk.slh_verify_hardened(&[digest], &sig, mask);
+    /// let (mr, er) = (out.masked_root(), out.expected_root());
+    /// if mr.len() != er.len() { fault_abort(); }
+    /// let mut matched: usize = 0;
+    /// for i in 0..mr.len() {
+    ///     let unmask = 0u8.wrapping_sub(((mask >> i) & 1) as u8); // 0x00 or 0xFF
+    ///     let cand = core::hint::black_box(mr[i]) ^ unmask;
+    ///     if cand != er[i] { fault_abort(); }   // independent per-byte branch
+    ///     matched += 1;
+    /// }
+    /// if matched != mr.len() { fault_abort(); } // loop-completion cross-check
+    /// // signature valid
+    /// ```
+    pub fn slh_verify_hardened(
+        &self,
+        msg: &[&[u8]],
+        signature: &Signature<P>,
+        mask: u32,
+    ) -> HardenedVerifyOutput<P> {
+        let digest = P::h_msg(&signature.randomizer, &self.pk_seed, &self.pk_root, &[msg]);
+        let (md, idx_tree, idx_leaf) = split_digest::<P>(&digest);
+
+        let ht = P::new_from_pk_seed(&self.pk_seed);
+        let adrs = ForsTree::new(idx_tree, idx_leaf);
+        let fors_pk = ht.fors_pk_from_sig(&signature.fors_sig, md, &adrs);
+        let root = ht.ht_root(&fors_pk, &signature.ht_sig, idx_tree, idx_leaf);
+
+        let masked_root = Array::from_fn(|i| {
+            // XOR byte i with 0xFF iff mask bit i is set. n <= 32 always.
+            root[i] ^ 0u8.wrapping_sub(((mask >> (i % 32)) & 1) as u8)
+        });
+
+        HardenedVerifyOutput {
+            masked_root,
+            expected_root: self.pk_root.clone(),
+            mask,
+        }
+    }
+}
+
 impl<P: ParameterSet> core::hash::Hash for VerifyingKey<P> {
     fn hash<H: core::hash::Hasher>(&self, state: &mut H) {
         self.to_bytes().hash(state);
@@ -262,5 +378,55 @@ mod tests {
         let vk_bytes: Array<u8, _> = (&vk).into();
         let vk2 = VerifyingKey::<Shake128f>::try_from(vk_bytes.as_slice()).unwrap();
         assert_eq!(vk, vk2);
+    }
+}
+
+#[cfg(all(test, feature = "hardened-verify"))]
+mod hardened_tests {
+    use super::*;
+    use crate::Shake128f;
+    use crate::signing_key::SigningKey;
+    use ::signature::Keypair;
+
+    /// The recommended caller-side loop from the API docs, as a predicate.
+    fn unmask_compare(out: &HardenedVerifyOutput<Shake128f>, mask: u32) -> bool {
+        let (mr, er) = (out.masked_root(), out.expected_root());
+        if mr.len() != er.len() {
+            return false;
+        }
+        let mut matched = 0usize;
+        for i in 0..mr.len() {
+            let unmask = 0u8.wrapping_sub(((mask >> i) & 1) as u8);
+            if (mr[i] ^ unmask) != er[i] {
+                return false;
+            }
+            matched += 1;
+        }
+        matched == mr.len()
+    }
+
+    #[test]
+    fn hardened_accepts_and_rejects() {
+        let sk = SigningKey::<Shake128f>::slh_keygen_internal(&[9u8; 16], &[8u8; 16], &[7u8; 16]);
+        let vk = sk.verifying_key();
+
+        // Pre-hash flow: the signed "message" is a short digest of the real
+        // payload, computed by the caller (stand-in bytes here).
+        let payload_digest = [0x42u8; 32];
+        let msg: &[u8] = &payload_digest;
+        let sig = sk.slh_sign_internal(&[msg], None);
+
+        for mask in [0u32, 0xFFFF_FFFF, 0xA5A5_5A5A] {
+            let out = vk.slh_verify_hardened(&[msg], &sig, mask);
+            assert!(unmask_compare(&out, mask), "valid signature must unmask-compare equal");
+        }
+
+        let mut tampered = payload_digest;
+        tampered[0] ^= 1;
+        let out = vk.slh_verify_hardened(&[&tampered[..]], &sig, 0xDEAD_BEEF);
+        assert!(!unmask_compare(&out, 0xDEAD_BEEF), "tampered digest must mismatch");
+
+        // Cross-check against the crate's own internal verify.
+        assert!(vk.slh_verify_internal(&[msg], &sig).is_ok());
     }
 }

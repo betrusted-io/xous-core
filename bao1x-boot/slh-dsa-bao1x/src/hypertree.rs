@@ -109,14 +109,18 @@ pub(crate) trait HypertreeParams: XmssParams + Sized {
         HypertreeSig(sig.iter().cloned().map(Option::unwrap).collect())
     }
 
-    fn ht_verify(
+    /// Compute the candidate hypertree root implied by `sig` for message `m`
+    /// at the given indices (FIPS-205 Algorithm 12 minus the final
+    /// comparison). `ht_verify` compares this against `pk_root`; the
+    /// `hardened-verify` API returns it to the caller for an externally
+    /// performed, fault-hardened comparison.
+    fn ht_root(
         &self,
         m: &Array<u8, Self::N>,
         sig: &HypertreeSig<Self>,
         mut idx_tree: u64,
         mut idx_leaf: u32,
-        pk_root: &Array<u8, Self::N>,
-    ) -> bool {
+    ) -> Array<u8, Self::N> {
         let mut adrs = WotsHash::default();
         adrs.tree_adrs_low.set(idx_tree);
 
@@ -134,7 +138,18 @@ pub(crate) trait HypertreeParams: XmssParams + Sized {
 
             root = self.xmss_pk_from_sig(idx_leaf, &sig.0[j as usize], &root, &adrs);
         }
-        &root == pk_root
+        root
+    }
+
+    fn ht_verify(
+        &self,
+        m: &Array<u8, Self::N>,
+        sig: &HypertreeSig<Self>,
+        idx_tree: u64,
+        idx_leaf: u32,
+        pk_root: &Array<u8, Self::N>,
+    ) -> bool {
+        &self.ht_root(m, sig, idx_tree, idx_leaf) == pk_root
     }
 }
 
