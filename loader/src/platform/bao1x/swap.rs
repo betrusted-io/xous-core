@@ -5,12 +5,12 @@ use aes_gcm_siv::{AeadInPlace, Aes256GcmSiv, KeyInit, Nonce, Tag};
 use bao1x_api::pubkeys::LOADER_TO_SWAP;
 use bao1x_api::udma::*;
 use bao1x_api::*;
+use bao1x_hal::ERASE_VALUE;
 use bao1x_hal::acram::SlotManager;
 use bao1x_hal::board::{APP_UART_IFRAM_ADDR, SPIM_FLASH_IFRAM_ADDR, SPIM_RAM_IFRAM_ADDR, SWAP_KEY};
 use bao1x_hal::ifram::IframRange;
 use bao1x_hal::iox::Iox;
 use bao1x_hal::sce;
-use bao1x_hal::sigcheck::ERASE_VALUE;
 use bao1x_hal::udma::{GlobalConfig, Spim, SpimClkPha, SpimClkPol, SpimCs};
 use rand_chacha::ChaCha8Rng;
 use rand_chacha::rand_core::RngCore;
@@ -247,12 +247,13 @@ impl SwapHal {
                             Some(&mut hal.flash_spim),
                             None,
                         ) {
-                            Ok((k, k2, tag, _target)) => {
+                            Ok((k, k2, tag, _target, pq)) => {
                                 println!(
-                                    "*** Swap signature check by key @ {}/{}({}) OK ***",
+                                    "*** Swap signature check by key @ {}/{}({}) pq {:?} OK ***",
                                     k,
                                     !k2,
-                                    core::str::from_utf8(&tag).unwrap_or("invalid tag")
+                                    core::str::from_utf8(&tag).unwrap_or("invalid tag"),
+                                    pq
                                 );
                                 bollard!(bao1x_hal::sigcheck::die_no_std, 4);
                                 if k != !k2 {

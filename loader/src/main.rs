@@ -268,7 +268,7 @@ pub unsafe extern "C" fn rust_entry(signed_buffer: *const usize, signature: u32)
     #[cfg(feature = "bao1x")]
     let detached_app = {
         use bao1x_api::{PARANOID_MODE, PARANOID_MODE_DUPE, bollard, pubkeys::LOADER_TO_KERNEL};
-        use bao1x_hal::{buram::ERASURE_PROOF_RANGE_BYTES, sigcheck::ERASE_VALUE};
+        use bao1x_hal::{ERASE_VALUE, buram::ERASURE_PROOF_RANGE_BYTES};
 
         let owc = bao1x_hal::acram::OneWayCounter::new();
         let backup = bao1x_hal::buram::BackupManager::new();
@@ -279,14 +279,15 @@ pub unsafe extern "C" fn rust_entry(signed_buffer: *const usize, signature: u32)
         bollard!(bao1x_hal::sigcheck::die_no_std, 4);
         // validate using the bao1x signature scheme
         match bao1x_hal::sigcheck::validate_image(LOADER_TO_KERNEL, None, Some(&mut csprng)) {
-            Ok((key, key_inv, tag, _target)) => {
+            Ok((key, key_inv, tag, _target, pq)) => {
                 if paranoid1 == 0 && paranoid2 == 0 {
                     // only print if not in paranoid mode; the DUART output can be used to align a glitch
                     println!(
-                        "*** Kernel signature check by key @ {}/{}({}) OK ***",
+                        "*** Kernel signature check by key @ {}/{}({}) pq {:?} OK ***",
                         key,
                         !key_inv,
-                        core::str::from_utf8(&tag).unwrap_or("invalid tag")
+                        core::str::from_utf8(&tag).unwrap_or("invalid tag"),
+                        pq
                     );
                 }
                 if key != !key_inv {
@@ -360,13 +361,14 @@ pub unsafe extern "C" fn rust_entry(signed_buffer: *const usize, signature: u32)
 
             csprng.random_delay();
             match bao1x_hal::sigcheck::validate_image(LOADER_TO_DETACHED_APP, None, Some(&mut csprng)) {
-                Ok((key, key_inv, tag, _target)) => {
+                Ok((key, key_inv, tag, _target, pq)) => {
                     if paranoid1 == 0 && paranoid2 == 0 {
                         println!(
-                            "*** Detached app signature check by key @ {}/{}({}) OK ***",
+                            "*** Detached app signature check by key @ {}/{}({}) pq {:?} OK ***",
                             key,
                             !key_inv,
-                            core::str::from_utf8(&tag).unwrap_or("invalid tag")
+                            core::str::from_utf8(&tag).unwrap_or("invalid tag"),
+                            pq
                         );
                     }
                     // k is just a nominal slot number. If either match, assume we are dealing with a
