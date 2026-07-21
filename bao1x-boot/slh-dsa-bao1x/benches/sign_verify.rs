@@ -1,3 +1,4 @@
+#![cfg_attr(rustfmt, rustfmt_skip)]
 use criterion::{Criterion, criterion_group, criterion_main};
 use signature::{Keypair, Signer, Verifier};
 use slh_dsa::*;

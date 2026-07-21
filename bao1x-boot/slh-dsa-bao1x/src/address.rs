@@ -1,3 +1,4 @@
+#![cfg_attr(rustfmt, rustfmt_skip)]
 //! Hash address definitions and serialization
 //!
 //!  From FIPS-205 section 4.2:

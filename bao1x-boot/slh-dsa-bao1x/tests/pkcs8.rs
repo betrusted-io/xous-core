@@ -1,3 +1,4 @@
+#![cfg_attr(rustfmt, rustfmt_skip)]
 #![cfg(feature = "alloc")]
 
 use hex_literal::hex;

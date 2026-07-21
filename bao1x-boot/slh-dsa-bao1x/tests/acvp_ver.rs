@@ -1,3 +1,4 @@
+#![cfg_attr(rustfmt, rustfmt_skip)]
 #![allow(non_snake_case)]
 #![cfg(feature = "alloc")]
 

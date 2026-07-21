@@ -1,3 +1,4 @@
+#![cfg_attr(rustfmt, rustfmt_skip)]
 //! Known-answer tests from the SPHINCS+ reference implementation
 //! Generated via https://github.com/sphincs/sphincsplus on branch consistent_basew (eccdc43a99e194f52d5ef0e4030ef4dd1e31828b)
 //! with PQCgenKAT_sign.c modified on line 59 to reduce iterations from 100 to 10
