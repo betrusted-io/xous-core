@@ -5,10 +5,12 @@
 //!       Layout is FIPS-205: sk_seed || sk_prf || pk_seed || pk_root (4*n = 64 bytes).
 //!
 //!   slh-sign sign <secret-key-in> <message-file> <signature-out> [tree-cache-in]
-//!       Read the secret key, read the message file, and write the raw binary
-//!       signature (3856 bytes) to <signature-out>. If a tree-cache file is
-//!       given, it is validated against the key and used to skip rebuilding
-//!       the (message-independent) XMSS tree — ~5x faster signing.
+//!       Read the secret key, compute SHA-256 of the message file, and sign
+//!       the 32-byte digest (pre-hash / HashSLH-DSA-style flow: the verifier
+//!       must likewise hash the payload and verify the digest as the
+//!       message). Writes the raw 3856-byte signature to <signature-out>. If
+//!       a tree-cache file is given, it is validated against the key and used
+//!       to skip rebuilding the (message-independent) XMSS tree — ~5x faster.
 //!
 //!   slh-sign cache <secret-key-in> <tree-cache-out>
 //!       Build the message-independent XMSS tree cache for the key and write
@@ -17,15 +19,21 @@
 //!       One-time cost of one full tree build; every subsequent `sign` with
 //!       it skips ~80% of the signing work.
 //!
-//! Signatures are standard FIPS-205 (empty context) and are deterministic, so
-//! signing the same message with the same key twice yields identical bytes.
+//! Signatures use the FIPS-205 *internal* path (`slh_sign_internal`: raw
+//! message, no context/domain-separation prefix), matching the KAT vectors and
+//! the `hardened-verify` boot verifier. They are deterministic: signing the
+//! same message with the same key twice yields identical bytes. NOTE: these
+//! signatures are NOT interoperable with standard "pure SLH-DSA" verifiers,
+//! which expect the context prefix; this is intentional for the closed
+//! signer/verifier system.
 
 use std::convert::TryFrom;
 use std::fs;
 use std::process::exit;
 
 use rand::RngCore; // rand 0.8.5: `fill_bytes`
-use slh_dsa::signature::{Keypair, Signer}; // `verifying_key()` / `try_sign`
+use sha2::{Digest as _, Sha256};
+use slh_dsa::signature::Keypair; // `verifying_key()`
 use slh_dsa::{Sha2_128_24, SigningKey, XmssTreeCache};
 
 /// n (in bytes) for SHA2-128-24. The secret key seed material is 3*n bytes
@@ -75,9 +83,16 @@ fn cache(sk_in: &str, cache_out: &str) {
 fn sign(sk_in: &str, msg_file: &str, sig_out: &str, cache_in: Option<&str>) {
     let sk = load_sk(sk_in);
     let msg = fs::read(msg_file).unwrap_or_else(|e| die(&format!("reading message {msg_file}: {e}")));
+    // Pre-hash: the signed message is SHA-256 of the payload. The verifier
+    // hashes the payload the same way (e.g. on a hardware hasher, streamed
+    // from flash) and verifies the digest, so the SLH-DSA code never touches
+    // the full image.
+    let digest = Sha256::digest(&msg);
+    let msg: &[u8] = digest.as_slice();
 
-    // Deterministic, empty-context FIPS-205 signature; the cached and
-    // uncached paths produce bit-identical output.
+    // Deterministic internal-path signature (raw message, no context prefix;
+    // opt_rand = None makes the randomizer deterministic per FIPS-205). The
+    // cached and uncached paths produce bit-identical output.
     let sig = match cache_in {
         Some(path) => {
             let bytes = fs::read(path).unwrap_or_else(|e| die(&format!("reading tree cache {path}: {e}")));
@@ -86,9 +101,9 @@ fn sign(sk_in: &str, msg_file: &str, sig_out: &str, cache_in: Option<&str>) {
             if !cache.validate(&sk.verifying_key()) {
                 die(&format!("tree cache {path} does not match this key (or is corrupt)"));
             }
-            sk.try_sign_with_tree_cache(&msg, &cache).unwrap_or_else(|e| die(&format!("signing failed: {e}")))
+            sk.slh_sign_internal_with_cache(&[msg], None, &cache)
         }
-        None => sk.try_sign(&msg).unwrap_or_else(|e| die(&format!("signing failed: {e}"))),
+        None => sk.slh_sign_internal(&[msg], None),
     };
 
     let sig_bytes = sig.to_bytes();
