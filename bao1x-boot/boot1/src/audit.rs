@@ -3,8 +3,8 @@ use core::convert::TryInto;
 use bao1x_api::pubkeys::{BOOT0_SELF_CHECK, BOOT0_TO_BOOT1, BOOT1_TO_LOADER_OR_BAREMETAL};
 use bao1x_api::signatures::{SIGBLOCK_LEN, SignatureInFlash, UNSIGNED_LEN};
 use bao1x_api::*;
+use bao1x_hal::ERASE_VALUE;
 use bao1x_hal::acram::OneWayCounter;
-use bao1x_hal::sigcheck::ERASE_VALUE;
 use digest::Digest;
 use sha2_bao1x::Sha512;
 
@@ -117,31 +117,34 @@ pub fn audit() {
     }
 
     match bao1x_hal::sigcheck::validate_image(BOOT0_SELF_CHECK, None, None) {
-        Ok((k, k2, tag, target)) => crate::println!(
-            "Boot0: key {}/{} ({}) -> {:x}",
+        Ok((k, k2, tag, target, pq)) => crate::println!(
+            "Boot0: key {}/{} ({}) pq {:?} -> {:x}",
             k,
             !k2,
             core::str::from_utf8(&tag).unwrap_or("invalid tag"),
+            pq,
             target ^ u32::from_le_bytes(tag)
         ),
         Err(e) => crate::println!("Boot0 did not validate: {:?}", e),
     }
     match bao1x_hal::sigcheck::validate_image(BOOT0_TO_BOOT1, None, None) {
-        Ok((k, k2, tag, target)) => crate::println!(
-            "Boot1: key {}/{} ({}) -> {:x}",
+        Ok((k, k2, tag, target, pq)) => crate::println!(
+            "Boot1: key {}/{} ({}) pq {:?} -> {:x}",
             k,
             !k2,
             core::str::from_utf8(&tag).unwrap_or("invalid tag"),
+            pq,
             target ^ u32::from_le_bytes(tag)
         ),
         Err(e) => crate::println!("Boot1 did not validate: {:?}", e),
     }
     match bao1x_hal::sigcheck::validate_image(BOOT1_TO_LOADER_OR_BAREMETAL, None, None) {
-        Ok((k, k2, tag, target)) => crate::println!(
-            "Next stage: key {}/{} ({}) -> {:x}",
+        Ok((k, k2, tag, target, pq)) => crate::println!(
+            "Next stage: key {}/{} ({}) pq {:?} -> {:x}",
             k,
             !k2,
             core::str::from_utf8(&tag).unwrap_or("invalid tag"),
+            pq,
             target ^ u32::from_le_bytes(tag)
         ),
         Err(e) => crate::println!("Next stage did not validate: {:?}", e),
@@ -264,7 +267,7 @@ pub fn audit() {
         secure = false;
     }
     let collateral = slot_mgr.read(&COLLATERAL).unwrap();
-    let check_val = alloc::vec![bao1x_hal::sigcheck::ERASE_VALUE; COLLATERAL.len() * SLOT_ELEMENT_LEN_BYTES];
+    let check_val = alloc::vec![bao1x_hal::ERASE_VALUE; COLLATERAL.len() * SLOT_ELEMENT_LEN_BYTES];
     let uninit_val = alloc::vec![0; COLLATERAL.len() * SLOT_ELEMENT_LEN_BYTES];
     // these strings below are used in CI. If they are changed, CI needs to be updated
     if collateral == &check_val {
