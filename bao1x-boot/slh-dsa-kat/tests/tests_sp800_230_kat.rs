@@ -15,7 +15,8 @@
 //!
 //! Place this file in the crate's `tests/` directory and run `cargo test`.
 //! The tree-cache variant additionally requires
-//! `cargo test --release --features tree-cache`.
+//! `cargo test --release --features tree-cache`, and the hardened-verify
+//! variant `--features hardened-verify`.
 
 use slh_dsa::*;
 
@@ -77,4 +78,43 @@ fn kat_sha2_128_24_tree_cache() {
 
     let sig = sk.slh_sign_internal_with_cache(&[MSG], Some(&ramp(0xC0, 16)), &cache);
     check_sig(&sig, SHA2_128_24_SIG);
+}
+
+/// Verify the C-reference vector through the fault-hardened path: parse the
+/// public key and signature from the vector bytes (as the boot verifier
+/// would), compute the masked roots, and run the recommended per-byte
+/// unmask-and-compare loop. The hardened API mirrors the internal path, so
+/// the KAT vector applies directly. Also checks a tampered message mismatches.
+#[cfg(feature = "hardened-verify")]
+#[test]
+fn kat_sha2_128_24_hardened_verify() {
+    let vk_bytes = hex::decode(SHA2_128_24_PK).unwrap();
+    let vk = VerifyingKey::<Sha2_128_24>::try_from(vk_bytes.as_slice()).unwrap();
+    let sig_bytes = hex::decode(SHA2_128_24_SIG).unwrap();
+    let sig = Signature::<Sha2_128_24>::try_from(sig_bytes.as_slice()).unwrap();
+
+    let unmask_compare = |out: &HardenedVerifyOutput<Sha2_128_24>, mask: u32| -> bool {
+        let (mr, er) = (out.masked_root(), out.expected_root());
+        if mr.len() != er.len() {
+            return false;
+        }
+        let mut matched = 0usize;
+        for i in 0..mr.len() {
+            let unmask = 0u8.wrapping_sub(((mask >> i) & 1) as u8);
+            if (mr[i] ^ unmask) != er[i] {
+                return false;
+            }
+            matched += 1;
+        }
+        matched == mr.len()
+    };
+
+    for mask in [0u32, 0xFFFF_FFFF, 0x5A5A_A5A5] {
+        let out = vk.slh_verify_hardened(&[MSG], &sig, mask);
+        assert!(unmask_compare(&out, mask), "C vector must verify via hardened path");
+    }
+
+    let tampered: &[u8] = b"NIST SP 800-230 SLH-DSA vector.";
+    let out = vk.slh_verify_hardened(&[tampered], &sig, 0xC0FF_EE00);
+    assert!(!unmask_compare(&out, 0xC0FF_EE00), "tampered message must mismatch");
 }

@@ -15,9 +15,14 @@ rust-version = "1.85"
 license = "Apache-2.0"
 
 [dependencies]
-slh-dsa = { path = "../slh-dsa-bao1x", features = ["parallel", "tree-cache"] }
+slh-dsa = { path = "../slh-dsa-bao1x", features = [
+    "parallel",
+    "tree-cache",
+    "hardened-verify",
+] }
 hex = "0.4.3"
 
 [features]
 tree-cache = []
-default = ["tree-cache"]
+hardened-verify = []
+default = ["tree-cache", "hardened-verify"]
