@@ -162,7 +162,7 @@ impl VariableOutputCore for Sha512VarCore {
         buffer.len128_padding_be(bit_len, |b| compress512(&mut self.csr, &[b.0]));
 
         for (chunk, v) in out.chunks_exact_mut(8).zip(self.state.iter()) {
-            chunk.copy_from_slice(&v.to_be_bytes());
+            chunk.copy_from_slice(&v.to_le_bytes());
         }
     }
 }
