@@ -75,7 +75,51 @@ macro_rules! encode_oneway {
     };
 }
 
+/// Total number of public key slots in the system. Pubkey revocations are duplicated because
+/// being able to override a pubkey revocation is a strong attack vector. If either OWC reads back
+/// as non-zero, the pubkey is considered to be revoked.
+pub const PUBKEY_SLOTS: usize = 4;
+
+pub const fn classic_to_pq_revocation(classic: usize) -> Option<usize> {
+    match classic {
+        BOOT0_REVOCATION_OFFSET => Some(PQ_BOOT0_REVOCATION_OFFSET),
+        BOOT1_REVOCATION_OFFSET => Some(PQ_BOOT1_REVOCATION_OFFSET),
+        LOADER_REVOCATION_OFFSET => Some(PQ_LOADER_REVOCATION_OFFSET),
+        _ => None,
+    }
+}
+
 // =========== ONE WAY COUNTER SLOTS ==============
+// slots 0-127 are for bootloader/xous use
+// slots 128-255 are for user applications
+
+// slots 0-20 are currently unallocated
+
+/// When this or REQUIRE_PQ_DUPE is set, the next stage *must* have a valid PQ signature
+/// By default, PQ signatures are optional.
+pub const REQUIRE_PQ: usize = 21;
+
+pub const PQ_LOADER_REVOCATION_DUPE_OFFSET: usize = 20; // [20..=23]
+pub const PQ_BOOT1_REVOCATION_DUPE_OFFSET: usize = PQ_LOADER_REVOCATION_DUPE_OFFSET + PUBKEY_SLOTS; // [24..=27]
+pub const PQ_BOOT0_REVOCATION_DUPE_OFFSET: usize = PQ_BOOT1_REVOCATION_DUPE_OFFSET + PUBKEY_SLOTS; // [28..=31]
+
+/// Offset in the one-way counter array for PQ loader key revocations. Provisions for up to four
+/// key slots, from [32..=35].
+pub const PQ_LOADER_REVOCATION_OFFSET: usize = 32;
+/// Offset in the one-way counter array for boot1 key revocations. Provisions for up to four
+/// key slots, from [36..=39].
+pub const PQ_BOOT1_REVOCATION_OFFSET: usize = PQ_LOADER_REVOCATION_OFFSET + PUBKEY_SLOTS;
+/// Offset in the one-way counter array for boot0 key revocations. Provisions for up to four
+/// key slots, from [40..=43].
+pub const PQ_BOOT0_REVOCATION_OFFSET: usize = PQ_BOOT1_REVOCATION_OFFSET + PUBKEY_SLOTS;
+
+/// Fixed offset between the main key and the duplicate key
+pub const PQ_REVOCATION_DUPE_DISTANCE: usize = PQ_LOADER_REVOCATION_OFFSET - PQ_LOADER_REVOCATION_DUPE_OFFSET;
+
+/// See REQUIRE_PQ. Duplicate value to complicate glitching/editing attacks.
+pub const REQUIRE_PQ_DUPE: usize = 44;
+
+// slots 45, 46 are unallocated
 
 /// This is used to count the number of boots, up to a certain threshold. The main
 /// purpose is to turn off the "audit" auto-print which is used to verify chip testing.
@@ -112,10 +156,6 @@ pub const POSSIBLE_ATTACKS: usize = 66;
 
 /// Paranoid mode is written twice
 pub const PARANOID_MODE_DUPE: usize = 67;
-
-/// Total number of public key slots in the system. Pubkey revocations are duplicated because
-/// being able to override a pubkey revocation is a strong attack vector.
-pub const PUBKEY_SLOTS: usize = 4;
 
 /// The layout of the below duplicate revocation bits *MUST* match that of the primary keys.
 /// This property is relied upon by the signature checking routine.
