@@ -61,14 +61,15 @@ pub fn try_boot(or_die: bool, csprng: &mut Csprng) {
     // loader is at the same offset as baremetal. Accept either as valid boot.
     // This diverges if the signature check is successful
     match bao1x_hal::sigcheck::validate_image(BOOT1_TO_LOADER_OR_BAREMETAL, None, Some(csprng)) {
-        Ok((key, key_inv, tag, target)) => {
+        Ok((key, key_inv, tag, target, pq)) => {
             if paranoid1 == 0 && paranoid2 == 0 {
                 // only emit prints if not in paranoid mode
                 crate::println!(
-                    "Booting with key {}/{}({})",
+                    "Booting with key {}/{}({}) pq: {}",
                     key,
                     !key_inv,
-                    core::str::from_utf8(&tag).unwrap_or("invalid tag")
+                    core::str::from_utf8(&tag).unwrap_or("invalid tag"),
+                    pq
                 );
             }
             if key != !key_inv {
