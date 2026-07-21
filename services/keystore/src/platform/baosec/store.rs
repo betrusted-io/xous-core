@@ -97,7 +97,7 @@ impl KeyStore {
     /// returns `true` if collateral is erased
     pub fn is_collateral_erased(&mut self) -> bool {
         let collateral = self.slot_mgr.read(&COLLATERAL).unwrap();
-        let check_val = vec![bao1x_hal::sigcheck::ERASE_VALUE; COLLATERAL.len() * SLOT_ELEMENT_LEN_BYTES];
+        let check_val = vec![bao1x_hal::ERASE_VALUE; COLLATERAL.len() * SLOT_ELEMENT_LEN_BYTES];
         // log::info!("collateral: {:x?}", &collateral);
         // log::info!("check_val: {:x?}", &check_val);
         collateral == &check_val
@@ -124,7 +124,7 @@ impl KeyStore {
         let root_seed = self.slot_mgr.read(&ROOT_SEED).unwrap();
         if root_seed[..8] == [0u8; 8] {
             log::info!("{}KEYSTORE.ZERO,{}", BOOKEND_START, BOOKEND_END);
-        } else if root_seed[..8] == [bao1x_hal::sigcheck::ERASE_VALUE; 8] {
+        } else if root_seed[..8] == [bao1x_hal::ERASE_VALUE; 8] {
             log::info!("{}KEYSTORE.ERASED,{}", BOOKEND_START, BOOKEND_END);
         } else {
             log::info!("{}KEYSTORE.KEYPASS,{}", BOOKEND_START, BOOKEND_END);
