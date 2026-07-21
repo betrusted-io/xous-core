@@ -4,6 +4,15 @@
 //!       Generate a fresh secret key and write it (raw binary) to <secret-key-out>.
 //!       Layout is FIPS-205: sk_seed || sk_prf || pk_seed || pk_root (4*n = 64 bytes).
 //!
+//!   slh-sign pubkey <secret-key-in> <pubkey-out>
+//!       Read the secret key and write the corresponding public (verifying)
+//!       key as raw binary to <pubkey-out>. Layout is FIPS-205:
+//!       pk_seed || pk_root (2*n = 32 bytes for SHA2-128-24). This is the
+//!       trailing 2*n bytes of the secret key: pk_seed and pk_root are both
+//!       stored verbatim in the secret key, so no recomputation is needed and
+//!       no entropy is drawn. The output matches `VerifyingKey::to_bytes`, i.e.
+//!       what the `hardened-verify` boot verifier consumes.
+//!
 //!   slh-sign sign <secret-key-in> <message-file> <signature-out> [tree-cache-in]
 //!       Read the secret key, compute SHA-256 of the message file, and sign
 //!       the 32-byte digest (pre-hash / HashSLH-DSA-style flow: the verifier
@@ -47,6 +56,7 @@ fn main() {
     let args: Vec<String> = std::env::args().collect();
     match args.get(1).map(String::as_str) {
         Some("keygen") if args.len() == 3 => keygen(&args[2]),
+        Some("pubkey") if args.len() == 4 => pubkey(&args[2], &args[3]),
         Some("sign") if args.len() == 5 => sign(&args[2], &args[3], &args[4], None),
         Some("sign") if args.len() == 6 => sign(&args[2], &args[3], &args[4], Some(&args[5])),
         Some("cache") if args.len() == 4 => cache(&args[2], &args[3]),
@@ -67,6 +77,21 @@ fn keygen(sk_out: &str) {
     fs::write(sk_out, bytes.as_slice())
         .unwrap_or_else(|e| die(&format!("writing secret key to {sk_out}: {e}")));
     eprintln!("wrote {}-byte secret key to {sk_out}", bytes.len());
+}
+
+fn pubkey(sk_in: &str, pk_out: &str) {
+    // The public key is the FIPS-205 verifying key: pk_seed || pk_root
+    // (2*n = 32 bytes for SHA2-128-24). Both halves live verbatim in the last
+    // 2*n bytes of the secret key, so `verifying_key()` just hands them back —
+    // this is a pure serialization of already-present material, deterministic
+    // and side-effect free.
+    let sk = load_sk(sk_in);
+    let vk = sk.verifying_key();
+
+    let bytes = vk.to_bytes();
+    fs::write(pk_out, bytes.as_slice())
+        .unwrap_or_else(|e| die(&format!("writing public key to {pk_out}: {e}")));
+    eprintln!("wrote {}-byte public key to {pk_out}", bytes.len());
 }
 
 fn cache(sk_in: &str, cache_out: &str) {
@@ -126,6 +151,7 @@ fn usage() -> ! {
     eprintln!(
         "usage:\n  \
          slh-sign keygen <secret-key-out>\n  \
+         slh-sign pubkey <secret-key-in> <pubkey-out>\n  \
          slh-sign sign <secret-key-in> <message-file> <signature-out> [tree-cache-in]\n  \
          slh-sign cache <secret-key-in> <tree-cache-out>"
     );
