@@ -62,7 +62,7 @@ harness = false
 
 [features]
 alloc = []
-default = ["alloc", "pkcs8/alloc"]
+default = ["alloc", "pkcs8/alloc", "hardened-verify"]
 zeroize = ["dep:zeroize", "hybrid-array/zeroize"]
 # NIST SP 800-230 (ipd) L3/L5 limited-signature sets (SLH-DSA-*-192-24 / -256-24).
 # Requires a `hybrid-array` that provides `ArraySize` impls for U7752 and U14944
@@ -81,3 +81,8 @@ tree-cache = []
 # Still relies on the software hasher for the actual signature, as the signature
 # implementation requires Clone.
 bao1x = ["sha2-bao1x"]
+# Fault-hardened verification: parallel APIs that return masked root material
+# for an external, per-byte comparison instead of a single Ok()/branch, plus a
+# detached-digest entry point for streaming the message through an external
+# (e.g. hardware) hasher. No dependencies; no_std- and no-alloc-safe.
+hardened-verify = []
