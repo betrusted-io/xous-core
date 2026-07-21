@@ -1,5 +1,5 @@
 use super::*;
-use crate::signatures::Pubkey;
+use crate::signatures::{Pubkey, PubkeyPq};
 
 /// Beta public key. Extracted from signing/beta_id_ed25519_sk using extract_sk_credential.py
 pub const ID_ED25519_SK_PUB: [u8; 32] = [
@@ -31,3 +31,8 @@ pub const ID_ED25519_SK_CRED_ID: [u8; 241] = [
 pub const ID_ED25519_SK_RP: &'static str = "ssh:";
 
 pub const PUBKEY: Pubkey = Pubkey { pk: ID_ED25519_SK_PUB, tag: *KEYSLOT_INITIAL_TAGS[BETA_KEY_SLOT] };
+
+// Temporary stand-in
+pub const SLH_DSA_PUB: [u8; 32] = [0u8; 32];
+
+pub const SLH_DSA_PUBKEY: PubkeyPq = PubkeyPq { pk: SLH_DSA_PUB, tag: *KEYSLOT_INITIAL_TAGS[BETA_KEY_SLOT] };
