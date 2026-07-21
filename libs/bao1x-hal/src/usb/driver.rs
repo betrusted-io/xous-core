@@ -2595,13 +2595,17 @@ impl UsbBus for CorigineWrapper {
                 &buf[..8.min(buf.len())]
             );
             self.disable_interrupts();
-            let addr = if let Some(addr) = self.core().get_app_buf_ptr(ep_addr.index() as u8, CRG_IN) {
-                // crate::println!("addr {:x}", addr);
-                addr
-            } else {
-                #[cfg(feature = "verbose-debug")]
-                crate::println!("would block");
-                return Err(UsbError::WouldBlock);
+            let addr = match self.core().get_app_buf_ptr(ep_addr.index() as u8, CRG_IN) {
+                Some(addr) => addr,
+                None => {
+                    #[cfg(feature = "verbose-debug")]
+                    crate::println!("would block");
+
+                    // `disable_interrupts()` was called above, so every return
+                    // path after that point must restore the USB interrupts.
+                    self.enable_interrupts();
+                    return Err(UsbError::WouldBlock);
+                }
             };
             let hw_buf = unsafe { core::slice::from_raw_parts_mut(addr as *mut u8, CRG_UDC_APP_BUF_LEN) };
             udc_pointer_check!(addr as usize, CRG_UDC_APP_BUF_LEN);
