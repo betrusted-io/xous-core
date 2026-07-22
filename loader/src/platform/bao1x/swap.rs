@@ -247,13 +247,19 @@ impl SwapHal {
                             Some(&mut hal.flash_spim),
                             None,
                         ) {
-                            Ok((k, k2, tag, _target, pq)) => {
+                            Ok((k, k2, tag, _target, pq_tag)) => {
+                                let tag_owned;
                                 println!(
-                                    "*** Swap signature check by key @ {}/{}({}) pq {:?} OK ***",
+                                    "*** Swap signature check by key @ {}/{}({}) pq {} OK ***",
                                     k,
                                     !k2,
                                     core::str::from_utf8(&tag).unwrap_or("invalid tag"),
-                                    pq
+                                    if let Some(tag) = pq_tag {
+                                        tag_owned = tag;
+                                        core::str::from_utf8(&tag_owned).unwrap_or("invalid tag")
+                                    } else {
+                                        "No PQ sig"
+                                    }
                                 );
                                 bollard!(bao1x_hal::sigcheck::die_no_std, 4);
                                 if k != !k2 {
@@ -267,6 +273,11 @@ impl SwapHal {
                                         [bao1x_api::pubkeys::DEVELOPER_KEY_SLOT]
                                     || k == bao1x_api::pubkeys::DEVELOPER_KEY_SLOT
                                     || !k2 == bao1x_api::pubkeys::DEVELOPER_KEY_SLOT
+                                    || pq_tag
+                                        == Some(
+                                            *bao1x_api::pubkeys::KEYSLOT_INITIAL_TAGS
+                                                [bao1x_api::pubkeys::DEVELOPER_KEY_SLOT],
+                                        )
                                 {
                                     // we can't erase keys in the loader, because the keys have already been
                                     // locked out at this point. Thus,

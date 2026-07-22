@@ -279,15 +279,21 @@ pub unsafe extern "C" fn rust_entry(signed_buffer: *const usize, signature: u32)
         bollard!(bao1x_hal::sigcheck::die_no_std, 4);
         // validate using the bao1x signature scheme
         match bao1x_hal::sigcheck::validate_image(LOADER_TO_KERNEL, None, Some(&mut csprng)) {
-            Ok((key, key_inv, tag, _target, pq)) => {
+            Ok((key, key_inv, tag, _target, pq_tag)) => {
                 if paranoid1 == 0 && paranoid2 == 0 {
+                    let tag_owned;
                     // only print if not in paranoid mode; the DUART output can be used to align a glitch
                     println!(
-                        "*** Kernel signature check by key @ {}/{}({}) pq {:?} OK ***",
+                        "*** Kernel signature check by key @ {}/{}({}) pq {} OK ***",
                         key,
                         !key_inv,
                         core::str::from_utf8(&tag).unwrap_or("invalid tag"),
-                        pq
+                        if let Some(tag) = pq_tag {
+                            tag_owned = tag;
+                            core::str::from_utf8(&tag_owned).unwrap_or("invalid tag")
+                        } else {
+                            "No PQ sig"
+                        }
                     );
                 }
                 if key != !key_inv {
@@ -303,6 +309,10 @@ pub unsafe extern "C" fn rust_entry(signed_buffer: *const usize, signature: u32)
                 // this has to gate on keys being initialized, because without key setup nothing gets erased
                 if tag == *bao1x_api::pubkeys::KEYSLOT_INITIAL_TAGS[bao1x_api::pubkeys::DEVELOPER_KEY_SLOT]
                     || key == bao1x_api::pubkeys::DEVELOPER_KEY_SLOT
+                    || pq_tag
+                        == Some(
+                            *bao1x_api::pubkeys::KEYSLOT_INITIAL_TAGS[bao1x_api::pubkeys::DEVELOPER_KEY_SLOT],
+                        )
                 {
                     csprng.random_delay();
                     let erase_proof: &[u8; 32] =
@@ -361,14 +371,20 @@ pub unsafe extern "C" fn rust_entry(signed_buffer: *const usize, signature: u32)
 
             csprng.random_delay();
             match bao1x_hal::sigcheck::validate_image(LOADER_TO_DETACHED_APP, None, Some(&mut csprng)) {
-                Ok((key, key_inv, tag, _target, pq)) => {
+                Ok((key, key_inv, tag, _target, pq_tag)) => {
                     if paranoid1 == 0 && paranoid2 == 0 {
+                        let tag_owned;
                         println!(
-                            "*** Detached app signature check by key @ {}/{}({}) pq {:?} OK ***",
+                            "*** Detached app signature check by key @ {}/{}({}) pq {} OK ***",
                             key,
                             !key_inv,
                             core::str::from_utf8(&tag).unwrap_or("invalid tag"),
-                            pq
+                            if let Some(tag) = pq_tag {
+                                tag_owned = tag;
+                                core::str::from_utf8(&tag_owned).unwrap_or("invalid tag")
+                            } else {
+                                "No PQ sig"
+                            }
                         );
                     }
                     // k is just a nominal slot number. If either match, assume we are dealing with a
@@ -380,7 +396,12 @@ pub unsafe extern "C" fn rust_entry(signed_buffer: *const usize, signature: u32)
                     bollard!(bao1x_hal::sigcheck::die_no_std, 4);
                     if (tag
                         == *bao1x_api::pubkeys::KEYSLOT_INITIAL_TAGS[bao1x_api::pubkeys::DEVELOPER_KEY_SLOT]
-                        || key == bao1x_api::pubkeys::DEVELOPER_KEY_SLOT)
+                        || key == bao1x_api::pubkeys::DEVELOPER_KEY_SLOT
+                        || pq_tag
+                            == Some(
+                                *bao1x_api::pubkeys::KEYSLOT_INITIAL_TAGS
+                                    [bao1x_api::pubkeys::DEVELOPER_KEY_SLOT],
+                            ))
                         && (init1 != 0)
                     {
                         let erase_proof: &[u8; 32] =
