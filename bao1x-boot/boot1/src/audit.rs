@@ -116,35 +116,53 @@ pub fn audit() {
         crate::println!("");
     }
 
+    let tag_owned;
     match bao1x_hal::sigcheck::validate_image(BOOT0_SELF_CHECK, None, None) {
-        Ok((k, k2, tag, target, pq)) => crate::println!(
+        Ok((k, k2, tag, target, pq_tag)) => crate::println!(
             "Boot0: key {}/{} ({}) pq {:?} -> {:x}",
             k,
             !k2,
             core::str::from_utf8(&tag).unwrap_or("invalid tag"),
-            pq,
+            if let Some(tag) = pq_tag {
+                tag_owned = tag;
+                core::str::from_utf8(&tag_owned).unwrap_or("invalid tag")
+            } else {
+                "No PQ sig"
+            },
             target ^ u32::from_le_bytes(tag)
         ),
         Err(e) => crate::println!("Boot0 did not validate: {:?}", e),
     }
+    let tag_owned;
     match bao1x_hal::sigcheck::validate_image(BOOT0_TO_BOOT1, None, None) {
-        Ok((k, k2, tag, target, pq)) => crate::println!(
+        Ok((k, k2, tag, target, pq_tag)) => crate::println!(
             "Boot1: key {}/{} ({}) pq {:?} -> {:x}",
             k,
             !k2,
             core::str::from_utf8(&tag).unwrap_or("invalid tag"),
-            pq,
+            if let Some(tag) = pq_tag {
+                tag_owned = tag;
+                core::str::from_utf8(&tag_owned).unwrap_or("invalid tag")
+            } else {
+                "No PQ sig"
+            },
             target ^ u32::from_le_bytes(tag)
         ),
         Err(e) => crate::println!("Boot1 did not validate: {:?}", e),
     }
+    let tag_owned;
     match bao1x_hal::sigcheck::validate_image(BOOT1_TO_LOADER_OR_BAREMETAL, None, None) {
-        Ok((k, k2, tag, target, pq)) => crate::println!(
+        Ok((k, k2, tag, target, pq_tag)) => crate::println!(
             "Next stage: key {}/{} ({}) pq {:?} -> {:x}",
             k,
             !k2,
             core::str::from_utf8(&tag).unwrap_or("invalid tag"),
-            pq,
+            if let Some(tag) = pq_tag {
+                tag_owned = tag;
+                core::str::from_utf8(&tag_owned).unwrap_or("invalid tag")
+            } else {
+                "No PQ sig"
+            },
             target ^ u32::from_le_bytes(tag)
         ),
         Err(e) => crate::println!("Next stage did not validate: {:?}", e),
