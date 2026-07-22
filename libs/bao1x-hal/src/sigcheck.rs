@@ -73,7 +73,7 @@ pub fn validate_image(
     configuration: SecurityConfiguration,
     mut spim: Option<&mut Spim>,
     mut csprng: Option<&mut Csprng>,
-) -> Result<(usize, usize, [u8; 4], u32, bool), String> {
+) -> Result<(usize, usize, [u8; 4], u32, Option<[u8; 4]>), String> {
     // Unpack the arguments
     let img_offset: *const u32 = configuration.image_ptr;
     let pubkeys_offset: *const u32 = configuration.pubkey_ptr;
@@ -324,12 +324,17 @@ pub fn validate_image(
             // insert PQ check after ed25519 checks have passed
             bollard!(die_no_std, 4);
             csprng.as_deref_mut().map(|rng| rng.random_delay());
-            if let Some(out) = pq_checks(mask, &configuration, spim, &mut csprng) {
+            let mut pq_tag: [u8; 4] =
+                *bao1x_api::pubkeys::KEYSLOT_INITIAL_TAGS[bao1x_api::pubkeys::DEVELOPER_KEY_SLOT]; // this will trigger an erase if the copy-update is glitched over
+            if let Some((out, pq_tag_inner)) = pq_checks(mask, &configuration, spim, &mut csprng) {
                 let (mr, er) = (out.masked_root(), out.expected_root());
                 if mr.len() != er.len() {
                     // this is a hard error
                     die_no_std();
                 }
+                csprng.as_deref_mut().map(|rng| rng.random_delay());
+                pq_tag.copy_from_slice(&pq_tag_inner);
+                bollard!(die_no_std, 4);
                 let mut matched: usize = 0;
                 for i in 0..mr.len() {
                     bollard!(die_no_std, 4);
@@ -427,8 +432,7 @@ pub fn validate_image(
                 valid_key2,
                 pk_src.sealed_data.pubkeys[valid_key].tag,
                 (img_offset as u32) ^ u32::from_le_bytes(pk_src.sealed_data.pubkeys[valid_key].tag),
-                // this is *advisory* so the value is unhardened
-                verdict == PQ_MATCH,
+                if verdict == PQ_MATCH { Some(pq_tag) } else { None },
             ))
         } else {
             Err(String::from("No valid pubkeys found or signature invalid"))
@@ -446,7 +450,7 @@ pub fn pq_checks(
     configuration: &SecurityConfiguration,
     mut spim: Option<&mut Spim>,
     csprng: &mut Option<&mut Csprng>,
-) -> Option<slh_dsa::HardenedVerifyOutput<slh_dsa::Sha2_128_24>> {
+) -> Option<(slh_dsa::HardenedVerifyOutput<slh_dsa::Sha2_128_24>, [u8; 4])> {
     use core::convert::TryFrom;
 
     use slh_dsa::SignatureLen;
@@ -567,10 +571,10 @@ pub fn pq_checks(
         let Ok(sig) = Signature::<Sha2_128_24>::try_from(&pq_sig.signature[..]) else { continue };
         csprng.as_deref_mut().map(|rng| rng.random_delay());
         bollard!(die_no_std, 4);
-        out = Some(vk.slh_verify_hardened(&[digest], &sig, mask));
+        out = Some((vk.slh_verify_hardened(&[digest], &sig, mask), key.tag.clone()));
         bollard!(die_no_std, 4);
         csprng.as_deref_mut().map(|rng| rng.random_delay());
-        if let Some(out) = &out {
+        if let Some((out, _pq_tag)) = &out {
             // this is an advisory-only check if the signature passed. If the signatures match,
             // then we must stop checking the next public keys. If an attacker glitches past this check,
             // and the signature doesn't match, that's fine because it will be caught by the caller.
@@ -778,6 +782,7 @@ pub fn hardened_erase_policy(
     key_inv: usize,
     tag: [u8; 4],
     csprng: &mut Csprng,
+    pq_tag: Option<[u8; 4]>,
 ) -> Result<(), String> {
     if key == DEVELOPER_KEY_SLOT {
         // this is a common case - if we're not under attack, and we're in developer mode,
@@ -787,7 +792,12 @@ pub fn hardened_erase_policy(
     bollard!(die_no_std, 4);
     csprng.random_delay();
     // if the tag is the developer tag, erase the keys.
-    if &tag == b"dev " {
+    if &tag == bao1x_api::pubkeys::KEYSLOT_INITIAL_TAGS[bao1x_api::pubkeys::DEVELOPER_KEY_SLOT] {
+        erase_secrets(&mut Some(csprng))?;
+    }
+    bollard!(die_no_std, 4);
+    csprng.random_delay();
+    if pq_tag == Some(*bao1x_api::pubkeys::KEYSLOT_INITIAL_TAGS[bao1x_api::pubkeys::DEVELOPER_KEY_SLOT]) {
         erase_secrets(&mut Some(csprng))?;
     }
     bollard!(die_no_std, 4);
