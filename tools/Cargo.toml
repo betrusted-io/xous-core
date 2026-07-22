@@ -3,7 +3,7 @@ authors = ["Sean Cross <sean@xobs.io>", "bunnie <bunnie@baochip.com>"]
 default-run = "xous-app-uf2"
 edition = "2018"
 name = "xous-tools"
-version = "0.1.2"
+version = "0.1.3"
 description = "A set of tools for managing Xous ecosystem binaries"
 license = "Apache-2.0"
 
@@ -37,7 +37,12 @@ serde_json = "1.0"
 # size of the signature block or offsets in RRAM are changed, so that it can be
 # absorbed into this package.
 # bao1x-api = { path = "../libs/bao1x-api" }
-bao1x-api = "0.1.0" # use crates.io to refer to this
+bao1x-api = "0.1.2" # use crates.io to refer to this
+
+slh-dsa = { path = "../bao1x-boot/slh-dsa-bao1x", features = [
+    "parallel",
+    "tree-cache",
+] }
 
 # for remote resolution of github version in out-of-tree builds. Note that pulling
 # in this dependency tree *greatly* increases the attack surface of the SBOM. I don't
@@ -67,6 +72,9 @@ name = "xous-create-detached-app"
 
 [[bin]]
 name = "xous-app-uf2"
+
+[[bin]]
+name = "xous-pq-sign-image"
 
 [features]
 precursor = []

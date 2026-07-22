@@ -1,21 +1,38 @@
 use std::collections::HashMap;
+use std::convert::TryFrom;
+use std::convert::TryInto;
 use std::fs;
 use std::io::{Read, Write};
 use std::path::Path;
 use std::str::FromStr;
 
 use bao1x_api::signatures::{
-    FunctionCode, PADDING_LEN, Pubkey, SIGBLOCK_LEN, SealedFields, SignatureInFlash, UNSIGNED_LEN,
+    FunctionCode, PADDING_LEN, Pubkey, PubkeyPq, SIGBLOCK_LEN, SealedFields, SignatureInFlash, UNSIGNED_LEN,
+    baochip_sig_version,
 };
 use ed25519_dalek::{DigestSigner, SigningKey};
 use pkcs8::PrivateKeyInfo;
 use pkcs8::der::Decodable;
 use rand::RngCore;
 use ring::signature::{Ed25519KeyPair, KeyPair};
-use sha2::{Digest, Sha512};
+use sha2::{Digest, Sha256, Sha512};
+use slh_dsa::SigningKey as SigningKeyPq;
+use slh_dsa::signature::Keypair as KeypairPq;
+use slh_dsa::{Sha2_128_24, XmssTreeCache};
 
 // this must match exactly what's in devkey/testing.key
 const TEST_KEY_PEM: &'static str = "-----BEGIN PRIVATE KEY-----\nMC4CAQAwBQYDK2VwBCIEIKindlyNoteThisIsTestKeyDontUseForProduction\n-----END PRIVATE KEY-----";
+const TEST_KEY_PQ: [u8; 64] = [
+    0x40, 0xEE, 0xFA, 0x77, 0xDC, 0x37, 0xFD, 0xD1, 0x07, 0x53, 0x0B, 0x72, 0x9D, 0x9B, 0xC9, 0x63, 0xBE,
+    0xB0, 0x0C, 0xA1, 0x46, 0xE1, 0x78, 0x9C, 0x9F, 0xB2, 0x24, 0x59, 0x5E, 0x76, 0xBD, 0xD2, 0x88, 0xED,
+    0x70, 0x2A, 0xE1, 0xE6, 0xA1, 0x21, 0x62, 0xED, 0x8E, 0x85, 0xA5, 0x5E, 0x44, 0x8C, 0x14, 0x26, 0xDC,
+    0x52, 0xAC, 0x0C, 0xDC, 0xD1, 0x1B, 0x3D, 0x60, 0x1D, 0x37, 0xDE, 0x8C, 0x72,
+];
+const TEST_KEY_PQ_PUB: [u8; 32] = [
+    0x88, 0xED, 0x70, 0x2A, 0xE1, 0xE6, 0xA1, 0x21, 0x62, 0xED, 0x8E, 0x85, 0xA5, 0x5E, 0x44, 0x8C, 0x14,
+    0x26, 0xDC, 0x52, 0xAC, 0x0C, 0xDC, 0xD1, 0x1B, 0x3D, 0x60, 0x1D, 0x37, 0xDE, 0x8C, 0x72,
+];
+type Params = Sha2_128_24;
 
 #[repr(u32)]
 #[derive(PartialEq, Eq, Clone, Copy)]
@@ -105,7 +122,31 @@ fn semver_for_sign_embed(explicit: Option<[u8; 16]>) -> Result<[u8; 16], Box<dyn
     }
 }
 
-pub fn sign_image(
+fn die(msg: &str) -> ! {
+    eprintln!("error: {msg}");
+    std::process::exit(1);
+}
+
+pub fn load_pq_key_bytes<P: AsRef<Path>>(
+    pq_private_key: Option<(P, Option<P>)>,
+) -> Result<Option<([u8; 64], Option<P>)>, Box<dyn std::error::Error>> {
+    match pq_private_key {
+        None => Ok(None),
+        Some((path, other)) => {
+            let bytes = fs::read(path.as_ref())?;
+            if bytes.len() != 64 {
+                return Err(
+                    format!("Expected exactly 64 bytes for PQ private key, got {}", bytes.len()).into()
+                );
+            }
+            // Safe to unwrap since we verified the length
+            let key_array: [u8; 64] = bytes.try_into().expect("Length already verified");
+            Ok(Some((key_array, other)))
+        }
+    }
+}
+
+pub fn sign_image<P: AsRef<Path>>(
     source: &[u8],
     private_key: &pem::Pem,
     defile: bool,
@@ -117,6 +158,7 @@ pub fn sign_image(
     function_code: Option<&str>,
     anti_rollback_manual: Option<usize>,
     fake_pubkeys: bool,
+    pq_private_key: Option<([u8; 64], Option<P>)>,
 ) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
     let mut dest_file = vec![];
 
@@ -236,6 +278,9 @@ pub fn sign_image(
             secbytes.copy_from_slice(&pkinfo.private_key[2..]);
             // Now we can use the private key data.
             let signing_key = SigningKey::from_bytes(&secbytes);
+            let testing_pem = pem::parse(TEST_KEY_PEM)?;
+            let testing_pem_data = testing_pem.contents[16..].to_owned();
+            let testing_key = SigningKey::from_bytes(testing_pem.contents[16..].try_into().unwrap());
 
             let anti_rollback = if let Some(code) = anti_rollback_manual {
                 code as u32
@@ -267,12 +312,28 @@ pub fn sign_image(
             header.sealed_data.min_semver = minver_bytes;
             header.sealed_data.semver = semver;
 
+            // new items introduced with PQ
+            header.sealed_data.corrected_version = baochip_sig_version();
+            if pq_private_key.is_some() {
+                header.sealed_data.pq_enabled = 0xA0A0_5555; // any non-0 value works, but more distance from 0 is stronger
+            }
+
             // whack in all the public keys, defined in the bao1x-api crate
             if !fake_pubkeys {
                 for (dst, src) in
                     header.sealed_data.pubkeys.iter_mut().zip(bao1x_api::pubkeys::PUBKEY_HEADER.iter())
                 {
                     dst.populate_from(src);
+                }
+                if pq_private_key.is_some() {
+                    for (dst, src) in header
+                        .sealed_data
+                        .pubkeys_pq
+                        .iter_mut()
+                        .zip(bao1x_api::pubkeys::PUBKEY_PQ_HEADER.iter())
+                    {
+                        dst.populate_from(src);
+                    }
                 }
             } else {
                 // populate with a random key. Use actual key generation to ensure that the committed
@@ -293,16 +354,44 @@ pub fn sign_image(
                     dst.populate_from(&fake_pk);
                 }
 
-                let testing_key = pem::parse(TEST_KEY_PEM)?;
                 // derive the public key for use in "fake keys" routines
-                let sk = Ed25519KeyPair::from_pkcs8_maybe_unchecked(&testing_key.contents)
+                let sk = Ed25519KeyPair::from_pkcs8_maybe_unchecked(&testing_pem_data)
                     .map_err(|e| format!("{}", e))?;
                 let derived_public_key = sk.public_key();
 
                 // replace devkey slot with the derived public key of the fake signer
                 header.sealed_data.pubkeys[3].pk.copy_from_slice(derived_public_key.as_ref());
+
+                // fake keys also always includes fake PQ keys
+                header.sealed_data.pq_enabled = 0xA0A0_5555; // any non-0 value works, but more distance from 0 is stronger
+                // create fake PQ's for the 3 non-dev keys
+                for dst in header.sealed_data.pubkeys_pq[..3].iter_mut() {
+                    let mut fake_pk = PubkeyPq::default();
+                    // n (in bytes) for SHA2-128-24. The secret key seed material is 3*n bytes
+                    // (sk_seed || sk_prf || pk_seed); the serialized key is 4*n (adds pk_root).
+                    const N: usize = 16;
+
+                    let mut seed = [0u8; 3 * N];
+                    rand::rngs::OsRng.fill_bytes(&mut seed); // 0.8.5 OsRng: infallible
+                    let sk = SigningKeyPq::<Params>::slh_keygen_internal(
+                        &seed[..N],
+                        &seed[N..2 * N],
+                        &seed[2 * N..3 * N],
+                    );
+                    let vk = sk.verifying_key();
+                    let bytes = vk.to_bytes();
+                    fake_pk.pk.copy_from_slice(&bytes);
+
+                    rand::rngs::OsRng.fill_bytes(&mut fake_pk.tag);
+                    dst.populate_from(&fake_pk);
+                }
+                rand::rngs::OsRng.fill_bytes(&mut header.sealed_data.pubkeys_pq[3].tag); // tag may be random
+                header.sealed_data.pubkeys_pq[3].pk.copy_from_slice(&TEST_KEY_PQ_PUB); // however we need to have a correct pub key so we can sign it
             }
 
+            header._jal_instruction = generate_jal_x0(SIGBLOCK_LEN as isize)?;
+
+            // --- classical signature ---
             let mut protected = Vec::new();
             protected.extend_from_slice(header.sealed_data.as_ref());
             protected.resize(protected.len() + PADDING_LEN, 0);
@@ -312,11 +401,65 @@ pub fn sign_image(
             let mut h: Sha512 = Sha512::new();
             h.update(&protected);
 
-            let sig = signing_key.sign_digest(h.clone()).to_bytes();
-            header._jal_instruction = generate_jal_x0(SIGBLOCK_LEN as isize)?;
+            let sig = if !fake_pubkeys {
+                signing_key.sign_digest(h.clone()).to_bytes()
+            } else {
+                testing_key.sign_digest(h.clone()).to_bytes()
+            };
             header.signature.copy_from_slice(&sig);
             // no AAD on this type of signature
             header.aad_len = 0;
+
+            // --- PQ signature ---
+            let pq_sig_bytes: Vec<u8> = if let Some((pq_sk, cached_sk)) = pq_private_key {
+                let mut h: Sha256 = Sha256::new();
+                h.update(&protected);
+                let digest = h.finalize();
+                let msg: &[u8] = digest.as_slice();
+                // println!("hash: {:x?}", msg);
+
+                let sk = if !fake_pubkeys {
+                    SigningKeyPq::<Params>::try_from(pq_sk.as_slice()).expect("Invalid PQ private key")
+                } else {
+                    SigningKeyPq::<Params>::try_from(TEST_KEY_PQ.as_slice()).unwrap_or_else(|_| {
+                        die(&format!(
+                            "invalid Test key: expected 64 bytes (4*n for SHA2-128-24), got {}",
+                            TEST_KEY_PQ.len()
+                        ))
+                    })
+                };
+                // for sanity checking the pk
+                // let pk = sk.verifying_key().to_vec();
+                // println!("pk: {:x?}", pk);
+                let sig = match cached_sk {
+                    Some(path) => {
+                        let path = path.as_ref();
+                        let bytes = fs::read(path)
+                            .unwrap_or_else(|e| die(&format!("reading tree cache {path:?}: {e}")));
+                        let cache = XmssTreeCache::<Params>::from_bytes(&bytes)
+                            .unwrap_or_else(|e| die(&format!("parsing tree cache {path:?}: {e}")));
+                        if !cache.validate(&sk.verifying_key()) {
+                            die(&format!("tree cache {path:?} does not match this key (or is corrupt)"));
+                        }
+                        sk.slh_sign_internal_with_cache(&[msg], None, &cache)
+                    }
+                    None => sk.slh_sign_internal(&[msg], None),
+                };
+                sig.to_bytes().to_vec()
+            } else {
+                vec![]
+            };
+            /*
+            if pq_sig_bytes.len() > 0 {
+                println!(
+                    "sig: {:x?} ... {:x?}",
+                    &pq_sig_bytes[..16],
+                    &pq_sig_bytes[pq_sig_bytes.len() - 16..]
+                );
+            } else {
+                println!("no pq sig performed");
+            }
+            */
 
             // Write the header
             dest_file.write_all(&header.as_ref()[..UNSIGNED_LEN])?;
@@ -330,6 +473,9 @@ pub fn sign_image(
             }
 
             dest_file.write_all(&protected)?;
+
+            // Write the PQ signature
+            dest_file.write_all(&pq_sig_bytes)?;
 
             if function_code == FunctionCode::Kernel {
                 let target = bao1x_api::RRAM_STORAGE_LEN - (bao1x_api::KERNEL_START - bao1x_api::BOOT0_START);
@@ -354,7 +500,7 @@ pub fn sign_image(
     }
 }
 
-pub fn sign_file<S, T>(
+pub fn sign_file<S, T, P>(
     input: &S,
     output: &T,
     private_key: &pem::Pem,
@@ -367,10 +513,12 @@ pub fn sign_file<S, T>(
     function_code: Option<&str>,
     arb_override: Option<usize>,
     fake_pubkeys: bool,
+    pq_private_key: Option<(P, Option<P>)>,
 ) -> Result<(), Box<dyn std::error::Error>>
 where
     S: AsRef<Path>,
     T: AsRef<Path>,
+    P: AsRef<Path>,
 {
     let mut source = vec![];
     let mut source_file = std::fs::File::open(input)?;
@@ -389,6 +537,7 @@ where
         function_code,
         arb_override,
         fake_pubkeys,
+        load_pq_key_bytes(pq_private_key)?,
     )?;
     dest_file.write_all(&result)?;
     Ok(())

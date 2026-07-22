@@ -128,6 +128,7 @@ members = [
   "apps-dabao/dabao-console",
   "services/swaptest1",
   "services/swaptest2",
+  "bao1x-boot/slh-dsa-bao1x",
 ]
 resolver = "2"
 
@@ -149,7 +150,8 @@ exclude = [
   # This directory is dedicated to out-of-tree tests and examples
   "planning/",
   # This is for signing images, and requires dependencies that are incompatible with Xous
-  "signing/fido-signer"
+  "signing/fido-signer",
+  "bao1x-boot/slh-dsa-kat"
 ]
 
 [profile.release]

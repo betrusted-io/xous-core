@@ -1,0 +1,88 @@
+[package]
+name = "slh-dsa"
+description = """
+Pure Rust implementation of SLH-DSA (aka SPHINCS+) as described in the
+FIPS-205 standard.
+
+This is forked from Rust-crypto because we're tweaking parameters in accordance
+with NIST SP.800-230, and also, using hardware acceleration for the hashes.
+"""
+version = "0.2.0-rc.5"
+edition = "2024"
+rust-version = "1.85"
+license = "Apache-2.0 OR MIT"
+homepage = "https://github.com/RustCrypto/signatures/tree/master/slh-dsa"
+repository = "https://github.com/RustCrypto/signatures"
+readme = "README.md"
+categories = ["cryptography"]
+keywords = ["crypto", "signature"]
+exclude = ["tests"]
+
+[dependencies]
+const-oid = { version = "0.10", features = ["db"] }
+digest = "0.11"
+hmac = "0.13"
+hybrid-array = { version = "0.4", features = ["extra-sizes"] }
+pkcs8 = { version = "0.11", default-features = false }
+rand_core = "0.10"
+sha2-bao1x = { package = "sha2-bao1x-pq", path = "../sha2-bao1x-pq", default-features = false, optional = true }
+sha2 = "0.11.0"
+shake = { version = "0.1", default-features = false }
+signature = { version = "3", features = ["rand_core"] }
+typenum = { version = "1.20", features = ["const-generics"] }
+zerocopy = { version = "0.8", features = ["derive"] }
+
+# optional dependencies
+rayon = { version = "1.8", optional = true }
+zeroize = { version = "1.8.1", optional = true, default-features = false }
+
+[dev-dependencies]
+aes = "0.9.0-rc.2"
+criterion = "0.7"
+cipher = "0.5"
+ctr = "0.10.0-rc.3"
+hex = { version = "0.4.1", features = ["serde"] }
+hex-literal = "1"
+crypto-bigint = { version = "0.7", default-features = false, features = [
+    "alloc",
+] }
+paste = "1.0.15"
+pkcs8 = { version = "0.11", features = ["pem"] }
+proptest = "1.11.0"
+rand = "0.10"
+serde_json = "1.0.124"
+serde = { version = "1.0.207", features = ["derive"] }
+
+[lib]
+bench = false
+
+[[bench]]
+name = "sign_verify"
+harness = false
+
+[features]
+alloc = []
+default = ["alloc", "pkcs8/alloc", "hardened-verify"]
+zeroize = ["dep:zeroize", "hybrid-array/zeroize"]
+# NIST SP 800-230 (ipd) L3/L5 limited-signature sets (SLH-DSA-*-192-24 / -256-24).
+# Requires a `hybrid-array` that provides `ArraySize` impls for U7752 and U14944
+# (the published crate does not yet — see README "hybrid-array sizes"). The L1
+# sets (SLH-DSA-*-128-24, sig size 3856) are always available and need no patch.
+sp800-230-highsec = []
+# Rayon fork-join Merkle tree builds for *signing* (keygen and slh_sign paths).
+# Requires a std target; verification and all no_std embedded builds are
+# unaffected — with this feature off, rayon is absent from the dependency graph
+# and the compiled code is identical to the sequential original.
+parallel = ["dep:rayon"]
+# Turns on tree caching - computes the top part of the xmss tree, which does not
+# vary between messages, to further accelerate signing operations.
+tree-cache = []
+# Turns on bao1x hardware hasher for hashing the incoming message for verification.
+# Still relies on the software hasher for the actual signature, as the signature
+# implementation requires Clone.
+bao1x = ["sha2-bao1x"]
+# Fault-hardened verification: parallel APIs that return masked root material
+# for an external, per-byte comparison instead of a single Ok()/branch, plus a
+# detached-digest entry point for streaming the message through an external
+# (e.g. hardware) hasher. No dependencies; no_std- and no-alloc-safe.
+hardened-verify = []
