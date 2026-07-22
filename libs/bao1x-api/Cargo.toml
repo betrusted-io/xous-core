@@ -1,6 +1,6 @@
 [package]
 name = "bao1x-api"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2021"
 description = "Baochip-1x API Crate"
 license = "Apache-2.0"
