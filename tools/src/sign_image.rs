@@ -429,7 +429,7 @@ pub fn sign_image<P: AsRef<Path>>(
                     })
                 };
                 // for sanity checking the pk
-                let pk = sk.verifying_key().to_vec();
+                // let pk = sk.verifying_key().to_vec();
                 // println!("pk: {:x?}", pk);
                 let sig = match cached_sk {
                     Some(path) => {
