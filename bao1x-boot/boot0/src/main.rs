@@ -339,12 +339,12 @@ pub unsafe extern "C" fn rust_entry() -> ! {
             reseed_skipping(csprng.get_u32());
         }
         match bao1x_hal::sigcheck::validate_image(configuration, None, Some(&mut csprng)) {
-            Ok((key, key_inv, tag, target, _pq)) => {
+            Ok((key, key_inv, tag, target, pq_tag)) => {
                 if key != !key_inv {
                     die();
                 }
                 // implement the hardened erase policy. This is marked #[inline(always)].
-                hardened_erase_policy(paranoid1, paranoid2, key, key_inv, tag, &mut csprng)
+                hardened_erase_policy(paranoid1, paranoid2, key, key_inv, tag, &mut csprng, pq_tag)
                     .inspect_err(|e| crate::println!("{}", e))
                     .ok(); // "ok" because the expected error is a check on logic/configuration bugs, not attacks
                 // second check if paranoid is not 0. While this branch can be glitched over, to get here,
