@@ -174,7 +174,7 @@ pub const LOADER_REVOCATION_DUPE_OFFSET: usize = 68;
 /// key slots, from [72..=75].
 pub const BOOT1_REVOCATION_DUPE_OFFSET: usize = LOADER_REVOCATION_DUPE_OFFSET + PUBKEY_SLOTS;
 /// Offset in the one-way counter array for boot0 key revocations. Provisions for up to four
-/// key slots, from [76..=80].
+/// key slots, from [76..=79].
 pub const BOOT0_REVOCATION_DUPE_OFFSET: usize = BOOT1_REVOCATION_DUPE_OFFSET + PUBKEY_SLOTS;
 
 /// Fixed offset between the main key and the duplicate key
