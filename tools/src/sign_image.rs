@@ -22,6 +22,8 @@ use slh_dsa::{Sha2_128_24, XmssTreeCache};
 
 // this must match exactly what's in devkey/testing.key
 const TEST_KEY_PEM: &'static str = "-----BEGIN PRIVATE KEY-----\nMC4CAQAwBQYDK2VwBCIEIKindlyNoteThisIsTestKeyDontUseForProduction\n-----END PRIVATE KEY-----";
+#[allow(dead_code)]
+// not used currently, but kept around in case we need it eventually
 const TEST_KEY_PQ: [u8; 64] = [
     0x40, 0xEE, 0xFA, 0x77, 0xDC, 0x37, 0xFD, 0xD1, 0x07, 0x53, 0x0B, 0x72, 0x9D, 0x9B, 0xC9, 0x63, 0xBE,
     0xB0, 0x0C, 0xA1, 0x46, 0xE1, 0x78, 0x9C, 0x9F, 0xB2, 0x24, 0x59, 0x5E, 0x76, 0xBD, 0xD2, 0x88, 0xED,
@@ -279,7 +281,6 @@ pub fn sign_image<P: AsRef<Path>>(
             // Now we can use the private key data.
             let signing_key = SigningKey::from_bytes(&secbytes);
             let testing_pem = pem::parse(TEST_KEY_PEM)?;
-            let testing_key = SigningKey::from_bytes(testing_pem.contents[16..].try_into().unwrap());
 
             let anti_rollback = if let Some(code) = anti_rollback_manual {
                 code as u32
@@ -400,11 +401,7 @@ pub fn sign_image<P: AsRef<Path>>(
             let mut h: Sha512 = Sha512::new();
             h.update(&protected);
 
-            let sig = if !fake_pubkeys {
-                signing_key.sign_digest(h.clone()).to_bytes()
-            } else {
-                testing_key.sign_digest(h.clone()).to_bytes()
-            };
+            let sig = signing_key.sign_digest(h.clone()).to_bytes();
             header.signature.copy_from_slice(&sig);
             // no AAD on this type of signature
             header.aad_len = 0;
@@ -417,16 +414,7 @@ pub fn sign_image<P: AsRef<Path>>(
                 let msg: &[u8] = digest.as_slice();
                 // println!("hash: {:x?}", msg);
 
-                let sk = if !fake_pubkeys {
-                    SigningKeyPq::<Params>::try_from(pq_sk.as_slice()).expect("Invalid PQ private key")
-                } else {
-                    SigningKeyPq::<Params>::try_from(TEST_KEY_PQ.as_slice()).unwrap_or_else(|_| {
-                        die(&format!(
-                            "invalid Test key: expected 64 bytes (4*n for SHA2-128-24), got {}",
-                            TEST_KEY_PQ.len()
-                        ))
-                    })
-                };
+                let sk = SigningKeyPq::<Params>::try_from(pq_sk.as_slice()).expect("Invalid PQ private key");
                 // for sanity checking the pk
                 // let pk = sk.verifying_key().to_vec();
                 // println!("pk: {:x?}", pk);
