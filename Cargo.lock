@@ -8221,9 +8221,9 @@ dependencies = [
 
 [[package]]
 name = "xous-semver"
-version = "0.1.5"
+version = "0.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "906500be0c4ed13afc3c8743e4d40337bfbe08e7dadfa216c39907aaa06cc8c2"
+checksum = "40505168527c6a6aa9ebb8487657e983748f0c1e86cd701ff0046f08dcea3761"
 
 [[package]]
 name = "xous-susres"
