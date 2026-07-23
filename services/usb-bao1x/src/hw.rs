@@ -209,6 +209,10 @@ impl<'a> Bao1xUsb<'a> {
     /// the interrupt is masked remains pending and is processed after the
     /// previous interrupt-enable state is restored.
     pub fn serial_write_irq_safe(&mut self, data: &[u8]) -> usb_device::Result<usize> {
+        // IRQARRAY1 is currently dedicated to the Corigine USB implementation,
+        // so this code assumes there are no concurrent writers to EV_ENABLE.
+        // If another IRQARRAY1 user is added, access to EV_ENABLE must be
+        // centralized or protected by an IRQ-safe synchronization mechanism.
         let previous_enable = self.irq_csr.r(utra::irqarray1::EV_ENABLE);
 
         self.irq_csr.wo(utra::irqarray1::EV_ENABLE, previous_enable & !CORIGINE_IRQ_MASK);
