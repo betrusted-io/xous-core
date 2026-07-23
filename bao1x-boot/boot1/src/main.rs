@@ -17,8 +17,12 @@ use core::{
     sync::atomic::{AtomicBool, AtomicU32, Ordering},
 };
 
-use bao1x_api::{BoardTypeCoding, BootWaitCoding, bollard};
-use bao1x_hal::{board::KeyPress, iox::Iox, usb::driver::UsbDeviceState};
+use bao1x_api::{BoardTypeCoding, BootWaitCoding, UsbDefaultSpeed, bollard};
+use bao1x_hal::{
+    board::KeyPress,
+    iox::Iox,
+    usb::driver::{PortSpeed, UsbDeviceState},
+};
 use bao1x_hal::{buram::BackupManager, hardening::*};
 use bao1x_hal::{sh1107::Oled128x128, udma::GlobalConfig};
 use critical_section::Mutex;
@@ -232,7 +236,10 @@ pub unsafe extern "C" fn rust_entry() -> ! {
 
     delay(250);
     // setup the USB port
-    let (mut last_usb_state, mut portsc) = glue::setup();
+    let (mut last_usb_state, mut portsc) = match one_way.get_decoded::<UsbDefaultSpeed>() {
+        Ok(UsbDefaultSpeed::Full) => glue::setup(Some(PortSpeed::Fs)),
+        _ => glue::setup(Some(PortSpeed::Hs)),
+    };
     delay(150);
 
     // release SE0
@@ -261,7 +268,7 @@ pub unsafe extern "C" fn rust_entry() -> ! {
     crate::glue::setup_spim(perclk);
 
     // it's in this loop that the board type would be set after initial boot
-    let mut repl = crate::repl::Repl::new();
+    let mut repl = crate::repl::Repl::new(perclk);
     let mut new_key: Option<KeyPress>;
     loop {
         let (new_usb_state, new_portsc) = glue::usb_status();
