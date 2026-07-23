@@ -148,7 +148,7 @@ impl<'a> Bao1xUsb<'a> {
         self.irq_csr.wo(utra::irqarray1::EV_EDGE_TRIGGERED, 0);
         self.irq_csr.wo(utra::irqarray1::EV_POLARITY, 0);
 
-        self.wrapper.core().init();
+        self.wrapper.core().init(None);
         self.wrapper.core().start();
         self.wrapper.core().update_current_speed();
 
