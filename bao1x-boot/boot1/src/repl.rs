@@ -102,12 +102,20 @@ impl Repl {
                     ("loader", LOADER_REVOCATION_OFFSET + bao1x_api::pubkeys::DEVELOPER_KEY_SLOT),
                     ("boot0", BOOT0_REVOCATION_OFFSET + bao1x_api::pubkeys::DEVELOPER_KEY_SLOT),
                     ("boot1", BOOT1_REVOCATION_OFFSET + bao1x_api::pubkeys::DEVELOPER_KEY_SLOT),
-                    ("loader", LOADER_REVOCATION_DUPE_OFFSET + bao1x_api::pubkeys::DEVELOPER_KEY_SLOT),
-                    ("boot0", BOOT0_REVOCATION_DUPE_OFFSET + bao1x_api::pubkeys::DEVELOPER_KEY_SLOT),
-                    ("boot1", BOOT1_REVOCATION_DUPE_OFFSET + bao1x_api::pubkeys::DEVELOPER_KEY_SLOT),
+                    ("loader+", LOADER_REVOCATION_DUPE_OFFSET + bao1x_api::pubkeys::DEVELOPER_KEY_SLOT),
+                    ("boot0+", BOOT0_REVOCATION_DUPE_OFFSET + bao1x_api::pubkeys::DEVELOPER_KEY_SLOT),
+                    ("boot1+", BOOT1_REVOCATION_DUPE_OFFSET + bao1x_api::pubkeys::DEVELOPER_KEY_SLOT),
+                    ("loader-pq", PQ_LOADER_REVOCATION_OFFSET + bao1x_api::pubkeys::DEVELOPER_KEY_SLOT),
+                    ("boot0-pq", PQ_BOOT0_REVOCATION_OFFSET + bao1x_api::pubkeys::DEVELOPER_KEY_SLOT),
+                    ("boot1-pq", PQ_BOOT1_REVOCATION_OFFSET + bao1x_api::pubkeys::DEVELOPER_KEY_SLOT),
+                    ("loader-pq+", PQ_LOADER_REVOCATION_DUPE_OFFSET + bao1x_api::pubkeys::DEVELOPER_KEY_SLOT),
+                    ("boot0-pq+", PQ_BOOT0_REVOCATION_DUPE_OFFSET + bao1x_api::pubkeys::DEVELOPER_KEY_SLOT),
+                    ("boot1-pq+", PQ_BOOT1_REVOCATION_DUPE_OFFSET + bao1x_api::pubkeys::DEVELOPER_KEY_SLOT),
                     ("paranoid1", PARANOID_MODE), /* let's try CI testing with this active, and see how
                                                    * bad it is... */
                     ("paranoid2", PARANOID_MODE_DUPE),
+                    ("pq", REQUIRE_PQ),
+                    ("pq+", REQUIRE_PQ_DUPE),
                 ];
                 for &(desc, devkey) in devkey_offsets.iter() {
                     match unsafe { owc.inc(devkey) } {
@@ -713,6 +721,22 @@ impl Repl {
                 unsafe { rram.self_destruct() }
                 // ... and all was null and void!
             }
+            "require-pq" => {
+                match args.as_slice() {
+                    [s] if s == "confirm" => false,
+                    _ => {
+                        return Err(Error::help(
+                            "Usage: 'require-pq confirm'. This command disallows firmwares without a valid PQ signature. WARNING: cannot be undone!",
+                        ));
+                    }
+                };
+                let one_way = OneWayCounter::new();
+                // safety: the offsets come from the API and are guaranteed to be valid
+                unsafe {
+                    one_way.inc(bao1x_api::REQUIRE_PQ).unwrap();
+                    one_way.inc(bao1x_api::REQUIRE_PQ_DUPE).unwrap();
+                }
+            }
             "baosec-init" => {
                 let full = match args.as_slice() {
                     [s] if s == "confirm" => false,
@@ -1104,7 +1128,7 @@ impl Repl {
             _ => {
                 crate::println!("Command not recognized: {}", cmd);
                 crate::print!(
-                    "Commands include: altboot, audit, boot, boardtype, bootwait, echo, idmode, ifr, localecho, lockdown, paranoid, reset, self_destruct, skipping, uf2, usb_speed"
+                    "Commands include: altboot, audit, boot, boardtype, bootwait, echo, idmode, ifr, localecho, lockdown, paranoid, require-pq, reset, self_destruct, skipping, uf2, usb_speed"
                 );
                 #[cfg(feature = "test-boot0-keys")]
                 crate::print!(", publock");

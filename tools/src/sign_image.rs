@@ -279,7 +279,6 @@ pub fn sign_image<P: AsRef<Path>>(
             // Now we can use the private key data.
             let signing_key = SigningKey::from_bytes(&secbytes);
             let testing_pem = pem::parse(TEST_KEY_PEM)?;
-            let testing_pem_data = testing_pem.contents[16..].to_owned();
             let testing_key = SigningKey::from_bytes(testing_pem.contents[16..].try_into().unwrap());
 
             let anti_rollback = if let Some(code) = anti_rollback_manual {
@@ -355,7 +354,7 @@ pub fn sign_image<P: AsRef<Path>>(
                 }
 
                 // derive the public key for use in "fake keys" routines
-                let sk = Ed25519KeyPair::from_pkcs8_maybe_unchecked(&testing_pem_data)
+                let sk = Ed25519KeyPair::from_pkcs8_maybe_unchecked(&testing_pem.contents)
                     .map_err(|e| format!("{}", e))?;
                 let derived_public_key = sk.public_key();
 
