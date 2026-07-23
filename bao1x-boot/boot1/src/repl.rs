@@ -32,12 +32,13 @@ pub struct Repl {
     do_cmd: bool,
     local_echo: bool,
     lockdown_armed: bool,
+    perclk: u32,
     #[cfg(feature = "uf2-spim")]
     serial_assembler: PageAssembler<PageCallback>,
 }
 
 impl Repl {
-    pub fn new() -> Self {
+    pub fn new(perclk: u32) -> Self {
         Self {
             cmdline: String::new(),
             do_cmd: false,
@@ -45,6 +46,7 @@ impl Repl {
             lockdown_armed: false,
             #[cfg(feature = "uf2-spim")]
             serial_assembler: PageAssembler::new(write_spim_page),
+            perclk,
         }
     }
 
@@ -1024,6 +1026,75 @@ impl Repl {
                 }
                 run_kat_verify::<Sha2_128_24>(SHA2_128_24_PK, SHA2_128_24_SIG);
             }
+            "ate" => {
+                use bao1x_api::{IoGpio, IoSetup};
+                use bao1x_hal::iox::Iox;
+                let iox = Iox::new(utralib::utra::iox::HW_IOX_BASE as *mut u32);
+                // setup PF1 as an "index" pin
+                iox.setup_pin(
+                    bao1x_api::IoxPort::PF,
+                    5,
+                    Some(bao1x_api::IoxDir::Output),
+                    Some(bao1x_api::IoxFunction::Gpio),
+                    None,
+                    Some(bao1x_api::IoxEnable::Disable),
+                    None,
+                    None,
+                );
+                // indicates test running
+                iox.set_gpio_pin_value(bao1x_api::IoxPort::PF, 5, bao1x_api::IoxValue::Low);
+                // force USB speed to full speed
+                crate::glue::setup(Some(bao1x_hal::usb::driver::PortSpeed::Fs));
+
+                let slot_mgr = bao1x_hal::acram::SlotManager::new();
+                let mut rram = bao1x_hal::rram::Reram::new();
+                let slot = &bao1x_api::offsets::ATE_RESERVED;
+                let ate = crate::platform::ate::Ate::new(self.perclk);
+                let mut data = [0u8; 32];
+                ate.serialize_into(&mut data);
+                slot_mgr.write(&mut rram, slot, &data).ok();
+
+                // indicates test finish
+                iox.set_gpio_pin_value(bao1x_api::IoxPort::PF, 5, bao1x_api::IoxValue::High);
+            }
+            "atecheck" => {
+                let slot_mgr = bao1x_hal::acram::SlotManager::new();
+                let slot = &bao1x_api::offsets::ATE_RESERVED;
+                match slot_mgr.read(slot) {
+                    Ok(d) => crate::println!("{:02x?}", d),
+                    Err(e) => crate::println!("{:?}", e),
+                }
+            }
+            "usb_speed" => {
+                let one_way = OneWayCounter::new();
+                if args.len() == 0 {
+                    crate::println!(
+                        "USB speed: {:?}",
+                        one_way.get_decoded::<bao1x_api::UsbDefaultSpeed>().expect("owc coding error")
+                    );
+                    self.abort_cmd();
+                    return Ok(());
+                } else if args.len() != 1 {
+                    return Err(Error::help("usb_speed [full | high]"));
+                }
+                let new_type = match args[0].as_str() {
+                    "full" => bao1x_api::UsbDefaultSpeed::Full,
+                    "high" => bao1x_api::UsbDefaultSpeed::High,
+                    _ => return Err(Error::help("usb_speed [full | high]")),
+                };
+                let mut count = 0;
+                while one_way.get_decoded::<bao1x_api::UsbDefaultSpeed>().expect("owc coding error")
+                    != new_type
+                {
+                    one_way.inc_coded::<bao1x_api::UsbDefaultSpeed>().expect("increment error");
+                    count += 1;
+                }
+                crate::println!(
+                    "USB default speed is {:?} after {} increments. Takes effect after a reboot.",
+                    new_type,
+                    count
+                );
+            }
             "echo" => {
                 for word in args {
                     crate::print!("{} ", word);
@@ -1033,7 +1104,7 @@ impl Repl {
             _ => {
                 crate::println!("Command not recognized: {}", cmd);
                 crate::print!(
-                    "Commands include: altboot, audit, boot, boardtype, bootwait, echo, idmode, ifr, localecho, lockdown, paranoid, reset, self_destruct, skipping, uf2"
+                    "Commands include: altboot, audit, boot, boardtype, bootwait, echo, idmode, ifr, localecho, lockdown, paranoid, reset, self_destruct, skipping, uf2, usb_speed"
                 );
                 #[cfg(feature = "test-boot0-keys")]
                 crate::print!(", publock");

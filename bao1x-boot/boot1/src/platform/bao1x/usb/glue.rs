@@ -104,7 +104,7 @@ pub fn write_spim_page(addr: usize, data: Box<[u8; SPINOR_ERASE_SIZE as usize]>)
     }
 }
 
-pub fn setup() -> (UsbDeviceState, u32) {
+pub fn setup(speed: Option<bao1x_hal::usb::driver::PortSpeed>) -> (UsbDeviceState, u32) {
     /*
     use crate::usb;
 
@@ -127,7 +127,7 @@ pub fn setup() -> (UsbDeviceState, u32) {
         if let Some(ref mut usb_ref) = crate::platform::bao1x::usb::USB {
             let usb = &mut *core::ptr::addr_of_mut!(*usb_ref);
             usb.reset();
-            usb.init();
+            usb.init(speed);
             usb.start();
             usb.update_current_speed();
             // IRQ enable must happen without dependency on the hardware lock
