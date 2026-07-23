@@ -133,9 +133,6 @@ pub const THE_FLAG_1: SlotIndex = SlotIndex::Data(260, PartitionAccess::Fw0, RwP
 // [261..=383] reserved for Baochip data slot usage, see the "common" page for more details
 // NOTE: COLLATERAL is from 261..265, but it is in the "common" page
 
-// [384..=1919] are unused and available for third party use
-pub const APPLICATION: SlotIndex = crate::offsets::APPLICATION;
-
 pub const NUISANCE_KEYS_1: SlotIndex =
     SlotIndex::DataRange(1920..2048, PartitionAccess::Fw0, RwPerms::ReadWrite);
 pub const NUISANCE_KEYS: [SlotIndex; 2] = [NUISANCE_KEYS_0, NUISANCE_KEYS_1];
