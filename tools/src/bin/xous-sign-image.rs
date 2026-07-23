@@ -53,6 +53,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .default_value(DEVKEY_PATH),
         )
         .arg(
+            Arg::with_name("pq-key")
+            .long("pq-key")
+            .takes_value(true)
+            .required(false)
+            .help("Post quantum signing key; if non provided, defaults to the dev key")
+            .value_name("Post quantum signing key")
+        )
+        .arg(
+            Arg::with_name("pq-key-cache")
+            .long("pq-key-cache")
+            .takes_value(true)
+            .required(false)
+            .help("Post quantum signing key cache. When provided, accelerates the signing process.")
+            .value_name("Post quantum signing key")
+        )
+        .arg(
             Arg::with_name("loader-output")
                 .long("loader-output")
                 .takes_value(true)
@@ -149,6 +165,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         None
     };
 
+    let pq_args = if let Some(pq_key) = matches.value_of("pq-key") {
+        if let Some(pq_cache) = matches.value_of("pq-key-cache") {
+            Some((pq_key, Some(pq_cache)))
+        } else {
+            Some((pq_key, None))
+        }
+    } else {
+        None
+    };
+
     let sig_length = usize::from_str_radix(matches.value_of("sig-length").unwrap_or("4096"), 10)
         .expect("sig-length should be a decimal number");
     // Sign the loader, if an output file was specified
@@ -183,6 +209,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             matches.value_of("function-code"),
             arb_override.map(|x| x as usize),
             matches.is_present("fake-pubkeys"),
+            pq_args,
         )?;
 
         if matches.is_present("bao1x") {
@@ -227,6 +254,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             Some(matches.value_of("function-code").unwrap_or("kernel")),
             arb_override.map(|x| x as usize),
             matches.is_present("fake-pubkeys"),
+            pq_args,
         )?;
 
         if matches.is_present("bao1x") {

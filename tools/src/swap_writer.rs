@@ -1,5 +1,7 @@
 use std::convert::TryInto;
+use std::fs;
 use std::io::{Cursor, Result, Seek, SeekFrom, Write};
+use std::path::Path;
 use std::process::Command;
 
 use aes_gcm_siv::{
@@ -82,18 +84,37 @@ impl SwapHeader {
     }
 }
 
+pub fn load_pq_key_bytes<P: AsRef<Path>>(
+    pq_private_key: Option<(P, Option<P>)>,
+) -> std::result::Result<Option<([u8; 64], Option<P>)>, Box<dyn std::error::Error + Send + Sync>> {
+    match pq_private_key {
+        None => Ok(None),
+        Some((path, other)) => {
+            let bytes = fs::read(path.as_ref())?;
+            if bytes.len() != 64 {
+                return Err(
+                    format!("Expected exactly 64 bytes for PQ private key, got {}", bytes.len()).into()
+                );
+            }
+            let key_array: [u8; 64] = bytes.try_into().expect("Length already verified");
+            Ok(Some((key_array, other)))
+        }
+    }
+}
+
 impl SwapWriter {
     pub fn new() -> Self { SwapWriter { buffer: Cursor::new(Vec::new()) } }
 
     /// Take the swap file and wrap it data structures that facilitate per-device encryption
     /// after deployment to a user device.
-    pub fn encrypt_to<T>(
+    pub fn encrypt_to<T, P: AsRef<Path>>(
         &mut self,
         mut f: T,
         private_key: &pem::Pem,
         anti_rollback_manual: Option<usize>,
         git_rev_override: Option<&str>,
         semver: Option<[u8; 16]>,
+        pq_private_key: Option<(P, Option<P>)>,
     ) -> Result<usize>
     where
         T: Write + Seek,
@@ -149,6 +170,8 @@ impl SwapWriter {
             function,
             anti_rollback_manual,
             false,
+            load_pq_key_bytes(pq_private_key)
+                .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?,
         )
         .map_err(|_| std::io::Error::new(std::io::ErrorKind::Other, "Can't sign swap image"))?;
         // write the header, less space for the signature

@@ -1,0 +1,40 @@
+# Standalone KAT runner for SLH-DSA-SHA2-128-24 (NIST SP 800-230 ipd).
+#
+# Deliberately its own workspace root (empty [workspace] below) so it can be
+# dropped anywhere — including inside the slh-dsa checkout — without cargo
+# complaining about workspace membership.
+[workspace]
+
+[package]
+name = "slh-kat"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[[bin]]
+name = "slh-kat"
+path = "src/main.rs"
+
+[dependencies]
+slh-dsa = { path = "../slh-dsa-bao1x", features = ["parallel", "tree-cache"] }
+
+# Only used to check that the embedded signature blob matches the `sig_digest`
+# line of the published vector, i.e. to distinguish "the vector got mangled"
+# from "the crate is wrong". This is the same version slh-dsa itself depends
+# on, so it adds nothing to the dependency graph. If it ever causes friction,
+# delete this dep and the `vector_digest` check in main.rs; nothing else uses it.
+sha2 = "0.11.0"
+
+[features]
+# Compiles the fault-hardened verification checks. slh-dsa enables
+# `hardened-verify` in its own defaults, so this is on unless you turn it off.
+default = ["hardened-verify"]
+hardened-verify = ["slh-dsa/hardened-verify"]
+
+[profile.release]
+opt-level = 3
+debug = false
+# Keep overflow checks on: this is a correctness canary, not a benchmark, and
+# a silent wrap in index arithmetic is exactly the kind of build-environment
+# weirdness this binary exists to catch.
+overflow-checks = true

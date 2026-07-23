@@ -61,14 +61,21 @@ pub fn try_boot(or_die: bool, csprng: &mut Csprng) {
     // loader is at the same offset as baremetal. Accept either as valid boot.
     // This diverges if the signature check is successful
     match bao1x_hal::sigcheck::validate_image(BOOT1_TO_LOADER_OR_BAREMETAL, None, Some(csprng)) {
-        Ok((key, key_inv, tag, target)) => {
+        Ok((key, key_inv, tag, target, pq_tag)) => {
             if paranoid1 == 0 && paranoid2 == 0 {
+                let tag_owned;
                 // only emit prints if not in paranoid mode
                 crate::println!(
-                    "Booting with key {}/{}({})",
+                    "Booting with key {}/{}({}) pq: {}",
                     key,
                     !key_inv,
-                    core::str::from_utf8(&tag).unwrap_or("invalid tag")
+                    core::str::from_utf8(&tag).unwrap_or("invalid tag"),
+                    if let Some(tag) = pq_tag {
+                        tag_owned = tag;
+                        core::str::from_utf8(&tag_owned).unwrap_or("invalid tag")
+                    } else {
+                        "No PQ sig"
+                    }
                 );
             }
             if key != !key_inv {
@@ -81,9 +88,11 @@ pub fn try_boot(or_die: bool, csprng: &mut Csprng) {
             // the tag is from signed, trusted data
             // k is just a nominal slot number. If either match, assume we are dealing with a
             // developer image.
-            bao1x_hal::sigcheck::hardened_erase_policy(paranoid1, paranoid2, key, key_inv, tag, csprng)
-                .inspect_err(|e| crate::println!("{}", e))
-                .ok(); // "ok" because the expected error is a check on logic/configuration bugs, not attacks
+            bao1x_hal::sigcheck::hardened_erase_policy(
+                paranoid1, paranoid2, key, key_inv, tag, csprng, pq_tag,
+            )
+            .inspect_err(|e| crate::println!("{}", e))
+            .ok(); // "ok" because the expected error is a check on logic/configuration bugs, not attacks
 
             // this print message is not hardened, and it's actually retrospective of the policy
             // implementation

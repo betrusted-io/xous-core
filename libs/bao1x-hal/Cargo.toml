@@ -40,6 +40,8 @@ ed25519-dalek = { package = "ed25519-dalek-bao1x", path = "../../bao1x-boot/ed25
 ], optional = true }
 sha2-bao1x = { path = "../../bao1x-boot/sha2-bao1x", optional = true, default-features = false }
 linked_list_allocator = { version = "0.10.5", optional = true }
+slh-dsa = { path = "../../bao1x-boot/slh-dsa-bao1x", optional = true, default-features = false }
+typenum = { version = "1.20", features = ["const-generics"], optional = true }
 
 # for generating glitch-protection delays
 rand_chacha = { version = "0.3.1", default-features = false }
@@ -61,7 +63,14 @@ display-sh1107 = []
 sensor-lis2dh12 = []
 axp2101 = []
 bmp180 = []
-sigcheck = ["ed25519-dalek", "sha2-bao1x", "digest", "linked_list_allocator"]
+sigcheck = [
+    "ed25519-dalek",
+    "sha2-bao1x",
+    "digest",
+    "linked_list_allocator",
+    "slh-dsa/hardened-verify",
+    "typenum",
+]
 board-baosec = [
     "std",
     "camera-gc2145",

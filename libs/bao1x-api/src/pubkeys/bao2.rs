@@ -1,5 +1,5 @@
 use super::*;
-use crate::signatures::Pubkey;
+use crate::signatures::{Pubkey, PubkeyPq};
 
 /// Bao2 public key. Extracted from signing/bao2_id_ed25519_sk using extract_sk_credential.py
 pub const ID_ED25519_SK_PUB: [u8; 32] = [
@@ -29,3 +29,11 @@ pub const ID_ED25519_SK_CRED_ID: [u8; 241] = [
 pub const ID_ED25519_SK_RP: &'static str = "ssh:";
 
 pub const PUBKEY: Pubkey = Pubkey { pk: ID_ED25519_SK_PUB, tag: *KEYSLOT_INITIAL_TAGS[BAO2_KEY_SLOT] };
+
+// Temporary stand-in
+pub const SLH_DSA_PUB: [u8; 32] = [
+    0x97, 0x58, 0x96, 0xA4, 0xB1, 0x8A, 0xC1, 0x1B, 0x03, 0x84, 0x06, 0x8D, 0x5C, 0x1A, 0x70, 0x9D, 0x9E,
+    0xE2, 0x6E, 0xB3, 0x97, 0xBA, 0xE6, 0x56, 0x65, 0xBE, 0x4C, 0x74, 0xFF, 0x5C, 0x4B, 0x24,
+];
+
+pub const SLH_DSA_PUBKEY: PubkeyPq = PubkeyPq { pk: SLH_DSA_PUB, tag: *KEYSLOT_INITIAL_TAGS[BAO2_KEY_SLOT] };

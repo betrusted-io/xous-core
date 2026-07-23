@@ -232,7 +232,33 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .help("Explicit git describe version for swap signing (e.g., 'v0.10.0-19-g0d934e1'). If not specified, uses git describe.")
                 .value_name("version"),
         )
+        .arg(
+            Arg::with_name("pq-key")
+            .long("pq-key")
+            .takes_value(true)
+            .required(false)
+            .help("Post quantum signing key; if non provided, defaults to the dev key")
+            .value_name("Post quantum signing key")
+        )
+        .arg(
+            Arg::with_name("pq-key-cache")
+            .long("pq-key-cache")
+            .takes_value(true)
+            .required(false)
+            .help("Post quantum signing key cache. When provided, accelerates the signing process.")
+            .value_name("Post quantum signing key")
+        )
         .get_matches();
+
+    let pq_args = if let Some(pq_key) = matches.value_of("pq-key") {
+        if let Some(pq_cache) = matches.value_of("pq-key-cache") {
+            Some((pq_key, Some(pq_cache)))
+        } else {
+            Some((pq_key, None))
+        }
+    } else {
+        None
+    };
 
     let mut ram_config = RamConfig {
         offset: Default::default(),
@@ -533,7 +559,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let sf = File::create(swap_filename)
                 .unwrap_or_else(|_| panic!("Couldn't create output file {}", swap_filename));
             swap_buffer
-                .encrypt_to(sf, &swap_pkey, None, git_rev, semver)
+                .encrypt_to(sf, &swap_pkey, None, git_rev, semver, pq_args)
                 .expect("Couldn't flush swap buffer to disk");
         } // drop sf, so it closes
 
