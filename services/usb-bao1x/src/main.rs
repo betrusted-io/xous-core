@@ -732,8 +732,9 @@ pub(crate) fn main_hw() -> ! {
                 if cu.device.state() != usb_device::device::UsbDeviceState::Configured {
                     continue;
                 }
-                // this will hardware flush any pending items in usb_serial driver
-                cu.serial_port.flush().ok();
+                // The interrupt handler may access the same usbd-serial state through
+                // UsbDevice::poll(), so the flush must use the IRQ-safe wrapper.
+                cu.serial_flush_irq_safe().ok();
                 // this tries to return any data that's pending within the main loop's buffers
                 match serial_listen_mode {
                     SerialListenMode::BinaryListener => {
@@ -779,16 +780,52 @@ pub(crate) fn main_hw() -> ! {
                 }
                 let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                 let data = buffer.to_original::<UsbSerialBinary, _>().unwrap();
-                let mut total_sent = 0;
+
+                // This is a best-effort, non-blocking path. Stop at the first short
+                // write or error because only a contiguous prefix can be accepted.
                 for chunk in data.d.chunks(crate::hw::SERIAL_MAX_PACKET_SIZE) {
-                    match cu.serial_port.write(chunk) {
-                        Ok(sent) => total_sent += sent,
-                        Err(e) => {
-                            log::error!("Error in SerialSendData: {:?}", e);
-                        }
+                    match cu.serial_write_irq_safe(chunk) {
+                        Ok(sent) if sent == chunk.len() => {}
+                        Ok(_) | Err(_) => break,
                     }
                 }
-                log::debug!("Serial sent {} bytes", total_sent);
+            }
+            Opcode::SerialSendDataBlocking => {
+                let mut buffer =
+                    unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+
+                let mut request = buffer.to_original::<UsbSerialSend, _>().unwrap();
+
+                if cu.device.state() != usb_device::device::UsbDeviceState::Configured {
+                    // The IPC request itself was handled successfully, but no bytes
+                    // can be accepted while the USB device is not configured.
+                    request.sent = Some(0);
+                    buffer.replace(request).unwrap();
+                    continue;
+                }
+
+                let mut total_sent = 0usize;
+
+                // usbd-serial has a smaller internal transmit buffer than the IPC
+                // payload, so submit the request in USB-sized chunks.
+                //
+                // Only a contiguous prefix is reported as accepted. Stop at the
+                // first short write or error and let the caller retry the remainder.
+                for chunk in request.d.chunks(crate::hw::SERIAL_MAX_PACKET_SIZE) {
+                    match cu.serial_write_irq_safe(chunk) {
+                        Ok(sent) => {
+                            total_sent += sent;
+
+                            if sent < chunk.len() {
+                                break;
+                            }
+                        }
+                        Err(_) => break,
+                    }
+                }
+
+                request.sent = Some(total_sent as u32);
+                buffer.replace(request).unwrap();
             }
             Opcode::LogString => {
                 // the logger API is "best effort" only. Because retries and response codes can cause problems
@@ -801,7 +838,7 @@ pub(crate) fn main_hw() -> ! {
                             for chunk in
                                 usb_send.s.as_bytes().chunks(bao1x_hal::usb::driver::CRG_UDC_APP_BUFSIZE)
                             {
-                                cu.serial_port.write(&chunk).ok();
+                                cu.serial_write_irq_safe(&chunk).ok();
                             }
                         }
                         _ => {} // silent errors

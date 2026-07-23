@@ -269,18 +269,67 @@ impl UsbHid {
         .unwrap();
     }
 
-    /// Takes a slice-u8 and tries to send the data. Reports how many bytes were actually sent.
-    pub fn serial_send(&self, data: &[u8]) -> Result<usize, xous::Error> {
-        let mut sender = UsbSerialBinary { d: Vec::new() };
+    /// Queues up to one IPC page of binary data for best-effort USB CDC
+    /// transmission without waiting for a result from the USB service.
+    ///
+    /// This method is intended for callers that must not block, such as
+    /// interactive character echo.
+    ///
+    /// The returned value is the number of bytes submitted in the IPC
+    /// request. It does not indicate how many bytes were accepted by the
+    /// USB CDC transmit buffer or delivered to the host.
+    pub fn serial_send_nb(&self, data: &[u8]) -> Result<usize, xous::Error> {
+        if data.is_empty() {
+            return Ok(0);
+        }
+
         // sendable length is limited by the size of a page of memory, e.g. how much we can map
         // into the receiving process in a single go
         let sendable_len = data.len().min(SERIAL_BINARY_BUFLEN);
-        sender.d.extend_from_slice(data);
+
+        let sender = UsbSerialBinary { d: Vec::from(&data[..sendable_len]) };
+
         let buf = Buffer::into_buf(sender).or(Err(xous::Error::InternalError)).expect("Internal error");
-        // NOTE: The send will not fail if the host receiver can't accept the characters (i.e. no host
-        // connected)
+        // The request is best-effort. Once queued to the service, failure to
+        // accept the data into the USB transmit buffer is not reported here.
         buf.send(self.conn, Opcode::SerialSendData.to_u32().unwrap()).ok();
         Ok(sendable_len)
+    }
+
+    /// Submits up to one IPC page of binary data to the USB CDC transmit
+    /// buffer and waits for the USB service to return the accepted length.
+    ///
+    /// This method waits for the service to process the request, but it does
+    /// not wait for the host to receive the data.
+    ///
+    /// The returned value is the length of the contiguous prefix accepted by
+    /// `serial_port.write()`. A value smaller than the requested length
+    /// indicates a short write or write error; the caller may retry the
+    /// remaining suffix.
+    ///
+    /// Returns `Ok(0)` when the USB device is not configured.
+    pub fn serial_send(&self, data: &[u8]) -> Result<usize, xous::Error> {
+        if data.is_empty() {
+            return Ok(0);
+        }
+
+        // sendable length is limited by the size of a page of memory, e.g. how much we can map
+        // into the receiving process in a single go
+        let sendable_len = data.len().min(SERIAL_BINARY_BUFLEN);
+
+        let sender = UsbSerialSend { d: Vec::from(&data[..sendable_len]), sent: None };
+
+        let mut buf = Buffer::into_buf(sender).or(Err(xous::Error::InternalError)).expect("Internal error");
+
+        buf.lend_mut(self.conn, Opcode::SerialSendDataBlocking.to_u32().unwrap())
+            .or(Err(xous::Error::InternalError))?;
+
+        let returned = buf.to_original::<UsbSerialSend, _>().or(Err(xous::Error::InternalError))?;
+
+        match returned.sent {
+            Some(sent) => Ok(sent as usize),
+            None => Err(xous::Error::InternalError),
+        }
     }
 
     pub fn register_u2f_observer(&self, server_name: &str, action_opcode: usize) {

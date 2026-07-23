@@ -759,6 +759,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "bio-stream"
+version = "0.1.0"
+dependencies = [
+ "bao1x-api 0.1.2",
+ "bao1x-hal",
+ "bao1x-hal-service",
+ "log",
+ "num-derive 0.4.2",
+ "num-traits",
+ "usb-bao1x",
+ "utralib 0.1.27",
+ "xous 0.9.70 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-api-log",
+ "xous-api-names",
+ "xous-api-ticktimer",
+ "xous-ipc 0.10.10 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
 name = "bit-set"
 version = "0.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
