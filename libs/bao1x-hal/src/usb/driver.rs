@@ -334,13 +334,6 @@ pub struct Uicr {
 }
 
 const CRG_UDC_CFG0_MAXSPEED_FS: u32 = 1;
-// surprisingly, just swapping this constant in "sort of works"
-// some to-do around figuring out why the protocol breaks, could
-// just be signal integrity because too many connectors, but very
-// likely this is also an inability to handle the longer packet
-// sizes mandated by the HS protocol.
-//
-// leave as a warning so we have this as a TODO.
 const CRG_UDC_CFG0_MAXSPEED_HS: u32 = 3;
 
 pub const CRG_UDC_ERDPLO_EHB: u32 = 1 << 3;
@@ -1272,7 +1265,7 @@ impl CorigineUsb {
         println!("USB reset done: {:x}", dummy);
     }
 
-    pub fn init(&mut self) {
+    pub fn init(&mut self, speed: Option<PortSpeed>) {
         crate::println!("~~~~~~~~~~~~~~~~INIT~~~~~~~~~~~~~~~");
         let ifram_slice = unsafe {
             core::slice::from_raw_parts_mut(
@@ -1291,7 +1284,12 @@ impl CorigineUsb {
             // wait for reset to finish
         }
 
-        self.csr.wo(DEVCONFIG, 0x80 | CRG_UDC_CFG0_MAXSPEED_FS | CRG_UDC_CFG0_MAXSPEED_HS);
+        match speed {
+            // note: LS option is not well tested
+            Some(PortSpeed::Ls) => self.csr.wo(DEVCONFIG, 0x80),
+            Some(PortSpeed::Fs) => self.csr.wo(DEVCONFIG, 0x80 | CRG_UDC_CFG0_MAXSPEED_FS),
+            _ => self.csr.wo(DEVCONFIG, 0x80 | CRG_UDC_CFG0_MAXSPEED_FS | CRG_UDC_CFG0_MAXSPEED_HS),
+        };
 
         self.csr.wo(
             EVENTCONFIG,
@@ -2260,7 +2258,7 @@ impl CorigineUsb {
      we uh...decide to implement a third target, or something like that.
     */
     /// Force and hold the reset pin according to the state selected
-    pub fn ll_reset(&mut self, state: bool) {
+    pub fn ll_reset(&mut self, state: bool, speed: Option<PortSpeed>) {
         #[cfg(feature = "std")]
         crate::println!("ll_reset is UNSURE");
         // There is a PHY control, it looks like 0x1C bit 1 set to 1 will cause the device to hi-Z
@@ -2270,7 +2268,7 @@ impl CorigineUsb {
         if state {
             self.reset();
         } else {
-            self.init();
+            self.init(speed);
         }
     }
 
@@ -2503,7 +2501,7 @@ impl UsbBus for CorigineWrapper {
             // disable IRQs
             hw.irq_csr.wo(utralib::utra::irqarray1::EV_ENABLE, 0);
             hw.reset();
-            hw.init();
+            hw.init(None); // default to high speed
             hw.start();
             hw.update_current_speed();
             // IRQ enable must happen without dependency on the hardware lock
