@@ -93,7 +93,15 @@ pub const fn classic_to_pq_revocation(classic: usize) -> Option<usize> {
 // slots 0-127 are for bootloader/xous use
 // slots 128-255 are for user applications
 
-// slots 0-20 are currently unallocated
+// slots 0-19 are currently unallocated
+
+encode_oneway! {
+    #[offset = 20]
+    pub enum UsbDefaultSpeed {
+        High,
+        Full,
+    }
+}
 
 /// When this or REQUIRE_PQ_DUPE is set, the next stage *must* have a valid PQ signature
 /// By default, PQ signatures are optional.
@@ -327,7 +335,10 @@ pub const BOOT1_RECEIPT_SLOTS: [SlotIndex; 4] =
 // 32 bytes reserved to configure/set up clock scrambling
 pub const CLOCK_SCRAMBLE_PARAMS: SlotIndex = SlotIndex::Data(272, PartitionAccess::Open, RwPerms::ReadWrite);
 
-// [273..=383] available for future data slot usage - in particular opentitan provisioning block (2k of data)
+// 32 bytes reserved for ATE test operations. Data is read back by the ATE at this location via JTAG.
+pub const ATE_RESERVED: SlotIndex = SlotIndex::Data(273, PartitionAccess::Open, RwPerms::ReadWrite);
+
+// [274..=383] available for future data slot usage - in particular opentitan provisioning block (2k of data)
 // can fit in this with some margin.
 
 // Notes on defining the boot0 IFR region.
