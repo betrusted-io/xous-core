@@ -94,6 +94,7 @@ pub fn audit() {
         owc.get(PARANOID_MODE).unwrap(),
         owc.get(PARANOID_MODE_DUPE).unwrap()
     );
+    crate::println!("PQ required: {}/{}", owc.get(REQUIRE_PQ).unwrap(), owc.get(REQUIRE_PQ_DUPE).unwrap());
     // this number may be non-zero because some of the sensors are on a hair-trigger
     crate::println!("Possible attack attempts: {}", owc.get(POSSIBLE_ATTACKS).unwrap());
     crate::println!("Revocations:");
