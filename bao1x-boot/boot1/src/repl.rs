@@ -725,7 +725,9 @@ impl Repl {
                 match args.as_slice() {
                     [s] if s == "confirm" => false,
                     _ => {
-                        return Err(Error::help("Usage: 'require-pq confirm'. WARNING: cannot be undone!"));
+                        return Err(Error::help(
+                            "Usage: 'require-pq confirm'. This command disallows firmwares without a valid PQ signature. WARNING: cannot be undone!",
+                        ));
                     }
                 };
                 let one_way = OneWayCounter::new();
