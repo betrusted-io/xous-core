@@ -128,6 +128,7 @@ members = [
   "apps-dabao/dabao-console",
   "services/swaptest1",
   "services/swaptest2",
+  "apps-dabao/bio-stream",
   "bao1x-boot/slh-dsa-bao1x",
 ]
 resolver = "2"

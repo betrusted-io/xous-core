@@ -193,6 +193,58 @@ impl<'a> Bao1xUsb<'a> {
         self.irq_csr.wo(utra::irqarray1::EV_PENDING, 0xFFFF_FFFF);
         self.irq_csr.wo(utra::irqarray1::EV_ENABLE, CORIGINE_IRQ_MASK | SW_IRQ_MASK);
     }
+
+    /// Writes data to the USB CDC serial transmit buffer while preventing
+    /// re-entry from the Corigine USB interrupt handler.
+    ///
+    /// `serial_port.write()` modifies the internal `usbd-serial` transmit
+    /// buffer. The USB interrupt handler may call `UsbDevice::poll()`, which
+    /// can flush and modify the same buffer when an IN transfer completes.
+    ///
+    /// Allowing those operations to run concurrently can corrupt the buffer's
+    /// read and write positions and lead to an out-of-bounds access. Mask the
+    /// Corigine interrupt only for the duration of the buffer update.
+    ///
+    /// Pending interrupt events are not cleared here. An event raised while
+    /// the interrupt is masked remains pending and is processed after the
+    /// previous interrupt-enable state is restored.
+    pub fn serial_write_irq_safe(&mut self, data: &[u8]) -> usb_device::Result<usize> {
+        // IRQARRAY1 is currently dedicated to the Corigine USB implementation,
+        // so this code assumes there are no concurrent writers to EV_ENABLE.
+        // If another IRQARRAY1 user is added, access to EV_ENABLE must be
+        // centralized or protected by an IRQ-safe synchronization mechanism.
+        let previous_enable = self.irq_csr.r(utra::irqarray1::EV_ENABLE);
+
+        self.irq_csr.wo(utra::irqarray1::EV_ENABLE, previous_enable & !CORIGINE_IRQ_MASK);
+
+        compiler_fence(Ordering::SeqCst);
+
+        let result = self.serial_port.write(data);
+
+        compiler_fence(Ordering::SeqCst);
+
+        self.irq_csr.wo(utra::irqarray1::EV_ENABLE, previous_enable);
+
+        result
+    }
+
+    /// Flushes the USB CDC serial transmit buffer without allowing the USB
+    /// interrupt handler to access the same `usbd-serial` state concurrently.
+    pub fn serial_flush_irq_safe(&mut self) -> usb_device::Result<()> {
+        let previous_enable = self.irq_csr.r(utra::irqarray1::EV_ENABLE);
+
+        self.irq_csr.wo(utra::irqarray1::EV_ENABLE, previous_enable & !CORIGINE_IRQ_MASK);
+
+        compiler_fence(Ordering::SeqCst);
+
+        let result = self.serial_port.flush();
+
+        compiler_fence(Ordering::SeqCst);
+
+        self.irq_csr.wo(utra::irqarray1::EV_ENABLE, previous_enable);
+
+        result
+    }
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]

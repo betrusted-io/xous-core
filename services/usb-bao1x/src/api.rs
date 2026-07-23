@@ -56,8 +56,14 @@ pub enum Opcode {
     SerialClearHooks = 517,
     /// TRNG send poll
     SerialTrngPoll = 518,
-    /// Send serial data
+    /// Send serial data, without waiting for a response.
     SerialSendData = 519,
+    /// Submit serial data and return the number of bytes accepted by the
+    /// USB CDC transmit buffer.
+    ///
+    /// This blocks until the USB service processes the IPC request. It does
+    /// not wait for the host to receive the data.
+    SerialSendDataBlocking = 520,
 
     /// Interrupt-context USB stack messages
     IrqFidoRx = 768,
@@ -171,6 +177,19 @@ pub struct UsbSerialBinary {
     pub d: Vec<u8>,
 }
 
+#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+pub struct UsbSerialSend {
+    /// Data submitted to the USB CDC transmit buffer.
+    pub d: Vec<u8>,
+
+    /// Length of the contiguous prefix accepted by the service.
+    ///
+    /// `None` means that the service did not return a valid response.
+    /// `Some(0)` may indicate that USB is not configured or that the
+    /// transmit buffer could not accept data.
+    pub sent: Option<u32>,
+}
+
 pub const MAX_HID_REPORT_DESCRIPTOR_LEN: usize = 1024;
 
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
@@ -184,7 +203,7 @@ pub struct HIDReportDescriptorMessage {
 pub struct HIDReport(pub [u8; 64]);
 
 impl Default for HIDReport {
-    fn default() -> Self { return Self([0u8; 64]) }
+    fn default() -> Self { return Self([0u8; 64]); }
 }
 
 #[derive(Debug, Default, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Copy, Clone)]
