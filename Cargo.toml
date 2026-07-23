@@ -151,7 +151,12 @@ exclude = [
   "planning/",
   # This is for signing images, and requires dependencies that are incompatible with Xous
   "signing/fido-signer",
-  "bao1x-boot/slh-dsa-kat"
+  # Known answer test for bao1x-boot, meant to run on the host to check the soundness of
+  # of the slh-dsa library off-line
+  "bao1x-boot/slh-dsa-kat",
+  # One-way counter map checks - stand-alone tests that run on the host which check that
+  # the constant maps are sane
+  "libs/owc-checks"
 ]
 
 [profile.release]
