@@ -170,7 +170,7 @@ impl<'a> Bao1xUsb<'a> {
         self.irq_csr.wo(utra::irqarray1::EV_ENABLE, 0);
 
         self.wrapper.core().reset();
-        self.wrapper.core().init();
+        self.wrapper.core().init(None);
         self.wrapper.core().start();
         self.wrapper.core().update_current_speed();
 
