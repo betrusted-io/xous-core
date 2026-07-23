@@ -67,7 +67,7 @@ pub fn audit() {
     let owc = OneWayCounter::new();
     let boardtype = owc.get_decoded::<BoardTypeCoding>().unwrap();
     crate::println!("Board type reads as: {:?}", boardtype);
-    crate::println!("Boot partition is: {:?}", owc.get_decoded::<AltBootCoding>());
+    crate::println!("First-try boot partition is: {:?}", owc.get_decoded::<AltBootCoding>());
     crate::println!("Semver is: {}", crate::version::SEMVER);
     crate::println!("Description is: {}", crate::RELEASE_DESCRIPTION);
     crate::println!("Stepping is: {}", detect_stepping());
