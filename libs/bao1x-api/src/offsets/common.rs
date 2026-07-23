@@ -93,10 +93,10 @@ pub const fn classic_to_pq_revocation(classic: usize) -> Option<usize> {
 // slots 0-127 are for bootloader/xous use
 // slots 128-255 are for user applications
 
-// slots 0-19 are currently unallocated
+// slots 0-17 are currently unallocated
 
 encode_oneway! {
-    #[offset = 20]
+    #[offset = 18]
     pub enum UsbDefaultSpeed {
         High,
         Full,
@@ -105,7 +105,7 @@ encode_oneway! {
 
 /// When this or REQUIRE_PQ_DUPE is set, the next stage *must* have a valid PQ signature
 /// By default, PQ signatures are optional.
-pub const REQUIRE_PQ: usize = 21;
+pub const REQUIRE_PQ: usize = 19;
 
 pub const PQ_LOADER_REVOCATION_DUPE_OFFSET: usize = 20; // [20..=23]
 pub const PQ_BOOT1_REVOCATION_DUPE_OFFSET: usize = PQ_LOADER_REVOCATION_DUPE_OFFSET + PUBKEY_SLOTS; // [24..=27]
@@ -168,10 +168,10 @@ pub const PARANOID_MODE_DUPE: usize = 67;
 /// The layout of the below duplicate revocation bits *MUST* match that of the primary keys.
 /// This property is relied upon by the signature checking routine.
 /// Offset in the one-way counter array for loader key revocations. Provisions for up to four
-/// key slots, from [68..=72].
+/// key slots, from [68..=71].
 pub const LOADER_REVOCATION_DUPE_OFFSET: usize = 68;
 /// Offset in the one-way counter array for boot1 key revocations. Provisions for up to four
-/// key slots, from [72..=76].
+/// key slots, from [72..=75].
 pub const BOOT1_REVOCATION_DUPE_OFFSET: usize = LOADER_REVOCATION_DUPE_OFFSET + PUBKEY_SLOTS;
 /// Offset in the one-way counter array for boot0 key revocations. Provisions for up to four
 /// key slots, from [76..=80].
@@ -252,7 +252,7 @@ encode_oneway! {
 }
 
 /// Offset in the one-way counter array for loader key revocations. Provisions for up to four
-/// key slots, from [116..=120].
+/// key slots, from [116..=119].
 pub const LOADER_REVOCATION_OFFSET: usize = 116;
 /// Offset in the one-way counter array for boot1 key revocations. Provisions for up to four
 /// key slots, from [120..=123].
