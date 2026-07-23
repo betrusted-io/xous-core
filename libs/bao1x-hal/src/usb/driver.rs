@@ -2873,7 +2873,7 @@ impl UsbBus for CorigineWrapper {
             // disable IRQs
             hw.irq_csr.wo(utralib::utra::irqarray1::EV_ENABLE, 0);
             hw.reset();
-            hw.init();
+            hw.init(None);
             hw.start();
             hw.update_current_speed();
             // IRQ enable must happen without dependency on the hardware lock
