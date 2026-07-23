@@ -1126,7 +1126,7 @@ impl Repl {
             _ => {
                 crate::println!("Command not recognized: {}", cmd);
                 crate::print!(
-                    "Commands include: altboot, audit, boot, boardtype, bootwait, echo, idmode, ifr, localecho, lockdown, paranoid, reset, self_destruct, skipping, uf2, usb_speed"
+                    "Commands include: altboot, audit, boot, boardtype, bootwait, echo, idmode, ifr, localecho, lockdown, paranoid, require-pq, reset, self_destruct, skipping, uf2, usb_speed"
                 );
                 #[cfg(feature = "test-boot0-keys")]
                 crate::print!(", publock");
