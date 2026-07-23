@@ -39,7 +39,7 @@ use crate::secboot::try_boot;
 // - "Towards" - not a release yet, but working towards the stated milestone
 // - Eliminating "Towards" is done at the tag-out point.
 // - The "base" name is the name of the signing key used in the release.
-const RELEASE_DESCRIPTION: &'static str = "0.10.1 bao1";
+const RELEASE_DESCRIPTION: &'static str = "0.10.2 bao1";
 
 static UART_RX: Mutex<RefCell<VecDeque<u8>>> = Mutex::new(RefCell::new(VecDeque::new()));
 #[allow(dead_code)]
