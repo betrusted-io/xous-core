@@ -153,7 +153,7 @@ pub fn validate_image(
         bollard!(die_no_std, 4);
         csprng.as_deref_mut().map(|rng| rng.random_delay());
         if rev_b != 0 {
-            crate::println!("Key at index {} is revoked ({}), skipping", i, rev_a);
+            crate::println!("Key at index {} is revoked ({}), skipping", i, rev_b);
             continue;
         }
         let verifying_key =
@@ -328,7 +328,7 @@ pub fn validate_image(
                 *bao1x_api::pubkeys::KEYSLOT_INITIAL_TAGS[bao1x_api::pubkeys::DEVELOPER_KEY_SLOT]; // this will trigger an erase if the copy-update is glitched over
             if let Some((out, pq_tag_inner)) = pq_checks(mask, &configuration, spim, &mut csprng) {
                 let (mr, er) = (out.masked_root(), out.expected_root());
-                if mr.len() != er.len() {
+                if mr.len() == 0 || er.len() == 0 || (mr.len() != er.len()) {
                     // this is a hard error
                     die_no_std();
                 }
@@ -336,6 +336,7 @@ pub fn validate_image(
                 pq_tag.copy_from_slice(&pq_tag_inner);
                 bollard!(die_no_std, 4);
                 let mut matched: usize = 0;
+                assert!(mr.len() < 32, "corrupt mr.len()"); // catch shift overflow if mr.len() is corrupted
                 for i in 0..mr.len() {
                     bollard!(die_no_std, 4);
                     let unmask = 0u8.wrapping_sub(((mask >> i) & 1) as u8); // 0x00 or 0xFF
@@ -496,9 +497,7 @@ pub fn pq_checks(
     let owc = OneWayCounter::new();
     bollard!(die_no_std, 4);
 
-    // sha512 costs just about as much as sha256 with hardware acceleration, so we use sha512
-    // TODO: check that with measurements 8.4ms, 19.6ms @ sha512; 7.2ms, 16ms @ sha256
-
+    // hash times: 8.4ms, 19.6ms @ sha512; 7.2ms, 16ms @ sha256
     // iox.set_gpio_pin(IoxPort::PC, 6, IoxValue::High);
     let mut h: Sha256 = Sha256::new();
     bollard!(die_no_std, 4);
@@ -507,7 +506,9 @@ pub fn pq_checks(
         // ASSUME: the SPIM driver has allocated a read buffer that is actually PAGE_SIZE. If the SPIM
         // driver has a smaller buffer, reads get less efficient.
         let end = img_offset as usize + UNSIGNED_LEN + signed_len as usize;
-        assert!(end <= bao1x_api::offsets::baosec::SPI_FLASH_LEN);
+        assert!(
+            end + <Sha2_128_24 as SignatureLen>::SigLen::USIZE <= bao1x_api::offsets::baosec::SPI_FLASH_LEN
+        );
         for offset in ((img_offset as usize + UNSIGNED_LEN)..end).step_by(PAGE_SIZE) {
             let mut buf = [0u8; PAGE_SIZE];
             spim.mem_read(offset as u32, &mut buf, false);
@@ -545,6 +546,12 @@ pub fn pq_checks(
 
     let mut out = None;
     for (i, key) in pk_src.sealed_data.pubkeys_pq.iter().enumerate() {
+        csprng.as_deref_mut().map(|rng| rng.random_delay());
+        bollard!(die_no_std, 4);
+        // don't try the verification if there's no public key in the slot
+        if key.tag == [0u8; 4] {
+            continue;
+        }
         // revocations are hardened by checking duplicate one-way counters. The glitch attack has to
         // succeed twice to use a revoked key.
         let (rev_a, rev_b) = owc
@@ -559,38 +566,33 @@ pub fn pq_checks(
         bollard!(die_no_std, 4);
         csprng.as_deref_mut().map(|rng| rng.random_delay());
         if rev_b != 0 {
-            crate::println!("Key at index {} is revoked ({}), skipping", i, rev_a);
-            continue;
-        }
-        // don't try the verification if there's no public key in the slot
-        if key.pk == [0u8; PUBLIC_KEY_PQ_LENGTH] {
-            crate::println!("Skipping 0-key at {}", i);
+            crate::println!("Key at index {} is revoked ({}), skipping", i, rev_b);
             continue;
         }
         let Ok(vk) = VerifyingKey::<Sha2_128_24>::try_from(key.pk.as_slice()) else { continue };
-        let Ok(sig) = Signature::<Sha2_128_24>::try_from(&pq_sig.signature[..]) else { continue };
+        let Ok(pq_sig) = Signature::<Sha2_128_24>::try_from(&pq_sig.signature[..]) else { continue };
         csprng.as_deref_mut().map(|rng| rng.random_delay());
         bollard!(die_no_std, 4);
-        out = Some((vk.slh_verify_hardened(&[digest], &sig, mask), key.tag.clone()));
+        out = Some((vk.slh_verify_hardened(&[digest], &pq_sig, mask), key.tag.clone()));
         bollard!(die_no_std, 4);
         csprng.as_deref_mut().map(|rng| rng.random_delay());
-        if let Some((out, _pq_tag)) = &out {
+        if let Some((out_inner, _pq_tag)) = &out {
             // this is an advisory-only check if the signature passed. If the signatures match,
             // then we must stop checking the next public keys. If an attacker glitches past this check,
             // and the signature doesn't match, that's fine because it will be caught by the caller.
             bollard!(die_no_std, 4);
-            let (mr, er) = (out.masked_root(), out.expected_root());
+            let (mr, er) = (out_inner.masked_root(), out_inner.expected_root());
             // crate::println!("pq final: {:x?} | {:x?}", mr, er);
             if mr.len() != er.len() {
                 continue;
             }
             let mut matched: usize = 0;
-            for i in 0..mr.len() {
+            for mr_i in 0..mr.len() {
                 // as this check is merely advisory to see if we should check another key, only lightly harden
                 bollard!(die_no_std, 4);
-                let unmask = 0u8.wrapping_sub(((mask >> i) & 1) as u8); // 0x00 or 0xFF
-                let cand = core::hint::black_box(mr[i]) ^ unmask;
-                if cand != er[i] {
+                let unmask = 0u8.wrapping_sub(((mask >> mr_i) & 1) as u8); // 0x00 or 0xFF
+                let cand = core::hint::black_box(mr[mr_i]) ^ unmask;
+                if cand != er[mr_i] {
                     break; // aborts the check, matched will be < mr.len()
                 }
                 matched += 1;
