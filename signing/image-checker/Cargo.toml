@@ -1,0 +1,40 @@
+[package]
+name = "image-checker"
+version = "0.2.0"
+edition = "2021"
+description = "Parse and verify signed Baochip firmware images (Ed25519ph/FIDO2 + SLH-DSA)"
+
+[[bin]]
+name = "image-checker"
+path = "src/main.rs"
+
+[dependencies]
+bytemuck = { version = "1", features = ["derive"] }
+clap = { version = "4", features = ["derive"] }
+hex = "0.4"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Classical side. ed25519-dalek 2.x is pinned to the digest/sha2 0.10 family;
+# `digest` is needed directly for the PrecomputedHash shim used by
+# verify_prehashed.
+digest = "0.10"
+ed25519-dalek = { version = "2", features = ["digest"] }
+sha2 = "0.10"
+
+# Post-quantum side. This is the local SP 800-230 fork of the RustCrypto
+# slh-dsa crate (the published crates.io release does NOT have Sha2_128_24).
+# Point this at wherever the fork lives relative to this crate.
+#
+# It pulls in its own sha2 0.11 / signature 3.x internally; that coexists with
+# the 0.10 / 2.x versions above because they are separate semver majors. Only
+# raw digest bytes cross the boundary, so there is no trait-version mismatch.
+#
+# Default features are what you want here: they are ["alloc", "pkcs8/alloc",
+# "hardened-verify"], none of which pull in rayon or the tree cache. Do not set
+# default-features = false and re-enable only "alloc" -- the crate's SPKI code
+# is gated on "alloc" but needs "pkcs8/alloc" alongside it.
+slh-dsa = { path = "../../bao1x-boot/slh-dsa-bao1x" }
+
+[profile.release]
+opt-level = 3
