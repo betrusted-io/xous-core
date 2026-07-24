@@ -152,6 +152,8 @@ exclude = [
   "planning/",
   # This is for signing images, and requires dependencies that are incompatible with Xous
   "signing/fido-signer",
+  # This is for checking signed images and generating the hashes.txt file
+  "signing/image-checker",
   # Known answer test for bao1x-boot, meant to run on the host to check the soundness of
   # of the slh-dsa library off-line
   "bao1x-boot/slh-dsa-kat",
