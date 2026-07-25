@@ -193,6 +193,7 @@ foreach ($imageSpec in $selectedConfig) {
         # Build the cargo run command
         $cargoCmd = @(
             "cargo", "run", "--",
+            "--strip-pq",
             "--credential-file", "..\credentials\$CredentialFile",
             "--file", "..\..\$imagePath",
             "--function-code", $functionCode
@@ -203,7 +204,7 @@ foreach ($imageSpec in $selectedConfig) {
         Write-Status "Target SSH: $(if ($Local) { '(skipped, --Local mode)' } else { $TARGET })"
 
         # Execute the signing command
-        & cargo run -- --credential-file "..\credentials\$CredentialFile" --file "..\..\$imagePath" --function-code $functionCode 2>&1 | Tee-Object -Variable result
+        & cargo run -- --strip-pq --credential-file "..\credentials\$CredentialFile" --file "..\..\$imagePath" --function-code $functionCode 2>&1 | Tee-Object -Variable result
         # $result = cargo run -- --credential-file "..\credentials\$CredentialFile" --file "..\..\$imagePath" --function-code $functionCode | Tee-Object -Variable result
 
         if ($LASTEXITCODE -eq 0) {
