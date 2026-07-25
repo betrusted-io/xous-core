@@ -2,8 +2,12 @@ extern crate alloc;
 use alloc::string::String;
 use alloc::vec::Vec;
 
+use bao1x_api::PQ_REVOCATION_DUPE_DISTANCE;
+use bao1x_api::REQUIRE_PQ;
+use bao1x_api::REQUIRE_PQ_DUPE;
 use bao1x_api::REVOCATION_DUPE_DISTANCE;
 use bao1x_api::bollard;
+use bao1x_api::classic_to_pq_revocation;
 use bao1x_api::pubkeys::DEVELOPER_KEY_SLOT;
 use bao1x_api::pubkeys::SecurityConfiguration;
 use bao1x_api::signatures::*;
@@ -13,6 +17,7 @@ use digest::Digest;
 use sha2_bao1x::{Sha256, Sha512};
 use xous::arch::PAGE_SIZE;
 
+use crate::ERASE_VALUE;
 use crate::acram::OneWayCounter;
 #[cfg(not(feature = "std"))]
 use crate::acram::{AccessSettings, SlotManager};
@@ -20,11 +25,6 @@ use crate::acram::{AccessSettings, SlotManager};
 use crate::buram::{BackupManager, ERASURE_PROOF_RANGE_BYTES};
 use crate::hardening::Csprng;
 use crate::udma::Spim;
-
-// An erase value of 0 can be conflated with access permissions being incorrect. Choose a non-0 value
-// for the erase value, but also, don't pick a 0-1-0-1 dense pattern because that can assist with
-// calibrating microscopy techniques.
-pub const ERASE_VALUE: u8 = 0x03;
 
 /// Current draw @ 200MHz CPU ACLK (400MHz FCLK), VDD85 = 0.80V nom (measured @0.797V): ~71mA peak @ 27C,
 /// measured on VDD33 (LDO path places strict upper bounds on IDD85). Target: < 100mA under all PVT.
@@ -55,12 +55,15 @@ pub const ERASE_VALUE: u8 = 0x03;
 ///
 /// `csprng`, when Some, allows the image validator to insert random delays to harden against glitch attacks
 ///
-/// Returns either Ok(key_index, !key_index, tag, jump_target) or Err
+/// Returns either Ok(key_index, !key_index, tag, jump_target, pq_advisory) or Err
 ///   - `key_index` is returned twice, once as the compliment of itself, to harden the return value and to
 ///     facilitate hardened logic based on the return values.
 ///   - `tag` is an informative field, mostly, but can also be used to help with security checks as it should
 ///     be correlated to the `key_index` value.
 ///   - `jump_target` is the location to jump to, XOR'd with `tag` as a u32::le_bytes()
+///   - `pq_advisory` is an unhardened advisory value if a valid pq signature was found or not (`true` means
+///     it was found). The actual go/no-go decision is made inside the hardened loop, this value is provided
+///     for diagnostic & debug purposes only.
 ///
 /// The purpose the XOR of `jump_target` with `tag` is to prevent the compiler from simply statically
 /// inferring a jump address, which becomes an ideal glitch target. The XOR itself doesn't provide
@@ -70,7 +73,7 @@ pub fn validate_image(
     configuration: SecurityConfiguration,
     mut spim: Option<&mut Spim>,
     mut csprng: Option<&mut Csprng>,
-) -> Result<(usize, usize, [u8; 4], u32), String> {
+) -> Result<(usize, usize, [u8; 4], u32, Option<[u8; 4]>), String> {
     // Unpack the arguments
     let img_offset: *const u32 = configuration.image_ptr;
     let pubkeys_offset: *const u32 = configuration.pubkey_ptr;
@@ -105,13 +108,13 @@ pub fn validate_image(
         return Err(String::from("Invalid magic number on incoming record to be verified"));
     }
     bollard!(die_no_std, 4);
-    if sig.sealed_data.version != BAOCHIP_SIG_VERSION {
+    if !sig.is_compatible() {
         crate::println!(
-            "Version {:x} sig found, should be {:x}",
-            sig.sealed_data.version,
+            "Version {:x} sig is too new for {:x}",
+            sig.sealed_data.corrected_version,
             BAOCHIP_SIG_VERSION
         );
-        return Err(String::from("invalid sigblock version"));
+        return Err(String::from("incompatible sigblock version"));
     }
 
     // checking the function code prevents exploiting code meant for other partitions signed
@@ -150,7 +153,7 @@ pub fn validate_image(
         bollard!(die_no_std, 4);
         csprng.as_deref_mut().map(|rng| rng.random_delay());
         if rev_b != 0 {
-            crate::println!("Key at index {} is revoked ({}), skipping", i, rev_a);
+            crate::println!("Key at index {} is revoked ({}), skipping", i, rev_b);
             continue;
         }
         let verifying_key =
@@ -299,14 +302,138 @@ pub fn validate_image(
                 _ => return Err(String::from("Invalid anti-rollback code, aborting")),
             }
 
+            // default to a hard-wired mask if for some reason we're called with no csprng. The primary
+            // purpose of the mask is to force the Rust compiler to not optimize out the equality
+            // check of the PQ signature result, by causing the mask to be XOR'd into the values deep inside
+            // the API call.
+            let mask = csprng.as_deref_mut().map(|rng| rng.get_u32()).unwrap_or(0x5A5A_A5A5);
+
+            let (pq_required_a, pq_required_b) =
+                one_way_counters.hardened_get2(REQUIRE_PQ, REQUIRE_PQ_DUPE).expect("internal error");
+            let req_a = core::hint::black_box(pq_required_a);
+            let req_b = core::hint::black_box(pq_required_b);
+
+            // ---- normalise the PQ result into a redundant verdict pair ----
+            // far-apart complementary constants: one bit-flip can't turn NOMATCH into MATCH,
+            // and the two words must always agree.
+            const PQ_MATCH: u32 = 0x3C5A_A53C;
+            const PQ_NOMATCH: u32 = 0xC3A5_3C0F;
+            let mut verdict = PQ_NOMATCH;
+            let mut verdict_dup = PQ_NOMATCH;
+
+            // insert PQ check after ed25519 checks have passed
             bollard!(die_no_std, 4);
-            // key is defined as !key2, so they should never have the same value. Confirm that invariant here.
+            csprng.as_deref_mut().map(|rng| rng.random_delay());
+            let mut pq_tag: [u8; 4] =
+                *bao1x_api::pubkeys::KEYSLOT_INITIAL_TAGS[bao1x_api::pubkeys::DEVELOPER_KEY_SLOT]; // this will trigger an erase if the copy-update is glitched over
+            if let Some((out, pq_tag_inner)) = pq_checks(mask, &configuration, spim, &mut csprng) {
+                let (mr, er) = (out.masked_root(), out.expected_root());
+                if mr.len() == 0 || er.len() == 0 || (mr.len() != er.len()) {
+                    // this is a hard error
+                    die_no_std();
+                }
+                csprng.as_deref_mut().map(|rng| rng.random_delay());
+                pq_tag.copy_from_slice(&pq_tag_inner);
+                bollard!(die_no_std, 4);
+                let mut matched: usize = 0;
+                assert!(mr.len() < 32, "corrupt mr.len()"); // catch shift overflow if mr.len() is corrupted
+                for i in 0..mr.len() {
+                    bollard!(die_no_std, 4);
+                    let unmask = 0u8.wrapping_sub(((mask >> i) & 1) as u8); // 0x00 or 0xFF
+                    let cand = core::hint::black_box(mr[i]) ^ unmask;
+                    csprng.as_deref_mut().map(|rng| rng.random_delay());
+                    if cand != er[i] {
+                        break;
+                    } // independent per-byte branch
+                    matched += 1;
+                }
+                csprng.as_deref_mut().map(|rng| rng.random_delay());
+
+                if matched == mr.len() {
+                    bollard!(die_no_std, 4);
+                    // verdict is set here, spatially distant from verdict_dup, so that a single
+                    // glitch doesn't give us an easy win to set both
+                    verdict = PQ_MATCH;
+
+                    // independent recount, separate accumulator, sets the *dup* tracker
+                    let mut recount = 0usize;
+                    // change up the random delay signature
+                    csprng.as_deref_mut().map(|rng| rng.random_delay());
+                    for i in 0..er.len() {
+                        let unmask = 0u8.wrapping_sub(((mask >> i) & 1) as u8);
+                        bollard!(die_no_std, 4);
+                        if (core::hint::black_box(mr[i]) ^ unmask) == er[i] {
+                            recount += 1;
+                        }
+                    }
+                    // the recount must agree before the duplicate value switches
+                    csprng.as_deref_mut().map(|rng| rng.random_delay());
+                    if recount == er.len() {
+                        bollard!(die_no_std, 4);
+                        verdict_dup = PQ_MATCH;
+                    }
+                }
+                // this is a sanity check in case we glitched past the pq_checks() call and into the
+                // decision analysis code path above. It's likely that mr/er registers aren't set up,
+                // but if they "happen" to be 0, it would give a good chance of falsely setting a PQ_MATCH
+                csprng.as_deref_mut().map(|rng| rng.random_delay());
+                if mr.len() == 0 || er.len() == 0 || (mr.len() != er.len()) {
+                    die_no_std();
+                }
+            }
+
+            // ---- single flattened decision ----
+            bollard!(die_no_std, 4);
+            if verdict != verdict_dup {
+                die_no_std();
+            } // trackers must agree
+            csprng.as_deref_mut().map(|rng| rng.random_delay());
+            if verdict ^ verdict_dup != 0 {
+                die_no_std();
+            } // ...same test, different form
+
+            let pq_matched = verdict == PQ_MATCH && verdict_dup == PQ_MATCH;
+            let pq_unmatched = verdict == PQ_NOMATCH && verdict_dup == PQ_NOMATCH;
+            csprng.as_deref_mut().map(|rng| rng.random_delay());
+            if pq_matched == pq_unmatched {
+                die_no_std();
+            } // exactly one must hold
+
+            // two independent votes, one per counter — neither nests the other, both
+            // always evaluated (bitwise ops, no short-circuit).
+            bollard!(die_no_std, 4);
+            let ok_a = pq_matched || (req_a == 0);
+            csprng.as_deref_mut().map(|rng| rng.random_delay());
+            bollard!(die_no_std, 4);
+            let ok_b = !pq_unmatched || (req_b == 0);
+            csprng.as_deref_mut().map(|rng| rng.random_delay());
+
+            // default is fail-closed; booting needs BOTH votes to pass
+            if !(ok_a & ok_b) {
+                bollard!(die_no_std, 4);
+                return Err(String::from("PQ required but no valid PQ signature found"));
+            }
+
+            // at this point, in 'honest' code, we either don't require pq, or we have
+            // a valid pq sig, or both. A glitcher would want to glitch past that check above.
+            // So, we re-derive the same condition in negative form before the single success sink:
+            // if the !(ok_a & ok_b) is glitched-past, this statement will cause a die_no_std();
+            bollard!(die_no_std, 4);
+            let required = (req_a != 0) || (req_b != 0);
+            csprng.as_deref_mut().map(|rng| rng.random_delay());
+            if !pq_matched & required {
+                die_no_std();
+            }
+
+            // continue on to return classical signature
+            bollard!(die_no_std, 4);
             assert!(valid_key != valid_key2);
             Ok((
                 valid_key,
                 valid_key2,
                 pk_src.sealed_data.pubkeys[valid_key].tag,
                 (img_offset as u32) ^ u32::from_le_bytes(pk_src.sealed_data.pubkeys[valid_key].tag),
+                if verdict == PQ_MATCH { Some(pq_tag) } else { None },
             ))
         } else {
             Err(String::from("No valid pubkeys found or signature invalid"))
@@ -314,6 +441,175 @@ pub fn validate_image(
     } else {
         Err(String::from("No valid pubkeys found or signature invalid"))
     }
+}
+
+// PQ checks take +45ms for the system while in conservative speed mode (175MHz - boot0 speed)
+// and +22.8ms with the CPU running at 350MHz
+#[inline(never)]
+pub fn pq_checks(
+    mask: u32,
+    configuration: &SecurityConfiguration,
+    mut spim: Option<&mut Spim>,
+    csprng: &mut Option<&mut Csprng>,
+) -> Option<(slh_dsa::HardenedVerifyOutput<slh_dsa::Sha2_128_24>, [u8; 4])> {
+    use core::convert::TryFrom;
+
+    use slh_dsa::SignatureLen;
+    use slh_dsa::*;
+    use typenum::Unsigned;
+
+    // code for performance profiling with an oscope. Remove once things are stable.
+    // use bao1x_api::*;
+    // use crate::iox::Iox;
+    // let iox = Iox::new(utralib::utra::iox::HW_IOX_BASE as *mut u32);
+    // iox.set_gpio_dir(IoxPort::PC, 6, IoxDir::Output);
+    // iox.set_gpio_pin(IoxPort::PC, 6, IoxValue::Low);
+
+    csprng.as_deref_mut().map(|rng| rng.random_delay());
+    // Unpack the arguments
+    let img_offset: *const u32 = configuration.image_ptr;
+    let pubkeys_offset: *const u32 = configuration.pubkey_ptr;
+    let revocation_offset: usize =
+        classic_to_pq_revocation(configuration.revocation_owc).expect("bad revocation offset");
+
+    // ASSUME: all version checks, function code checks, etc. are correct and finished.
+    // we don't reproduce them here because we're running out of code space!
+
+    // Copy the signature into a structure so we can unpack it.
+    let mut sig = SignatureInFlash::default();
+    if let Some(ref mut spim) = spim {
+        spim.mem_read(img_offset as u32, sig.as_mut(), false);
+    } else {
+        // safety: `u8` can represent all values within the pointer.
+        let sig_slice =
+            unsafe { core::slice::from_raw_parts(img_offset as *const u8, size_of::<SignatureInFlash>()) };
+        sig.as_mut().copy_from_slice(sig_slice);
+    };
+
+    bollard!(die_no_std, 4);
+    let pubkey_ptr = pubkeys_offset as *const SignatureInFlash;
+    let pk_src: &SignatureInFlash = unsafe { pubkey_ptr.as_ref().unwrap() };
+    if pk_src.sealed_data.magic != MAGIC_NUMBER {
+        die_no_std();
+    }
+    let signed_len = sig.sealed_data.signed_len;
+
+    let owc = OneWayCounter::new();
+    bollard!(die_no_std, 4);
+
+    // hash times: 8.4ms, 19.6ms @ sha512; 7.2ms, 16ms @ sha256
+    // iox.set_gpio_pin(IoxPort::PC, 6, IoxValue::High);
+    let mut h: Sha256 = Sha256::new();
+    bollard!(die_no_std, 4);
+    let pq_sig = if let Some(ref mut spim) = spim {
+        // need to read the data out page by page and hash it.
+        // ASSUME: the SPIM driver has allocated a read buffer that is actually PAGE_SIZE. If the SPIM
+        // driver has a smaller buffer, reads get less efficient.
+        let end = img_offset as usize + UNSIGNED_LEN + signed_len as usize;
+        assert!(
+            end + <Sha2_128_24 as SignatureLen>::SigLen::USIZE <= bao1x_api::offsets::baosec::SPI_FLASH_LEN
+        );
+        for offset in ((img_offset as usize + UNSIGNED_LEN)..end).step_by(PAGE_SIZE) {
+            let mut buf = [0u8; PAGE_SIZE];
+            spim.mem_read(offset as u32, &mut buf, false);
+            let valid_length = if offset + PAGE_SIZE < end { PAGE_SIZE } else { end - offset };
+            h.update(&buf[..valid_length]);
+        }
+        // extract sig_data which should be appended directly to the end of the image in FLASH.
+        let mut sig_data = [0u8; <Sha2_128_24 as SignatureLen>::SigLen::USIZE];
+        spim.mem_read(end as u32, &mut sig_data, false);
+        &SignaturePqInFlash { signature: sig_data }
+    } else {
+        // sanity check the purported length of the image. It can't be any bigger than the available
+        // storage in RRAM.
+        assert!(
+            (signed_len as usize)
+                <= bao1x_api::RRAM_STORAGE_LEN
+                    - ((img_offset as usize - utralib::HW_RERAM_MEM) + UNSIGNED_LEN)
+        );
+        let image: &[u8] = unsafe {
+            core::slice::from_raw_parts(
+                (img_offset as usize + UNSIGNED_LEN) as *const u8,
+                signed_len as usize,
+            )
+        };
+        h.update(&image);
+
+        // safety:
+        //  - img_offset points to a "real" image on disk
+        //  - we are retrieving an XIP image
+        unsafe { sig.pq_signature(img_offset as usize) }
+    };
+    let digest_binding = h.finalize();
+    let digest = digest_binding.as_slice();
+    csprng.as_deref_mut().map(|rng| rng.random_delay());
+
+    let mut out = None;
+    for (i, key) in pk_src.sealed_data.pubkeys_pq.iter().enumerate() {
+        csprng.as_deref_mut().map(|rng| rng.random_delay());
+        bollard!(die_no_std, 4);
+        // don't try the verification if there's no public key in the slot
+        if key.tag == [0u8; 4] {
+            continue;
+        }
+        // revocations are hardened by checking duplicate one-way counters. The glitch attack has to
+        // succeed twice to use a revoked key.
+        let (rev_a, rev_b) = owc
+            .hardened_get2(revocation_offset + i, revocation_offset + i - PQ_REVOCATION_DUPE_DISTANCE)
+            .expect("internal error");
+        bollard!(die_no_std, 4);
+        csprng.as_deref_mut().map(|rng| rng.random_delay());
+        if rev_a != 0 {
+            crate::println!("Key at index {} is revoked ({}), skipping", i, rev_a);
+            continue;
+        }
+        bollard!(die_no_std, 4);
+        csprng.as_deref_mut().map(|rng| rng.random_delay());
+        if rev_b != 0 {
+            crate::println!("Key at index {} is revoked ({}), skipping", i, rev_b);
+            continue;
+        }
+        let Ok(vk) = VerifyingKey::<Sha2_128_24>::try_from(key.pk.as_slice()) else { continue };
+        let Ok(pq_sig) = Signature::<Sha2_128_24>::try_from(&pq_sig.signature[..]) else { continue };
+        csprng.as_deref_mut().map(|rng| rng.random_delay());
+        bollard!(die_no_std, 4);
+        out = Some((vk.slh_verify_hardened(&[digest], &pq_sig, mask), key.tag.clone()));
+        bollard!(die_no_std, 4);
+        csprng.as_deref_mut().map(|rng| rng.random_delay());
+        if let Some((out_inner, _pq_tag)) = &out {
+            // this is an advisory-only check if the signature passed. If the signatures match,
+            // then we must stop checking the next public keys. If an attacker glitches past this check,
+            // and the signature doesn't match, that's fine because it will be caught by the caller.
+            bollard!(die_no_std, 4);
+            let (mr, er) = (out_inner.masked_root(), out_inner.expected_root());
+            // crate::println!("pq final: {:x?} | {:x?}", mr, er);
+            if mr.len() != er.len() {
+                continue;
+            }
+            let mut matched: usize = 0;
+            for mr_i in 0..mr.len() {
+                // as this check is merely advisory to see if we should check another key, only lightly harden
+                bollard!(die_no_std, 4);
+                let unmask = 0u8.wrapping_sub(((mask >> mr_i) & 1) as u8); // 0x00 or 0xFF
+                let cand = core::hint::black_box(mr[mr_i]) ^ unmask;
+                if cand != er[mr_i] {
+                    break; // aborts the check, matched will be < mr.len()
+                }
+                matched += 1;
+            }
+            if matched != mr.len() {
+                continue; // try next key
+            }
+            // if we got here, the signature is a match - pass the key back for further checks
+            break;
+        }
+    }
+    bollard!(die_no_std, 4);
+    // iox.set_gpio_pin(IoxPort::PC, 6, IoxValue::Low);
+
+    // the return value will either be None - no matches found; or Some(possibly matching key) or
+    // Some(possibly not matching key). The comparison work shall be done up top.
+    out
 }
 
 #[cfg(feature = "std")]
@@ -488,6 +784,7 @@ pub fn hardened_erase_policy(
     key_inv: usize,
     tag: [u8; 4],
     csprng: &mut Csprng,
+    pq_tag: Option<[u8; 4]>,
 ) -> Result<(), String> {
     if key == DEVELOPER_KEY_SLOT {
         // this is a common case - if we're not under attack, and we're in developer mode,
@@ -497,7 +794,12 @@ pub fn hardened_erase_policy(
     bollard!(die_no_std, 4);
     csprng.random_delay();
     // if the tag is the developer tag, erase the keys.
-    if &tag == b"dev " {
+    if &tag == bao1x_api::pubkeys::KEYSLOT_INITIAL_TAGS[bao1x_api::pubkeys::DEVELOPER_KEY_SLOT] {
+        erase_secrets(&mut Some(csprng))?;
+    }
+    bollard!(die_no_std, 4);
+    csprng.random_delay();
+    if pq_tag == Some(*bao1x_api::pubkeys::KEYSLOT_INITIAL_TAGS[bao1x_api::pubkeys::DEVELOPER_KEY_SLOT]) {
         erase_secrets(&mut Some(csprng))?;
     }
     bollard!(die_no_std, 4);

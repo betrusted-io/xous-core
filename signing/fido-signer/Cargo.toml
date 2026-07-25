@@ -1,5 +1,5 @@
 [package]
-name = "auth-sign-test"
+name = "fido-signer"
 version = "0.1.0"
 edition = "2021"
 
@@ -16,6 +16,10 @@ bao1x-api = { path = "../../libs/bao1x-api" }
 sha2 = "0.10.9"
 digest = "0.10"
 byteorder = "1.2"
+slh-dsa = { path = "../../bao1x-boot/slh-dsa-bao1x", features = [
+    "tree-cache",
+    "parallel",
+] }
 
 # For Windows USB support
 [target.'cfg(windows)'.dependencies]

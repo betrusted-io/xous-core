@@ -138,6 +138,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     if !kernel_key.is_empty() {
         builder.kernel_key_file(kernel_key[0].to_string());
     }
+    let pq_key = get_flag("--pq-key")?;
+    if !pq_key.is_empty() {
+        builder.pq_key_file(pq_key[0].to_string());
+        builder.pq_cache_file(None); // this has to be switched off, in case no pq-cache is specified
+    }
+    let pq_cache = get_flag("--pq-cache")?;
+    if !pq_cache.is_empty() {
+        builder.pq_cache_file(Some(pq_cache[0].to_string()));
+    }
+    if env::args().filter(|x| x == "--no-pq").count() != 0 {
+        builder.skip_pq(true);
+    }
+
     let swap_key = get_flag("--swap")?;
     if swap_key.len() != 0 {
         let swap_parts: Vec<&str> = swap_key[0].split(':').collect();
@@ -979,6 +992,9 @@ be merged in with explicit app/service treatment with the following flags:
 [--git-describe version] Force a git describe version string (e.g., 'v0.10.0-19-g0d934e1') instead of running `git describe --long`. For build systems that lack git state.
                          Note: there is no sanity checking on the passed version. If it's specified incorrectly, subtle, weird things could happen.
 [--git-rev commit]       Force a git commit hash (e.g., '0d934e1...') for swap image nonce. Required with --git-describe for reproducible builds.
+[--no-pq]                Force PQ signing to be off (defaults to dev PQ key otherwise)
+[--pq-key <keyfile>]     Use this PQ key file instead of the dev key. Ignored if --no-pq specified.
+[--pq-cache <cache>]     Use this PQ cache file. If provided and valid, speeds up the PQ signing operation.
 
 - An 'app' must be enumerated in apps/manifest.json.
    A pre-processor configures the launch menu based on the list of specified apps.

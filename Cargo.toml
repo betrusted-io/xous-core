@@ -128,6 +128,8 @@ members = [
   "apps-dabao/dabao-console",
   "services/swaptest1",
   "services/swaptest2",
+  "apps-dabao/bio-stream",
+  "bao1x-boot/slh-dsa-bao1x",
 ]
 resolver = "2"
 
@@ -149,7 +151,15 @@ exclude = [
   # This directory is dedicated to out-of-tree tests and examples
   "planning/",
   # This is for signing images, and requires dependencies that are incompatible with Xous
-  "signing/fido-signer"
+  "signing/fido-signer",
+  # This is for checking signed images and generating the hashes.txt file
+  "signing/image-checker",
+  # Known answer test for bao1x-boot, meant to run on the host to check the soundness of
+  # of the slh-dsa library off-line
+  "bao1x-boot/slh-dsa-kat",
+  # One-way counter map checks - stand-alone tests that run on the host which check that
+  # the constant maps are sane
+  "libs/owc-checks"
 ]
 
 [profile.release]

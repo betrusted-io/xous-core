@@ -1,0 +1,13 @@
+[package]
+name = "owc-check"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "Host-side diagnostics for the bao1x one-way counter slot map"
+
+[dependencies]
+bao1x-api = { path = "../bao1x-api" }
+
+[[bin]]
+name = "owc-check"
+path = "src/main.rs"

@@ -63,6 +63,14 @@ pub mod sram_trim;
 #[cfg(not(feature = "hosted-baosec"))]
 pub mod wdt;
 
+// The erase value used to live in the `hardening` module, but it's pulled out to the top level so we don't
+// have to pull in all the module dependencies just to check that values are actually erased.
+//
+// An erase value of 0 can be conflated with access permissions being incorrect. Choose a non-0 value
+// for the erase value, but also, don't pick a 0-1-0-1 dense pattern because that can assist with
+// calibrating microscopy techniques.
+pub const ERASE_VALUE: u8 = 0x03;
+
 #[inline(always)]
 pub fn cache_flush() {
     unsafe {
