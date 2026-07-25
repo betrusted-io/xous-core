@@ -349,6 +349,48 @@ fn main() -> ! {
     .ok();
     vault_ui.refresh_draw_list();
 
+    {
+        // check/trigger swap encryption before starting the main loop
+        let xns = xous_names::XousNames::new().unwrap();
+        let keystore = keystore::Keystore::new(&xns);
+        const THROW_AWAY_SERVER: &'static str = "_use once server_";
+        const THROW_AWAY_OP: usize = 42;
+        // idle forever, maybe turn this into a full blocking server that just parks and ends
+        let status_server = xns.register_name(THROW_AWAY_SERVER, None).unwrap();
+
+        std::thread::sleep(std::time::Duration::from_millis(200)); // settle the system a little bit out of sheer paranoia
+
+        let rand = xous::create_server_id().unwrap().to_array();
+        let token = [rand[0], rand[1], rand[2]];
+        keystore.ensure_swap_encryption(THROW_AWAY_SERVER, THROW_AWAY_OP, token).unwrap();
+        let modals = modals::Modals::new(&xns).unwrap();
+        let mut in_progress = false;
+        let mut msg_opt = None;
+        loop {
+            xous::reply_and_receive_next(status_server, &mut msg_opt).unwrap();
+            let msg = msg_opt.as_mut().unwrap();
+            if msg.body.id() == THROW_AWAY_OP {
+                if let Some(scalar) = msg.body.scalar_message() {
+                    if token == [scalar.arg2 as u32, scalar.arg3 as u32, scalar.arg4 as u32] {
+                        let progress = scalar.arg1 as u32;
+                        if progress == 100 {
+                            break;
+                        }
+                        if !in_progress {
+                            modals.start_progress("Encrypting apps...", progress, 100, 0).ok();
+                            in_progress = true;
+                        } else {
+                            modals.update_progress(progress).ok();
+                        }
+                    }
+                }
+            }
+        }
+        if in_progress {
+            modals.finish_progress().ok();
+        }
+    }
+
     // kickstart the pumper
     xous::send_message(pump_conn, xous::Message::new_scalar(PumpOp::Pump.to_usize().unwrap(), 0, 0, 0, 0))
         .expect("couldn't start the pumper");
