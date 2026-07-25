@@ -859,7 +859,11 @@ impl Repl {
                 // and should report as all 0's.
                 let ifr = unsafe { core::slice::from_raw_parts(0x6040_0000 as *const u8, 0x400) };
                 for (i, chunk) in ifr.chunks(32).enumerate() {
+                    // these "redundant" asserts make it harder to abuse this print as a memory dumping
+                    // primitive, e.g. by glitching or other similar attack
+                    assert!(ifr.as_ptr() as usize == 0x6040_0000);
                     crate::println!("  {:03x}: {:02x?}", i * 32, chunk);
+                    assert!(i < 32);
                 }
             }
             #[cfg(feature = "test-boot0-keys")]
