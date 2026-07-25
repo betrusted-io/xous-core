@@ -1,5 +1,5 @@
 use super::*;
-use crate::signatures::Pubkey;
+use crate::signatures::{Pubkey, PubkeyPq};
 
 /// Developer public key. The private key is the devkey/ directory, included here for your
 /// convenience: "MC4CAQAwBQYDK2VwBCIEIKindlyNoteThisIsADevKeyDontUseForProduction" (base64)
@@ -9,3 +9,11 @@ pub const PUB: [u8; 32] = [
 ];
 
 pub const PUBKEY: Pubkey = Pubkey { pk: PUB, tag: *KEYSLOT_INITIAL_TAGS[DEVELOPER_KEY_SLOT] };
+
+pub const SLH_DSA_PUB: [u8; 32] = [
+    0xD7, 0xA6, 0x8F, 0xCD, 0xC5, 0xC4, 0x78, 0xF1, 0x95, 0xD6, 0x52, 0x37, 0x08, 0xF9, 0xC9, 0xA5, 0x5E,
+    0xE4, 0xC9, 0x05, 0x37, 0x49, 0x2D, 0xCE, 0x2F, 0x8B, 0xAC, 0x8D, 0x61, 0x83, 0x99, 0x28,
+];
+
+pub const SLH_DSA_PUBKEY: PubkeyPq =
+    PubkeyPq { pk: SLH_DSA_PUB, tag: *KEYSLOT_INITIAL_TAGS[DEVELOPER_KEY_SLOT] };
