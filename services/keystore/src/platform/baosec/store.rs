@@ -1,10 +1,12 @@
 use aes::Aes256;
 use aes::cipher::{BlockDecrypt, BlockEncrypt, KeyInit, generic_array::GenericArray};
+use aes_gcm_siv::{AeadInPlace, Aes256GcmSiv, Nonce, Tag};
 use bao1x_api::{
     BOOT0_PUBKEY_FAIL, BoardTypeCoding, BootWaitCoding, CP_ID, DEVELOPER_MODE, OEM_MODE,
-    SLOT_ELEMENT_LEN_BYTES, UUID,
+    SLOT_ELEMENT_LEN_BYTES, UUID, signatures::SWAP_VERSION, signatures::SwapSourceHeader,
 };
-use bao1x_hal::board::{BOOKEND_END, BOOKEND_START};
+use bao1x_hal::board::{BOOKEND_END, BOOKEND_START, SWAP_KEY};
+use bao1x_hal::udma::FLASH_SECTOR_LEN;
 use bao1x_hal::{
     acram::{OneWayCounter, SlotManager},
     board::{CHAFF_KEYS, COLLATERAL, NUISANCE_KEYS_0, NUISANCE_KEYS_1, ROOT_SEED, THE_FLAG_1},
@@ -14,6 +16,7 @@ use hkdf::Hkdf;
 use keystore_api::KeyWrapper;
 use rand::prelude::*;
 use sha2::Sha256;
+use xous::MemoryRange;
 
 use crate::*;
 
@@ -23,6 +26,7 @@ pub struct KeyStore {
     slot_mgr: SlotManager,
     pub owc: OneWayCounter,
     master_key: Option<[u8; KEY_LEN]>,
+    swap_range: MemoryRange,
 }
 
 impl KeyStore {
@@ -32,7 +36,24 @@ impl KeyStore {
         let owc = OneWayCounter::new();
         owc.register_mapping(rram);
 
-        Self { slot_mgr, owc, master_key: None }
+        let swap_range = xous::syscall::map_memory(
+            None,
+            // by requesting the offset into MMAP_VIRT_BASE, we (a) ensure the offset of the virtual
+            // pages maintain a 1:1 correspondence with the offsets in SPI flash and (b)
+            // by simply dereferencing any slices derived from virtual area we get a correct pointer
+            // that we can pass directly into the swapper to update the correct sector of memory.
+            xous::MemoryAddress::new(xous::arch::MMAP_VIRT_BASE),
+            bao1x_hal::board::SWAP_FLASH_RESERVED_LEN as usize,
+            xous::MemoryFlags::R | xous::MemoryFlags::VIRT,
+        )
+        .expect("Couldn't map the swap memory range");
+
+        Self { slot_mgr, owc, master_key: None, swap_range }
+    }
+
+    fn swap_slice(&self) -> &[u8] {
+        // safety: all values are representable in a u8
+        unsafe { self.swap_range.as_slice() }
     }
 
     fn system_init_inner(&mut self, rram: &mut Reram) {
@@ -387,6 +408,34 @@ impl KeyStore {
 
     pub fn is_developer(&self) -> bool { self.owc.get(bao1x_api::DEVELOPER_MODE).unwrap() != 0 }
 
+    #[cfg(not(feature = "legacy-swap-key"))]
+    pub(crate) fn get_swap_key(&self) -> [u8; 32] {
+        self.slot_mgr.read(&SWAP_KEY).expect("couldn't access swap key").try_into().unwrap()
+    }
+
+    #[cfg(feature = "legacy-swap-key")]
+    /// For legacy systems, the key isn't initialized on boot. If it's all 0, assume this is the case
+    /// and generate a fresh key.
+    pub(crate) fn get_swap_key(&self, rram: &mut Reram) -> [u8; 32] {
+        let key_slice = self.slot_mgr.read(&SWAP_KEY).expect("couldn't access swap key");
+        let mut key = [0u8; 32];
+        key.copy_from_slice(&key_slice);
+        if key == [0u8; 32] {
+            let xns = xous_names::XousNames::new().unwrap();
+            let mut trng = bao1x_hal_service::trng::Trng::new(&xns).unwrap();
+            trng.fill_bytes(&mut key);
+            match self.slot_mgr.write(rram, &SWAP_KEY, &key) {
+                Err(e) => {
+                    log::warn!("{:?}: Couldn't initialize the swap key - swap will be insecure!", e);
+                }
+                _ => {}
+            };
+            key
+        } else {
+            key
+        }
+    }
+
     #[cfg(feature = "app-keys")]
     pub fn read_app_key(&self, index: usize) -> Result<[u8; 32], xous::Error> {
         use bao1x_api::common::APPLICATION;
@@ -434,5 +483,134 @@ impl KeyStore {
                 }
             }
         }
+    }
+
+    #[cfg(feature = "swap")]
+    fn get_swap_header(&self) -> Result<SwapSourceHeader, xous::Error> {
+        // safety: swap_range is aligned to 4096-byte boundary and filled with initialized data
+        // ... or so we hope! we have to validate these fields, as they are attacker-controlled.
+        // the alignment is at least true as we control that
+        let ssh: &SwapSourceHeader =
+            unsafe { (self.swap_range.as_ptr() as *const SwapSourceHeader).as_ref().unwrap() };
+
+        if ssh.version != SWAP_VERSION {
+            return Err(xous::Error::VerificationError);
+        }
+        Ok(ssh.clone())
+    }
+
+    /// Implements the encryption check & call. Requires a connection, opcode and token
+    /// so that it can provide regular status updates to a UI layer that is outside of
+    /// this crate.
+    #[cfg(feature = "swap")]
+    pub fn ensure_swap_encryption(
+        &mut self,
+        cid: xous::CID,
+        opcode: u32,
+        token: [u32; 3],
+        key: [u8; 32],
+    ) -> Result<(), xous::Error> {
+        use xous_swapper::FlashPage;
+        use zeroize::Zeroize;
+
+        const REPORT_INTERVAL: usize = 8;
+
+        let ssh = self.get_swap_header()?;
+        assert!(ssh.mac_offset & 0xFFF == 0, "MAC offset has improper alignment");
+        let image_mac_start = ssh.mac_offset as usize + 0x1000;
+        let mut current_mac_offset = image_mac_start;
+
+        let zero_cipher = Aes256GcmSiv::new((&[0u8; 32]).into());
+        let dest_cipher = Aes256GcmSiv::new(&key.into());
+
+        let mut page_buf = FlashPage::new();
+        let mut tags = Vec::<Tag>::new();
+        const MAX_TAGS: usize = FLASH_SECTOR_LEN as usize / size_of::<Tag>();
+
+        let swapper = xous_swapper::Swapper::new().unwrap();
+
+        // swap image starts at 0x1000 and continues until mac_offset.
+        // The offset of 0x1000 is currently a hard-coded constant. It's used in
+        // loader/src/platform/bao1x/swap.rs and also in tools/src/swap_writer.rs
+        for (i, offset) in (0x1000..ssh.mac_offset as usize + 0x1000).step_by(FLASH_SECTOR_LEN).enumerate() {
+            let ciphertext = &self.swap_slice()[offset..offset + FLASH_SECTOR_LEN];
+            page_buf.data.copy_from_slice(ciphertext);
+            let mut nonce = [0u8; size_of::<Nonce>()];
+            nonce[..4].copy_from_slice(&(offset as u32 - 0x1000).to_be_bytes());
+            nonce[4..].copy_from_slice(&ssh.partial_nonce);
+            let mut aad_buf = [0u8; 64];
+            aad_buf[..ssh.aad_len as usize].copy_from_slice(&ssh.aad[..ssh.aad_len as usize]);
+            let aad = &aad_buf[..ssh.aad_len as usize];
+            let tag_loc = image_mac_start + ((offset - 0x1000) / 0x1000) * size_of::<Tag>();
+            let tag = &self.swap_slice()[tag_loc..tag_loc + size_of::<Tag>()];
+            let nonce = Nonce::from_slice(&nonce);
+            // log::info!("aad: {:x?}", &aad);
+            // log::info!("nonce: {:x?}", &nonce);
+            // log::info!("tag: {:x?}", &tag);
+            // log::info!("data: {:x?}...{:x?}", &page_buf.data[..16], &page_buf.data[4080..]);
+            if zero_cipher.decrypt_in_place_detached(nonce, &aad, &mut page_buf.data, tag.into()).is_err() {
+                log::debug!("zero cipher fail");
+                if offset == 0x1000 {
+                    // if we have an error on the first block, it might be that we're already encrypted
+                    if dest_cipher
+                        .decrypt_in_place_detached(nonce, &aad, &mut page_buf.data, tag.into())
+                        .is_ok()
+                    {
+                        // we're already encrypted - nothing to do
+                        return Ok(());
+                    }
+                }
+                log::debug!("didn't succeed fallback verification");
+                // just bail if we can't get the data - even if we're halfway through...
+                return Err(xous::Error::VerificationError);
+            }
+            // now page_buf has our data - let's encrypt to the new key
+            let new_tag = dest_cipher
+                .encrypt_in_place_detached(nonce, &aad, &mut page_buf.data)
+                .expect("couldn't encrypt to new key");
+            tags.push(new_tag);
+
+            // commit the page buf
+            swapper.write_page(offset, &page_buf)?;
+
+            // check and see if we need to commit tags
+            if tags.len() == MAX_TAGS {
+                // we have enough tags to write over a full page of tags - since we are going in linear
+                // order through memory, it's safe to replace a page of tags after we've read and encrypted
+                // the last page of tags.
+                page_buf.data.zeroize();
+                for (tag, chunk) in tags.iter().zip(page_buf.data.chunks_exact_mut(size_of::<Tag>())) {
+                    chunk.copy_from_slice(&tag[..]);
+                }
+                swapper.write_page(current_mac_offset, &page_buf)?;
+                current_mac_offset += FLASH_SECTOR_LEN;
+                tags.clear();
+            }
+
+            // report status to the caller - %age completion. This is a slow operation and users
+            // are impatient.
+            if i % REPORT_INTERVAL == 0 {
+                let percentage = (100 * i) / (ssh.mac_offset as usize / FLASH_SECTOR_LEN);
+                xous::try_send_message(
+                    cid,
+                    xous::Message::new_scalar(
+                        opcode as usize,
+                        percentage,
+                        token[0] as usize,
+                        token[1] as usize,
+                        token[2] as usize,
+                    ),
+                )
+                .ok();
+            }
+        }
+        // the final page may not have filled up the whole tag buffer. clear the remaining tags
+        page_buf.data.zeroize();
+        for (tag, chunk) in tags.iter().zip(page_buf.data.chunks_exact_mut(size_of::<Tag>())) {
+            chunk.copy_from_slice(&tag[..]);
+        }
+        swapper.write_page(current_mac_offset, &page_buf)?;
+
+        Ok(())
     }
 }

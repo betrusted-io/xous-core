@@ -407,6 +407,21 @@ impl Keystore {
             _ => Err(xous::Error::InternalError),
         }
     }
+
+    #[cfg(feature = "swap")]
+    pub fn ensure_swap_encryption(
+        &self,
+        status_server: &str,
+        op: usize,
+        token: [u32; 3],
+    ) -> Result<(), xous::Error> {
+        let call =
+            SwapEncryptCall { status_server: status_server.to_owned(), status_opcode: op as u32, token };
+        let buf = Buffer::into_buf(call).or(Err(xous::Error::InternalError))?;
+        buf.send(self.conn, Opcode::EnsureSwapEncryption.to_u32().unwrap())
+            .or(Err(xous::Error::InternalError))?;
+        Ok(())
+    }
 }
 
 use core::sync::atomic::{AtomicU32, Ordering};
