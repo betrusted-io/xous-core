@@ -1,11 +1,17 @@
 use aes::Aes256;
 use aes::cipher::{BlockDecrypt, BlockEncrypt, KeyInit, generic_array::GenericArray};
+#[cfg(feature = "swap")]
 use aes_gcm_siv::{AeadInPlace, Aes256GcmSiv, Nonce, Tag};
 use bao1x_api::{
     BOOT0_PUBKEY_FAIL, BoardTypeCoding, BootWaitCoding, CP_ID, DEVELOPER_MODE, OEM_MODE,
-    SLOT_ELEMENT_LEN_BYTES, UUID, signatures::SWAP_VERSION, signatures::SwapSourceHeader,
+    SLOT_ELEMENT_LEN_BYTES, UUID,
 };
-use bao1x_hal::board::{BOOKEND_END, BOOKEND_START, SWAP_KEY};
+#[cfg(feature = "swap")]
+use bao1x_api::{signatures::SWAP_VERSION, signatures::SwapSourceHeader};
+#[cfg(feature = "swap")]
+use bao1x_hal::board::SWAP_KEY;
+use bao1x_hal::board::{BOOKEND_END, BOOKEND_START};
+#[cfg(feature = "swap")]
 use bao1x_hal::udma::FLASH_SECTOR_LEN;
 use bao1x_hal::{
     acram::{OneWayCounter, SlotManager},
@@ -16,6 +22,7 @@ use hkdf::Hkdf;
 use keystore_api::KeyWrapper;
 use rand::prelude::*;
 use sha2::Sha256;
+#[cfg(feature = "swap")]
 use xous::MemoryRange;
 
 use crate::*;
@@ -26,6 +33,7 @@ pub struct KeyStore {
     slot_mgr: SlotManager,
     pub owc: OneWayCounter,
     master_key: Option<[u8; KEY_LEN]>,
+    #[cfg(feature = "swap")]
     swap_range: MemoryRange,
 }
 
@@ -36,6 +44,7 @@ impl KeyStore {
         let owc = OneWayCounter::new();
         owc.register_mapping(rram);
 
+        #[cfg(feature = "swap")]
         let swap_range = xous::syscall::map_memory(
             None,
             // by requesting the offset into MMAP_VIRT_BASE, we (a) ensure the offset of the virtual
@@ -48,9 +57,15 @@ impl KeyStore {
         )
         .expect("Couldn't map the swap memory range");
 
-        Self { slot_mgr, owc, master_key: None, swap_range }
+        #[cfg(not(feature = "swap"))]
+        let ret = Self { slot_mgr, owc, master_key: None };
+        #[cfg(feature = "swap")]
+        let ret = Self { slot_mgr, owc, master_key: None, swap_range };
+
+        ret
     }
 
+    #[cfg(feature = "swap")]
     fn swap_slice(&self) -> &[u8] {
         // safety: all values are representable in a u8
         unsafe { self.swap_range.as_slice() }
@@ -408,7 +423,7 @@ impl KeyStore {
 
     pub fn is_developer(&self) -> bool { self.owc.get(bao1x_api::DEVELOPER_MODE).unwrap() != 0 }
 
-    #[cfg(not(feature = "legacy-swap-key"))]
+    #[cfg(all(not(feature = "legacy-swap-key"), feature = "swap"))]
     pub(crate) fn get_swap_key(&self) -> [u8; 32] {
         self.slot_mgr.read(&SWAP_KEY).expect("couldn't access swap key").try_into().unwrap()
     }
