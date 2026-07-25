@@ -368,7 +368,7 @@ version = "0.1.0"
 dependencies = [
  "aes 0.8.4",
  "arbitrary-int",
- "bao1x-api 0.1.2",
+ "bao1x-api 0.1.3",
  "bao1x-emu",
  "bao1x-hal",
  "bao1x-hal-service",
@@ -402,7 +402,7 @@ dependencies = [
 name = "bao-video"
 version = "0.1.0"
 dependencies = [
- "bao1x-api 0.1.2",
+ "bao1x-api 0.1.3",
  "bao1x-emu",
  "bao1x-hal",
  "bao1x-hal-service",
@@ -432,7 +432,7 @@ dependencies = [
 
 [[package]]
 name = "bao1x-api"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "arbitrary-int",
  "bitbybit",
@@ -448,9 +448,9 @@ dependencies = [
 
 [[package]]
 name = "bao1x-api"
-version = "0.1.2"
+version = "0.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a4edc5137cb217d351fe061bbb39e97a31cffe012d10806b0b35f342cb0e4495"
+checksum = "bcda37a833ae6d23551c1e6340b7b2b53803d8e447ad10a4e6b71bd522149b4f"
 dependencies = [
  "arbitrary-int",
  "bitbybit",
@@ -465,7 +465,7 @@ dependencies = [
 name = "bao1x-boot0"
 version = "0.1.0"
 dependencies = [
- "bao1x-api 0.1.2",
+ "bao1x-api 0.1.3",
  "bao1x-hal",
  "critical-section",
  "digest 0.10.7",
@@ -484,7 +484,7 @@ dependencies = [
 name = "bao1x-boot1"
 version = "0.1.0"
 dependencies = [
- "bao1x-api 0.1.2",
+ "bao1x-api 0.1.3",
  "bao1x-hal",
  "base64 0.22.1",
  "critical-section",
@@ -509,7 +509,7 @@ dependencies = [
 name = "bao1x-emu"
 version = "0.1.0"
 dependencies = [
- "bao1x-api 0.1.2",
+ "bao1x-api 0.1.3",
  "log",
  "minifb",
  "num-derive 0.4.2",
@@ -531,7 +531,7 @@ name = "bao1x-hal"
 version = "0.1.0"
 dependencies = [
  "arbitrary-int",
- "bao1x-api 0.1.2",
+ "bao1x-api 0.1.3",
  "bitbybit",
  "bitfield",
  "bitflags 1.3.2",
@@ -563,7 +563,7 @@ name = "bao1x-hal-service"
 version = "0.1.0"
 dependencies = [
  "arbitrary-int",
- "bao1x-api 0.1.2",
+ "bao1x-api 0.1.3",
  "bao1x-hal",
  "bio-lib",
  "bitbybit",
@@ -630,7 +630,7 @@ dependencies = [
 name = "baremetal"
 version = "0.1.0"
 dependencies = [
- "bao1x-api 0.1.2",
+ "bao1x-api 0.1.3",
  "bao1x-hal",
  "base64 0.22.1",
  "critical-section",
@@ -745,7 +745,7 @@ name = "bio-lib"
 version = "0.1.0"
 dependencies = [
  "arbitrary-int",
- "bao1x-api 0.1.2",
+ "bao1x-api 0.1.3",
  "bao1x-hal",
  "bitbybit",
  "log",
@@ -762,7 +762,7 @@ dependencies = [
 name = "bio-stream"
 version = "0.1.0"
 dependencies = [
- "bao1x-api 0.1.2",
+ "bao1x-api 0.1.3",
  "bao1x-hal",
  "bao1x-hal-service",
  "log",
@@ -1908,7 +1908,7 @@ version = "0.1.0"
 dependencies = [
  "aes 0.8.4",
  "arbitrary-int",
- "bao1x-api 0.1.2",
+ "bao1x-api 0.1.3",
  "bao1x-emu",
  "bao1x-hal",
  "bao1x-hal-service",
@@ -3689,7 +3689,7 @@ dependencies = [
  "aes 0.8.4",
  "aes-gcm-siv",
  "aes-kw",
- "bao1x-api 0.1.2",
+ "bao1x-api 0.1.3",
  "bao1x-emu",
  "bao1x-hal",
  "bao1x-hal-service",
@@ -3716,6 +3716,7 @@ dependencies = [
  "xous-api-names",
  "xous-api-ticktimer",
  "xous-ipc 0.10.10 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-swapper",
  "zeroize",
 ]
 
@@ -3887,7 +3888,7 @@ dependencies = [
  "aes-gcm-siv",
  "armv7",
  "atsama5d27",
- "bao1x-api 0.1.2",
+ "bao1x-api 0.1.3",
  "bao1x-hal",
  "com_rs 0.1.0 (git+https://github.com/betrusted-io/com_rs?branch=main)",
  "crc 1.8.1",
@@ -4084,7 +4085,7 @@ dependencies = [
 name = "modals"
 version = "0.1.0"
 dependencies = [
- "bao1x-api 0.1.2",
+ "bao1x-api 0.1.3",
  "bao1x-emu",
  "bao1x-hal-service",
  "bit_field",
@@ -6027,7 +6028,7 @@ dependencies = [
 name = "sha2-bao1x"
 version = "0.10.9"
 dependencies = [
- "bao1x-api 0.1.2",
+ "bao1x-api 0.1.3",
  "digest 0.10.7",
  "utralib 0.1.27",
 ]
@@ -6036,7 +6037,7 @@ dependencies = [
 name = "sha2-bao1x-pq"
 version = "0.11.0"
 dependencies = [
- "bao1x-api 0.1.2",
+ "bao1x-api 0.1.3",
  "digest 0.11.3",
  "utralib 0.1.27",
 ]
@@ -7076,7 +7077,7 @@ dependencies = [
 name = "usb-bao1x"
 version = "0.1.0"
 dependencies = [
- "bao1x-api 0.1.2",
+ "bao1x-api 0.1.3",
  "bao1x-emu",
  "bao1x-hal",
  "bao1x-hal-service",
@@ -7406,7 +7407,7 @@ version = "0.1.0"
 dependencies = [
  "arrayref",
  "backup-vault2",
- "bao1x-api 0.1.2",
+ "bao1x-api 0.1.3",
  "bao1x-emu",
  "bao1x-hal",
  "bao1x-hal-service",
@@ -8167,7 +8168,7 @@ name = "xous-kernel"
 version = "0.9.38"
 dependencies = [
  "armv7",
- "bao1x-api 0.1.2",
+ "bao1x-api 0.1.3",
  "bao1x-hal",
  "bitflags 1.3.2",
  "critical-section",
@@ -8268,7 +8269,7 @@ version = "0.1.0"
 dependencies = [
  "aes 0.8.4",
  "aes-gcm-siv",
- "bao1x-api 0.1.2",
+ "bao1x-api 0.1.3",
  "bao1x-hal",
  "loader",
  "log",
@@ -8286,7 +8287,7 @@ dependencies = [
 name = "xous-ticktimer"
 version = "0.1.32"
 dependencies = [
- "bao1x-api 0.1.2",
+ "bao1x-api 0.1.3",
  "loader",
  "log",
  "num-derive 0.4.2",
@@ -8308,7 +8309,7 @@ name = "xous-tools"
 version = "0.1.3"
 dependencies = [
  "aes-gcm-siv",
- "bao1x-api 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "bao1x-api 0.1.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "base64 0.20.0",
  "bitflags 1.3.2",
  "byteorder",
@@ -8366,7 +8367,7 @@ name = "xtask"
 version = "0.1.0"
 dependencies = [
  "atty",
- "bao1x-api 0.1.2",
+ "bao1x-api 0.1.3",
  "chrono",
  "filetime",
  "lazy_static",
