@@ -6,7 +6,8 @@
 //! tool replaces those signatures in place with production ones. It never
 //! changes the size or layout of the image, so the input and output are
 //! byte-for-byte identical apart from the signature fields (plus the toolchain
-//! hash, if `--baobit-hash` is given).
+//! hash, if `--baobit-hash` is given) - the one exception being `--strip-pq`,
+//! which deliberately reverts an image to the smaller legacy layout.
 //!
 //! The two signatures are independent. Supply `-c` to replace the ed25519
 //! signature, `--pq-key` to replace the SLH-DSA signature, or both to do the
@@ -14,7 +15,8 @@
 //! an air-gapped signing host never has to shuttle intermediate files around.
 //! The ed25519 private key stays on the FIDO2 token; the SLH-DSA private key
 //! lives on the signing host itself (it has to - the tree build is far too slow
-//! to push through a token). At least one of the two must be given.
+//! to push through a token). At least one of `-c`, `--pq-key`, or `--strip-pq`
+//! must be given.
 //!
 //! # Usage
 //!
@@ -32,15 +34,22 @@
 //!       signature is left untouched, so this is a half-signed image until the
 //!       `-c` pass runs.
 //!
+//!   fido-signer -c <cred.json> -f <image.bin> --strip-pq
+//!       Turn a PQ image back into a legacy (pre-PQ) image and re-sign it with
+//!       ed25519. Clears the PQ fields, drops the SLH-DSA tail, and produces a
+//!       smaller file that exercises the pre-PQ verify path on an old bootloader
+//!       and is treated as a plain ed25519 image by a new one.
+//!
 //!   fido-signer -c <cred.json> -m <base64>
 //!       Sign a raw base64 message with the token. Testing aid; requires `-c`,
-//!       and `--pq-key` is not accepted, since there is no image header to patch.
+//!       and `--pq-key` / `--strip-pq` are not accepted, since there is no image
+//!       header to patch.
 //!
 //! Splitting the work across two invocations is safe in either order: the
 //! ed25519 pass writes only the unsigned prefix of the record, and the SLH-DSA
 //! pass writes only the tail past `sealed_data_end()`. Neither is inside the
-//! region the other one signs. `--baobit-hash`, however, is not order-free - see
-//! below.
+//! region the other one signs. `--baobit-hash` and `--strip-pq`, however, both
+//! edit the signed `sealed_data` and so are not order-free - see below.
 //!
 //! Useful flags:
 //!   -b/--baobit-hash <hex20>  Inject the toolchain hash into `sealed_data`
@@ -48,12 +57,35 @@
 //!                             any signature applied before the injection is
 //!                             invalidated by it. Use it on the first pass, or
 //!                             on a single combined pass.
+//!   --strip-pq                Remove the PQ signature fields entirely and drop
+//!                             the SLH-DSA tail, producing a legacy image. Edits
+//!                             the signed region, so it requires a following (or
+//!                             same-run) `-c` pass. Mutually exclusive with
+//!                             `--pq-key`.
 //!   -p/--function-code <code> Override the function code read out of the image.
 //!                             Rarely needed; see below.
 //!   --no-uf2                  Suppress the .uf2 output.
 //!   --pq-force                Sign even if the PQ public key is not listed in
 //!                             the image's own `pubkeys_pq` slots. Only useful
 //!                             for bring-up; such an image will not boot.
+//!
+//! # What --strip-pq clears
+//!
+//! A genuine pre-PQ image ends its meaningful `sealed_data` at `toolchain`;
+//! everything after it is zero-padding from the old generator. `--strip-pq`
+//! reproduces that by zeroing all three of the PQ-era fields:
+//!
+//!   - `pq_enabled`        what makes a modern verifier attempt a PQ check at all;
+//!   - `pubkeys_pq`        the committed PQ public keys;
+//!   - `corrected_version` the marker a modern verifier reads as "legacy record" (a value of 0 selects the
+//!     legacy compatibility path).
+//!
+//! and then truncates the trailing `SignaturePqInFlash`. Clearing
+//! `corrected_version` is what makes this a *legacy* image rather than a
+//! *modern non-PQ* image; drop that one field from the strip if you want the
+//! latter. A pre-PQ bootloader reads none of these three, so it accepts the
+//! result on the strength of the ed25519 signature alone; a modern bootloader
+//! sees a legacy record with no PQ signature and verifies ed25519 only.
 //!
 //! # Function code and the .uf2
 //!
@@ -77,18 +109,20 @@
 //! 1. Locate the signature record and recover the function code from it.
 //! 2. Patch the toolchain hash, if given. It lives inside `sealed_data`, so it must be final before anything
 //!    is hashed.
-//! 3. Run every PQ preflight check - key loads, cache matches the key, the image has `pq_enabled` set, the
+//! 3. Strip the PQ fields, if `--strip-pq`. Also edits `sealed_data` and drops the tail, so it too must
+//!    happen before hashing.
+//! 4. Run every PQ preflight check - key loads, cache matches the key, the image has `pq_enabled` set, the
 //!    image reserves a signature slot of the right size, and the key's public key is one of the four
 //!    committed in the header. All of this happens *before* the token is touched, so a mismatched key never
 //!    costs an operator a wasted user-presence gesture.
-//! 4. ed25519, if `-c`: hash the sealed region, get the assertion (touch the token), patch `signature` /
+//! 5. ed25519, if `-c`: hash the sealed region, get the assertion (touch the token), patch `signature` /
 //!    `aad` / `aad_len`.
-//! 5. SLH-DSA, if `--pq-key`: hash the same region with SHA-256, sign the digest, write the signature at
+//! 6. SLH-DSA, if `--pq-key`: hash the same region with SHA-256, sign the digest, write the signature at
 //!    `sealed_data_end()`. This is the long, unattended step, so it deliberately runs after the operator's
 //!    touch rather than before it.
-//! 6. Read the file back and verify the PQ signature against the public key committed in the image's own
+//! 7. Read the file back and verify the PQ signature against the public key committed in the image's own
 //!    header - the same computation the boot verifier performs.
-//! 7. Emit the .uf2 for the function code from step 1.
+//! 8. Emit the .uf2 for the function code from step 1.
 //!
 //! # What is covered by what
 //!
@@ -96,7 +130,7 @@
 //! for `swap`, whose metadata header precedes the signature block):
 //!
 //!   [0, sealed_data_offset())          jal || ed25519 sig || aad_len || aad.
-//!                                      Unsigned; this is what step 4 patches.
+//!                                      Unsigned; this is what step 5 patches.
 //!   [sealed_data_offset(),             `protected` = sealed_data || zero pad
 //!    sealed_data_end())                || payload. Covered by BOTH signatures.
 //!                                      `sealed_data_end()` is
@@ -193,6 +227,14 @@ struct Args {
     #[arg(short = 'b', long = "baobit-hash", value_name = "HASH")]
     baobit_hash: Option<String>,
 
+    /// Remove the PQ signature fields entirely, producing a legacy (pre-PQ)
+    /// image: clears `corrected_version`, `pq_enabled`, and `pubkeys_pq` in
+    /// `sealed_data` and drops the trailing SLH-DSA signature. Edits the signed
+    /// region, so an ed25519 re-sign (`-c`) must follow (ideally in the same
+    /// run). Mutually exclusive with `--pq-key`.
+    #[arg(long = "strip-pq", conflicts_with_all = ["message", "pq_key"])]
+    strip_pq: bool,
+
     /// SLH-DSA (post-quantum) secret key, raw 4*n bytes as emitted by
     /// `xous-pq-sign-image keygen`. When present, the image's PQ signature is
     /// replaced. May be used with or without `-c`.
@@ -286,17 +328,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Parse command line arguments
     let args = Args::parse();
 
-    // The two signature passes are independent, but doing neither is always a
+    // Each of the three passes is optional, but doing none of them is always a
     // mistake rather than a no-op worth honouring silently.
-    if args.credential_file.is_none() && args.pq_key.is_none() {
+    if args.credential_file.is_none() && args.pq_key.is_none() && !args.strip_pq {
         return Err(String::from(
             "Nothing to do: supply -c <cred.json> to replace the ed25519 signature, \
-             --pq-key <key> to replace the SLH-DSA signature, or both.",
+             --pq-key <key> to replace the SLH-DSA signature, --strip-pq to make a legacy image, \
+             or a combination.",
         )
         .into());
     }
-    // There is no PQ path for a raw message: the PQ signature only exists as a
-    // field inside an image header.
+    // There is no PQ path (add or strip) for a raw message: the PQ fields only
+    // exist inside an image header. clap already excludes --pq-key/--strip-pq
+    // from --message; this covers the remaining -c-less message case.
     if args.message.is_some() && args.credential_file.is_none() {
         return Err(String::from("--message requires -c <cred.json>").into());
     }
@@ -317,12 +361,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     };
 
-    // Injecting the toolchain hash mutates `sealed_data`, which both signatures
-    // cover. Doing that without re-applying ed25519 in the same run leaves the
-    // ed25519 signature stale until a later `-c` pass fixes it.
+    // Both --baobit-hash and --strip-pq mutate `sealed_data`, which the ed25519
+    // signature covers. Doing either without re-applying ed25519 in the same run
+    // leaves that signature stale until a later `-c` pass fixes it.
     if baobit_hash.is_some() && credential.is_none() {
         println!(
             "WARNING: --baobit-hash without -c invalidates the image's existing ed25519 \
+             signature.\n         An ed25519 pass must follow before this image will boot."
+        );
+    }
+    if args.strip_pq && credential.is_none() {
+        println!(
+            "WARNING: --strip-pq without -c invalidates the image's existing ed25519 \
              signature.\n         An ed25519 pass must follow before this image will boot."
         );
     }
@@ -361,11 +411,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             if let Some(toolchain) = baobit_hash {
                 patch_hash_in_file(&file_path, &toolchain, offset)?;
             }
+
+            // strip the PQ fields here, if requested. Like the baobit patch this
+            // edits `sealed_data`, and it also truncates the tail, so it must
+            // land before the sealed region is hashed below.
+            if args.strip_pq {
+                println!("\nStripping PQ fields to produce a legacy image...");
+                strip_pq_from_file(&file_path, offset)?;
+            }
+
             // Re-read the file so we hash the patched contents
             let file = fs::read(&file_path)
                 .map_err(|e| format!("Failed to re-read file '{}': {}", file_path.display(), e))?;
 
-            // Re-parse the header: the toolchain patch above changed `sealed_data`.
+            // Re-parse the header: the patches above changed `sealed_data`.
             let mut sig = SignatureInFlash::default();
             sig.as_mut().copy_from_slice(&file[offset..offset + size_of::<SignatureInFlash>()]);
 
@@ -403,7 +462,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 sealed_end - sealed_start
             );
             println!("  file is {} bytes ({} bytes of tail)", file.len(), file.len() - sealed_end);
-            println!("  pq_enabled: {:#010x}", sig.sealed_data.pq_enabled);
+            println!(
+                "  corrected_version: {:#010x}  pq_enabled: {:#010x}",
+                sig.sealed_data.corrected_version, sig.sealed_data.pq_enabled
+            );
 
             // A `swap` image is the only one whose record is displaced. If the
             // embedded code and the offset the record was found at disagree,
@@ -462,7 +524,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             };
 
             // Everything that can fail about the PQ side is checked here, before
-            // the operator is asked to touch the token.
+            // the operator is asked to touch the token. (--strip-pq and --pq-key
+            // are mutually exclusive, so this never runs on a stripped image.)
             if let Some(ref pq_key_path) = args.pq_key {
                 pq_ctx = Some(pq_preflight(
                     pq_key_path,
@@ -482,12 +545,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 data_to_sign = Some(h.finalize().as_slice().to_vec());
             }
         } else {
-            // Not a bao1x image: there is no header, so no PQ slot to patch and
-            // nothing to do but sign the raw bytes with the token.
+            // Not a bao1x image: there is no header, so no PQ slot to patch, no
+            // PQ fields to strip, and nothing to do but sign the raw bytes.
             if args.pq_key.is_some() {
                 return Err(format!(
                     "'{}' is not a signed bao1x image (no magic number at offset 0 or {}); \
                      there is no PQ signature slot to patch",
+                    file_path.display(),
+                    SWAP_SIG_OFFSET
+                )
+                .into());
+            }
+            if args.strip_pq {
+                return Err(format!(
+                    "'{}' is not a signed bao1x image (no magic number at offset 0 or {}); \
+                     there are no PQ fields to strip",
                     file_path.display(),
                     SWAP_SIG_OFFSET
                 )
@@ -556,7 +628,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             // The function code came from the image unless `-p` overrode it, so
             // the .uf2 is emitted without the operator having to name the
-            // partition.
+            // partition. If --strip-pq truncated the tail, the file is already
+            // shorter here, so the .uf2 excludes the removed signature too.
             if !args.no_uf2 {
                 if let Some(ref function_code) = uf2_function_code {
                     let output = file_path.with_extension("uf2");
@@ -597,6 +670,69 @@ fn sign_ed25519_hash(
         }
         Err(e) => Err(e.try_into().unwrap()),
     }
+}
+
+// ----- legacy conversion (--strip-pq) ---------------------------------------
+
+/// Zero the PQ-era fields inside `sealed_data` and drop the trailing SLH-DSA
+/// signature, turning a PQ image back into a faithful legacy (pre-PQ) image.
+///
+/// Clears `corrected_version`, `pq_enabled`, and `pubkeys_pq` - exactly the
+/// region the pre-PQ generator left as zero-padding - and truncates the
+/// `SignaturePqInFlash` tail. Everything touched is inside the ed25519-signed
+/// region (or changes the file length), so the caller MUST re-apply the ed25519
+/// signature afterwards or the image will not boot.
+///
+/// Returns the number of tail bytes removed.
+fn strip_pq_from_file(file_path: &PathBuf, offset: usize) -> Result<usize, Box<dyn std::error::Error>> {
+    let mut file = OpenOptions::new().read(true).write(true).open(file_path)?;
+    let mut header = read_header_from_file(&mut file, offset)?;
+
+    let was_corrected = header.sealed_data.corrected_version;
+    let was_enabled = header.sealed_data.pq_enabled;
+
+    header.sealed_data.corrected_version = 0;
+    header.sealed_data.pq_enabled = 0;
+    for pk in header.sealed_data.pubkeys_pq.iter_mut() {
+        *pk = Default::default();
+    }
+
+    write_header_to_file(&mut file, &header, offset)?;
+
+    // Drop the PQ signature tail, if present. `sealed_data_end()` is where the
+    // signed region ends and the tail begins; only a lone, correctly-sized PQ
+    // signature is removed - anything else is left alone and flagged, since we
+    // can't tell what it is.
+    let sealed_end = (offset + header.sealed_data_end()) as u64;
+    let file_len = file.seek(SeekFrom::End(0))?;
+    let tail = file_len.saturating_sub(sealed_end);
+
+    let removed = if tail == 0 {
+        0
+    } else if tail as usize == SIGNATURE_PQ_LENGTH {
+        file.set_len(sealed_end)?;
+        SIGNATURE_PQ_LENGTH
+    } else {
+        println!(
+            "  WARNING: {} trailing bytes after the signed region is not a {}-byte PQ signature; \
+             leaving the tail in place",
+            tail, SIGNATURE_PQ_LENGTH
+        );
+        0
+    };
+    file.flush()?;
+
+    println!(
+        "  cleared corrected_version ({:#010x} -> 0), pq_enabled ({:#010x} -> 0), pubkeys_pq",
+        was_corrected, was_enabled
+    );
+    if removed > 0 {
+        println!("  removed {}-byte PQ signature tail (file now {} bytes)", removed, sealed_end);
+    } else {
+        println!("  no PQ signature tail to remove");
+    }
+
+    Ok(removed)
 }
 
 // ----- post-quantum (SLH-DSA) signing ---------------------------------------
