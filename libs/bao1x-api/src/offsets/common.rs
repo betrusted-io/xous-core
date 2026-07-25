@@ -348,7 +348,9 @@ pub const BOOT1_PK_RECEIPT_SLOT3: SlotIndex = SlotIndex::Data(268, PartitionAcce
 pub const BOOT1_RECEIPT_SLOTS: [SlotIndex; 4] =
     [BOOT1_PK_RECEIPT_SLOT0, BOOT1_PK_RECEIPT_SLOT1, BOOT1_PK_RECEIPT_SLOT2, BOOT1_PK_RECEIPT_SLOT3];
 
-// [269..=271] reserved for future use
+// [269..=270] reserved for future use
+
+// 271 is the loader swap key for devices that have swap
 
 // 32 bytes reserved to configure/set up clock scrambling
 pub const CLOCK_SCRAMBLE_PARAMS: SlotIndex = SlotIndex::Data(272, PartitionAccess::Open, RwPerms::ReadWrite);

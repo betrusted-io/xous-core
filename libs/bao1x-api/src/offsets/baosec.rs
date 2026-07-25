@@ -122,16 +122,32 @@ pub const RMA_KEY: SlotIndex = SlotIndex::Data(257, PartitionAccess::Fw0, RwPerm
 /// to developer mode.
 pub const CP_COOKIE: SlotIndex = SlotIndex::Data(258, PartitionAccess::Fw0, RwPerms::ReadWrite);
 
-/// The swap encryption key. Used to protect swap images beyond the signing key, if we so desire.
-pub const SWAP_KEY: SlotIndex = SlotIndex::Data(259, PartitionAccess::Fw0, RwPerms::ReadWrite);
+/// This used to be the swap key, but it is deprecated. It is now marked as simply a reserved
+/// key which can be used for future purposes. Note the PartionAccess::Fw0 permissions on this -
+/// this means it's not accessible outside of the bootloader or key manager, in particular, it
+/// is not accessible in the loader, where the swap key would be needed.
+pub const RESERVED_1: SlotIndex = SlotIndex::Data(259, PartitionAccess::Fw0, RwPerms::ReadWrite);
 
 /// A test value placed by FT into the memory array. If you can read the original value, you've captured a
 /// flag!
 /// There is a second flag stored somewhere else. Can you find it?
 pub const THE_FLAG_1: SlotIndex = SlotIndex::Data(260, PartitionAccess::Fw0, RwPerms::ReadWrite);
 
-// [261..=383] reserved for Baochip data slot usage, see the "common" page for more details
-// NOTE: COLLATERAL is from 261..265, but it is in the "common" page
+// [261..=264] are the COLLATERAL keys (on the common page)
+// [265..=268] are the PK receipt slots
+
+/// The `SWAP` key gets more permissive access on it because it needs to be accessible outside
+/// of the bootloader and keystore - in particular, the loader, which is not trusted to
+/// access the master keys, needs access to this to decrypt the swap partition. This removes
+/// one of the belt and suspenders that protects the swap key - still, in user run mode, the
+/// key is not accessible by virtue of the memory page being mapped exclusively into the
+/// keystore process, so there is still *some* protection on the key.
+pub const SWAP_KEY: SlotIndex = SlotIndex::Data(271, PartitionAccess::Open, RwPerms::ReadWrite);
+
+// 272 are the clock scramble params
+// 273 are the ATE reserved location
+//
+// [274..=383] reserved for Baochip data slot usage, see the "common" page for more details
 
 pub const NUISANCE_KEYS_1: SlotIndex =
     SlotIndex::DataRange(1920..2048, PartitionAccess::Fw0, RwPerms::ReadWrite);

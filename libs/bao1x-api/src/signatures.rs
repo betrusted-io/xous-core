@@ -325,9 +325,13 @@ pub struct SwapDescriptor {
     pub ram_offset: u32,
     pub ram_size: u32,
     pub name: u32,
+    /// This field is deprecated. It is ignored but retained so that the record shape
+    /// remains backward compatible
     pub key: [u8; 32],
     pub flash_offset: u32,
 }
 impl AsRef<[u8]> for SwapDescriptor {
     fn as_ref(&self) -> &[u8] { bytemuck::bytes_of(self) }
 }
+
+pub const SWAP_VERSION: u32 = 0x01_01_0000;
