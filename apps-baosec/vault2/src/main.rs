@@ -349,6 +349,7 @@ fn main() -> ! {
     .ok();
     vault_ui.refresh_draw_list();
 
+    #[cfg(not(feature = "hosted-baosec"))]
     {
         // check/trigger swap encryption before starting the main loop
         let xns = xous_names::XousNames::new().unwrap();
