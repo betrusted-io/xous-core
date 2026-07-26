@@ -1,55 +1,47 @@
-//! Host-side diagnostics for the one-way counter slot map.
+//! Host-side diagnostics for both slot maps in `bao1x-api`: the one-way counter map and the
+//! per-target data slot map. The `const` assertions in the library are what gate the firmware
+//! build; a const panic can only carry a static string, so this binary reads the same `pub`
+//! tables on the host and reports exactly what is wrong. Run it after a build breaks, or in CI.
 //!
-//! The `const` assertions in `bao1x-api` are what actually gate the firmware build. They
-//! run on the cross target with no test harness, but a const panic can only carry a static
-//! string. This binary reads the same `pub` tables on the host and says precisely what is
-//! wrong, so it is the thing you run *after* the build breaks.
+//!     cargo run --bin bao1x-checks
 //!
-//! Exits non-zero on any inconsistency, so it also works as a CI gate.
+//! Exits non-zero on any inconsistency.
 //!
-//! Run with:
-//!     cargo run -p owc-check
-//!
-//! If the workspace `.cargo/config.toml` pins `[build] target = "riscv32imac-..."`, that
-//! applies to every cargo invocation in the tree and this will try to cross-compile a host
-//! binary. Two ways out, pick whichever fits your layout:
-//!   - `cargo run -p owc-check --target x86_64-unknown-linux-gnu`
-//!   - keep `owc-check` out of the workspace (`exclude = ["owc-check"]` in the root Cargo.toml) so it gets
-//!     its own config and builds for the host by default.
-//!
-//! If `bao1x-api` itself will not build for the host (utralib, target-specific deps), the
-//! escape hatch is to skip the dependency and pull the definitions in directly:
-//!
-//!     #[path = "../../bao1x-api/src/owc_slots.rs"]
-//!     mod owc_slots;
-//!     use owc_slots::*;
-//!
-//! which needs the slot file to be free of target-specific imports. That is a good reason
-//! to keep the OWC constants in their own leaf module with no `use` of hardware crates.
+//! Workspace note: if the root `.cargo/config.toml` pins a cross target, either add
+//! `exclude = ["slot-check"]` to the root `Cargo.toml`, or pass `--target <host-triple>`, so
+//! this builds for the host. If `bao1x-api` will not build for the host, pull the slot modules
+//! in by path instead of depending on the crate (see the OWC note we discussed).
 
-use bao1x_api::*;
+use bao1x_api::checks::data_slots::*;
+use bao1x_api::checks::owc::*;
 
 fn main() {
     let mut failures = 0usize;
 
-    failures += report_collisions();
-    print_occupancy();
-    failures += report_dupe_pairs();
-    report_headroom();
+    println!("==== one-way counter map ====");
+    failures += owc_report_collisions();
+    owc_print_occupancy();
+    failures += owc_report_dupe_pairs();
+    owc_report_headroom();
+
+    for m in DATA_MAPS {
+        println!("\n==== data slot map: {} ====", m.name);
+        failures += data_report(m);
+    }
 
     if failures == 0 {
-        println!("\nOK: slot map is consistent.");
+        println!("\nOK: all slot maps consistent.");
     } else {
         eprintln!("\nFAIL: {} problem(s) found.", failures);
         std::process::exit(1);
     }
 }
 
-/// Identify overlapping claims by name, which is the part the const assertion cannot say.
-fn report_collisions() -> usize {
+// ============================ one-way counter map ============================
+
+fn owc_report_collisions() -> usize {
     let mut owner: Vec<Option<(&'static str, usize)>> = vec![None; OWC_TOTAL_SLOTS];
     let mut failures = 0usize;
-
     for c in OWC_MAP {
         if c.count == 0 {
             println!("ZERO-LENGTH claim `{}` at slot {}", c.name, c.first);
@@ -58,37 +50,27 @@ fn report_collisions() -> usize {
         }
         for s in c.first..c.first + c.count {
             if s >= OWC_TOTAL_SLOTS {
-                println!("OUT OF RANGE: `{}` claims slot {} (max {})", c.name, s, OWC_TOTAL_SLOTS - 1);
+                println!("OUT OF RANGE: `{}` claims slot {}", c.name, s);
                 failures += 1;
                 continue;
             }
             match owner[s] {
-                Some((prev, prev_first)) => {
-                    println!(
-                        "COLLISION at slot {}: `{}` (starts {}) and `{}` (starts {})",
-                        s, prev, prev_first, c.name, c.first
-                    );
+                Some((prev, pf)) => {
+                    println!("COLLISION at slot {}: `{}` (@{}) and `{}` (@{})", s, prev, pf, c.name, c.first);
                     failures += 1;
                 }
                 None => owner[s] = Some((c.name, c.first)),
             }
         }
         if c.first + c.count > OWC_BOOT_SLOTS {
-            println!(
-                "SPILL: `{}` [{}..={}] reaches into the user application region (>= {})",
-                c.name,
-                c.first,
-                c.first + c.count - 1,
-                OWC_BOOT_SLOTS
-            );
+            println!("SPILL: `{}` reaches into the user region (>= {})", c.name, OWC_BOOT_SLOTS);
             failures += 1;
         }
     }
     failures
 }
 
-/// Print the boot region as a human-readable map, collapsing contiguous runs.
-fn print_occupancy() {
+fn owc_print_occupancy() {
     let mut owner: Vec<Option<&'static str>> = vec![None; OWC_TOTAL_SLOTS];
     for c in OWC_MAP {
         for s in c.first..(c.first + c.count).min(OWC_TOTAL_SLOTS) {
@@ -97,45 +79,25 @@ fn print_occupancy() {
             }
         }
     }
-
-    println!("\n--- one-way counter occupancy (boot region) ---");
-    let mut s = 0usize;
-    while s < OWC_BOOT_SLOTS {
-        let here = owner[s];
-        let start = s;
-        while s + 1 < OWC_BOOT_SLOTS && owner[s + 1] == here {
-            s += 1;
-        }
-        let label = here.unwrap_or("(free)");
-        if start == s {
-            println!("  {:>3}       {}", start, label);
-        } else {
-            println!("  {:>3}-{:<3}   {}", start, s, label);
-        }
-        s += 1;
-    }
+    println!("\n--- occupancy (boot region) ---");
+    print_runs(&owner, OWC_BOOT_SLOTS);
 }
 
-/// Resolve the duplicate index the way the signature checkers do, for every key slot.
-/// This mirrors `hardened_get2(offset + i, offset + i - DISTANCE)` exactly.
-fn report_dupe_pairs() -> usize {
+fn owc_report_dupe_pairs() -> usize {
     let mut failures = 0usize;
     println!("\n--- revocation duplicate resolution ---");
     for p in OWC_DUPE_PAIRS {
         for i in 0..PUBKEY_SLOTS {
             let primary = p.primary + i;
             if p.distance > primary {
-                println!("  {:<12} key {}: UNDERFLOW ({} - {})", p.name, i, primary, p.distance);
+                println!("  {:<12} key {}: UNDERFLOW", p.name, i);
                 failures += 1;
                 continue;
             }
             let resolved = primary - p.distance;
             let expected = p.dupe + i;
             if resolved != expected {
-                println!(
-                    "  {:<12} key {}: primary {} -> dupe {}, expected {}  <-- WRONG",
-                    p.name, i, primary, resolved, expected
-                );
+                println!("  {:<12} key {}: -> {} expected {}  WRONG", p.name, i, resolved, expected);
                 failures += 1;
             } else {
                 println!("  {:<12} key {}: primary {:>3} -> dupe {:>3}  ok", p.name, i, primary, resolved);
@@ -145,16 +107,13 @@ fn report_dupe_pairs() -> usize {
     failures
 }
 
-/// How many free slots sit above each revocation block before the next claim. Check this
-/// before changing PUBKEY_SLOTS; several blocks currently have zero headroom.
-fn report_headroom() {
+fn owc_report_headroom() {
     let mut claimed = vec![false; OWC_TOTAL_SLOTS];
     for c in OWC_MAP {
         for s in c.first..(c.first + c.count).min(OWC_TOTAL_SLOTS) {
             claimed[s] = true;
         }
     }
-
     println!("\n--- headroom above each revocation block ---");
     for c in OWC_MAP {
         if !c.name.contains("REVOCATION") {
@@ -167,13 +126,105 @@ fn report_headroom() {
             s += 1;
         }
         let flag = if headroom == 0 { "  <-- no room to grow" } else { "" };
-        println!(
-            "  {:<28} [{:>3}..={:<3}] headroom: {}{}",
-            c.name,
-            c.first,
-            c.first + c.count - 1,
-            headroom,
-            flag
-        );
+        println!("  {:<28} headroom: {}{}", c.name, headroom, flag);
+    }
+}
+
+// ============================ data slot map ============================
+
+fn data_report(m: &DataMap) -> usize {
+    let mut owner: Vec<Option<(&'static str, usize)>> = vec![None; MAX_DATA_SLOTS];
+    let mut failures = 0usize;
+
+    // primaries
+    for c in m.common.iter().chain(m.target.iter()) {
+        if !matches!(c.kind, SlotKind::Primary) {
+            continue;
+        }
+        if c.count == 0 {
+            println!("  ZERO-LENGTH `{}` at {}", c.name, c.first);
+            failures += 1;
+            continue;
+        }
+        for s in c.first..c.first + c.count {
+            if s >= MAX_DATA_SLOTS {
+                println!("  OUT OF RANGE `{}` slot {}", c.name, s);
+                failures += 1;
+                continue;
+            }
+            match owner[s] {
+                Some((prev, pf)) => {
+                    println!(
+                        "  PRIMARY COLLISION at {}: `{}` (@{}) and `{}` (@{}) -- if intentional, mark one alias()",
+                        s, prev, pf, c.name, c.first
+                    );
+                    failures += 1;
+                }
+                None => owner[s] = Some((c.name, c.first)),
+            }
+        }
+    }
+
+    // aliases
+    for c in m.common.iter().chain(m.target.iter()) {
+        if !matches!(c.kind, SlotKind::Alias) {
+            continue;
+        }
+        for s in c.first..c.first + c.count {
+            match owner.get(s).copied().flatten() {
+                Some((backing, _)) => {
+                    println!("  alias `{}` slot {} backs into `{}`  ok", c.name, s, backing)
+                }
+                None => {
+                    println!("  UNBACKED alias `{}` slot {}", c.name, s);
+                    failures += 1;
+                }
+            }
+        }
+    }
+
+    // coverage cross-check happens in the library const asserts; here we just show the map
+    let names: Vec<Option<&'static str>> = owner.iter().map(|o| o.map(|(n, _)| n)).collect();
+    println!("  --- {} occupancy ---", m.name);
+    print_runs_indented(&names, MAX_DATA_SLOTS);
+
+    failures
+}
+
+// ============================ shared ============================
+
+fn print_runs(owner: &[Option<&'static str>], upto: usize) {
+    let mut s = 0;
+    while s < upto {
+        let here = owner[s];
+        let start = s;
+        while s + 1 < upto && owner[s + 1] == here {
+            s += 1;
+        }
+        let label = here.unwrap_or("(free)");
+        if start == s {
+            println!("  {:>4}        {}", start, label);
+        } else {
+            println!("  {:>4}-{:<4}   {}", start, s, label);
+        }
+        s += 1;
+    }
+}
+
+fn print_runs_indented(owner: &[Option<&'static str>], upto: usize) {
+    let mut s = 0;
+    while s < upto {
+        let here = owner[s];
+        let start = s;
+        while s + 1 < upto && owner[s + 1] == here {
+            s += 1;
+        }
+        let label = here.unwrap_or("(free)");
+        if start == s {
+            println!("    {:>4}        {}", start, label);
+        } else {
+            println!("    {:>4}-{:<4}   {}", start, s, label);
+        }
+        s += 1;
     }
 }
