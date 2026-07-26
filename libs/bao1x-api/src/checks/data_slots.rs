@@ -146,7 +146,6 @@ pub const COMMON_DATA_CLAIMS: &[DataClaim] = &[
 ];
 
 // ---- baosec-specific claims ----
-// ---- baosec-specific claims ----
 pub const BAOSEC_DATA_CLAIMS: &[DataClaim] = &[
     primary("NUISANCE_KEYS_0", &crate::offsets::baosec::NUISANCE_KEYS_0),
     primary("CHAFF_KEYS", &crate::offsets::baosec::CHAFF_KEYS),

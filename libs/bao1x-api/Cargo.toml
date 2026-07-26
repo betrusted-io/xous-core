@@ -28,6 +28,13 @@ num_enum = { version = "0.5", default-features = false }
 [features]
 # testing flag that causes the PDDB to be small
 key-testing = []
+# When specified, the swap key is erased on transition to developer mode, causing the
+# contents of swap to be lost. This is normally not a helpful situation, especially if the
+# system is fully open source; however, applications that want to try and ship some "proprietary"
+# code in swap could activate this and gain a modicum of confidentiality on that. Note that this
+# is *not* the primary design intent of this key, so this is probably more an inconvenience to
+# a determined hacker than an actual barrier.
+erase-swap-on-dev = []
 
 std = ["derive-rkyv", "xous-names", "xous-ipc"]
 derive-rkyv = ["rkyv"]

@@ -200,5 +200,33 @@ pub const DATA_SLOTS: [SlotIndex; 12] = [
 
 /// In addition to these KEY_SLOTS, the DEVELOPER_MODE one way counter is a security-important parameter
 /// that should be included as domain separation in any KDF.
+///
+/// NOTE: `SWAP_KEY` has been removed from the KEY_SLOTS array. Here is the reasoning.
+///   - The primary purpose of the KEY_SLOTS array is to track the keys that should be erased upon entry to
+///     developer mode.
+///   - The main properties of these keys is that they are used to secure secret data - they derive the master
+///     key, or are related to one-time use keys where disclosure can lead to data leakage
+///   - SWAP_KEY actually does not serve a confidentiality purpose - in fact, the data it encrypts is "well
+///     known" in that it's shipped to the user encrypted by the "NULL" key.
+///   - Instead, the purpose of SWAP_KEY is to eliminate the TOCTOU that exists between signature checking the
+///     image in SPI flash, and when it's loaded for execution. This is accomplished by the nature of the AEAD
+///     used to secure the swap - the first "A" in AEAD stands for "authenticated".
+///   - Once we go into developer mode, "all bets are off" - a developer having access to the SWAP_KEY gains
+///     them nothing.
+///   - The important invariant that must hold is that SWAP_KEY must *not* be used for confidentiality
+///   - Finally, by *not* erasing the SWAP_KEY, this solves a major ergonomic issue in that transitioning from
+///     a sealed system  to a developer system would cause all the applications in swap to become invalid, and
+///     you'd need to reload them from dev-key signed versions. This could be a feature or a bug, but going
+///     under the theory that the system is intended to be open source, gaining access to the swap contents
+///     should not change anything.
+///   - The place where this breaks is if the contents of the apps in swap are supposed to be a secret for
+///     some reason. In this case, a user may wish to configure the system such that SWAP_KEY is part of the
+///     KEY_SLOTS array. This option is provided behind a feature gate that is by default off; note that
+///     because this isn't the design intent of SWAP_KEY, one should consider it more of a nuisance than an
+///     actual barrier to extraction of data from swap.
+#[cfg(not(feature = "erase-swap-on-dev"))]
+pub const KEY_SLOTS: [SlotIndex; 7] =
+    [THE_FLAG_1, CP_COOKIE, RMA_KEY, ROOT_SEED, NUISANCE_KEYS_0, NUISANCE_KEYS_1, CHAFF_KEYS];
+#[cfg(feature = "erase-swap-on-dev")]
 pub const KEY_SLOTS: [SlotIndex; 8] =
     [THE_FLAG_1, CP_COOKIE, RMA_KEY, ROOT_SEED, NUISANCE_KEYS_0, NUISANCE_KEYS_1, SWAP_KEY, CHAFF_KEYS];
