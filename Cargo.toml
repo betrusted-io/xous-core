@@ -157,9 +157,9 @@ exclude = [
   # Known answer test for bao1x-boot, meant to run on the host to check the soundness of
   # of the slh-dsa library off-line
   "bao1x-boot/slh-dsa-kat",
-  # One-way counter map checks - stand-alone tests that run on the host which check that
+  # Static slot map checks - stand-alone tests that run on the host which check that
   # the constant maps are sane
-  "libs/owc-checks"
+  "libs/bao1x-checks"
 ]
 
 [profile.release]
