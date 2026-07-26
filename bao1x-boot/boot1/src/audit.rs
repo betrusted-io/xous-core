@@ -169,6 +169,13 @@ pub fn audit() {
         Err(e) => crate::println!("Next stage did not validate: {:?}", e),
     }
 
+    let swap_key = slot_mgr.read(&bao1x_hal::board::SWAP_KEY).unwrap();
+    if swap_key == [0u8; 32] || swap_key == [ERASE_VALUE; 32] {
+        crate::println!("Swap key is not set, not required, or erased");
+    } else {
+        crate::println!("Swap key is set");
+    }
+
     // leak info about the erase proof coupon - this makes CI testing *so much easier*
     // the erase proof coupon is a "key" that's treated in a similar fashion in terms of lifecyle
     // to all the other keys, except its purpose is to be inspected.
