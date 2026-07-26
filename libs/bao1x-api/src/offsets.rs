@@ -1,3 +1,73 @@
+// ============================================================================
+//  SLOT MAP MAINTENANCE  -- read this before adding, moving, or removing any slot
+// ============================================================================
+//
+// INVARIANT
+//   Every data slot and every one-way-counter (OWC) slot declared in this crate is
+//   registered exactly once in the checks, and the checks pass. A slot that is defined
+//   but deliberately left unregistered (see `registered="no"` below) is the one allowed
+//   exception, and must say so in its tag.
+//
+// WHY THIS EXISTS
+//   The registration is a hand-maintained mirror of the constants. The compile-time
+//   `const _: () = assert!(...)` checks catch a broken mirror, but only *after* someone
+//   updates it. These annotations exist so the update is mechanical (and automatable):
+//   they carry the intent a tool cannot infer from a `SlotIndex` alone.
+//
+// SOURCE OF TRUTH  (edit the slot constants here)
+//   libs/bao1x-api/src/offsets/common.rs   - slots shared by all targets, + all OWC slots
+//   libs/bao1x-api/src/offsets/baosec.rs    - baosec-only data slots
+//   libs/bao1x-api/src/offsets/dabao.rs     - dabao-only data slots (some via `pub use` of baosec)
+//   libs/bao1x-api/src/offsets/offsets.rs   - SlotIndex, MAX_DATA_SLOTS
+//
+// MIRROR  (must be updated in lockstep with the constants above)
+//   libs/bao1x-api/src/checks/data_slots.rs - COMMON/<TARGET>_DATA_CLAIMS, DATA_MAPS
+//   libs/bao1x-api/src/checks/owc.rs        - OWC_MAP, OWC_DUPE_PAIRS
+//   The mechanical rules for updating these live in a header at the top of data_slots.rs.
+//
+// VERIFY  (must pass, and is the whole point -- do not skip)
+//   (cd libs/bao1x-checks && cargo run --bin bao1x-checks)
+//   The const asserts also fire on any cross-compile, so a normal target build catches
+//   a broken map too; the host tool is what tells you *which* slot is wrong, plus prints
+//   the occupancy map so you can eyeball the (free) gaps.
+//
+// PER-SLOT ANNOTATION
+//   Each slot constant carries a `<slot-map .../>` tag in its doc comment. The tag holds
+//   only what cannot be derived from the constant (the name and the slot number ARE derived
+//   from the constant -- never restate them, or you create a second thing that can drift):
+//
+//     <slot-map targets="all|baosec|dabao|baosec,dabao"
+//               registered="primary|alias|no"
+//               [backs="PRIMARY_NAME" position="last|any"]   ; only when registered="alias"
+//               [in-data-slots="yes|no"] [in-key-slots="yes|no"]  ; only when registered!="no"
+//               [reason="..."] />                            ; required when registered="no"
+//
+//   targets      which target maps the slot belongs to. A constant in common.rs is "all".
+//                A constant in baosec.rs used only by baosec is "baosec". A baosec.rs
+//                constant that dabao.rs re-exports via `pub use` is "baosec,dabao".
+//   registered   "primary" owns its slots; "alias" deliberately overlaps a primary;
+//                "no" means defined-but-intentionally-unmapped -- DO NOT add it to the map,
+//                it is expected to appear as (free) in the occupancy.
+//   backs        for aliases, the primary it sits inside.
+//   position     "last" if it must be the final slot of that primary (load-bearing for
+//                ERASE_PROOF); "any" otherwise.
+//   in-*-slots   whether the slot is also a member of the target's DATA_SLOTS / KEY_SLOTS
+//                ACL arrays. Drives the check_coverage assertions.
+//   reason       why an unregistered slot is being held out (e.g. reserved-for-later).
+//
+// FOR AI-ASSISTED MAINTENANCE
+//   To have an assistant update the checks after a slot change, provide these files:
+//     offsets/common.rs, offsets/baosec.rs, offsets/dabao.rs, offsets/mod.rs,
+//     checks/data_slots.rs, checks/owc.rs, checks/mod.rs,
+//     libs/bao1x-checks/src/main.rs
+//   (A CLI agent with repo access can fetch them itself; if you upload files individually,
+//   upload the whole set above so the assistant sees both source of truth and mirror.)
+//   The assistant should: edit only the MIRROR files, honor each slot's <slot-map> tag
+//   (especially registered="no" and alias position), leave intentional gaps as (free),
+//   then run the VERIFY command and report the occupancy diff. If a tag is missing on a
+//   changed slot, add the tag rather than guessing.
+// ============================================================================
+
 pub mod baosec;
 pub mod common;
 pub use common::*;

@@ -69,6 +69,8 @@ pub const DEFAULT_FCLK_FREQUENCY: u32 = 700_000_000;
 ///
 /// Notice there is a second range of nuisance keys at the end of the slot range (1920..2048), stuck there
 /// to force spatial diversity in the nuisance keys.
+///
+/// <slot-map targets="baosec,dabao" registered="primary" in-key-slots="yes" in-data-slots="no"/>
 pub const NUISANCE_KEYS_0: SlotIndex = SlotIndex::DataRange(8..128, PartitionAccess::Fw0, RwPerms::ReadWrite);
 
 /// `CHAFF_KEYS` are a bank of keys that are hashed into the key array, but instead of
@@ -90,6 +92,8 @@ pub const NUISANCE_KEYS_0: SlotIndex = SlotIndex::DataRange(8..128, PartitionAcc
 /// the chaff is cleared, we also don't care as much about side channels since we're now operating
 /// in a fundamentally insecure regime (e.g. developer mode - you can just read out the data by
 /// running your own code on the device).
+///
+/// <slot-map targets="baosec,dabao" registered="primary" in-key-slots="yes" in-data-slots="no"/>
 pub const CHAFF_KEYS: SlotIndex = SlotIndex::DataRange(128..256, PartitionAccess::Fw0, RwPerms::ReadWrite);
 
 /// This is intentionally the very last key in the chaff key range. It's "sampled" by copying
@@ -103,34 +107,52 @@ pub const CHAFF_KEYS: SlotIndex = SlotIndex::DataRange(128..256, PartitionAccess
 /// Placing this at the end of the key array ostensibly means that all the keys before it were
 /// erased; it might be possible to glitch all the way to the end and just have this one erased
 /// but I think that is reasonably unlikely...
+///
+/// <slot-map targets="baosec,dabao" registered="alias" backs="CHAFF_KEYS" position="last" in-key-slots="no"
+/// in-data-slots="no"/>
 pub const ERASE_PROOF: SlotIndex = SlotIndex::Data(255, PartitionAccess::Fw0, RwPerms::ReadWrite);
 
 /// The `ROOT_SEED` is the "mothership" secret that all device identity and secrets
 /// are derived from. The seed may be blended with other bits of data scattered about
 /// the RRAM array, other device identifiers and hardware measurements to create the final
 /// device secret key.
+///
+/// <slot-map targets="baosec,dabao" registered="primary" in-key-slots="yes" in-data-slots="no"/>
 pub const ROOT_SEED: SlotIndex = SlotIndex::Data(256, PartitionAccess::Fw0, RwPerms::ReadWrite);
 
 /// The `RMA_KEY` is a secret parameter that is unique per-device secret which is recorded
 /// at manufacturing time. Its purpose is to facilitate the creation of a signed RMA
 /// authorization certificate which upon receipt would blank the device and unlock various
 /// features for debugging failed hardware.
+///
+/// <slot-map targets="baosec,dabao" registered="primary" in-key-slots="yes" in-data-slots="no"/>
 pub const RMA_KEY: SlotIndex = SlotIndex::Data(257, PartitionAccess::Fw0, RwPerms::ReadWrite);
 
 /// Reserved for use as a CP to FT tracking cookie. This is used to help track inventory
 /// between CP and FT, if such a feature is desired in the supply chain. Blanked on entry
 /// to developer mode.
+///
+/// <slot-map targets="baosec" registered="primary" in-key-slots="yes" in-data-slots="no"/>
 pub const CP_COOKIE: SlotIndex = SlotIndex::Data(258, PartitionAccess::Fw0, RwPerms::ReadWrite);
 
 /// This used to be the swap key, but it is deprecated. It is now marked as simply a reserved
 /// key which can be used for future purposes. Note the PartionAccess::Fw0 permissions on this -
 /// this means it's not accessible outside of the bootloader or key manager, in particular, it
 /// is not accessible in the loader, where the swap key would be needed.
+///
+/// Intentionally NOT registered in the data slot map: slot 259 is held reserved (shows as
+/// (free) in the occupancy) to discourage reuse until fielded units have aged out, at which
+/// point it could be freed. Do not add it to BAOSEC_DATA_CLAIMS.
+///
+/// <slot-map targets="baosec" registered="no" reason="deprecated swap-key location; hold reserved to avoid
+/// reuse conflicts with fielded units until they age out, then may be freed"/>
 pub const RESERVED_1: SlotIndex = SlotIndex::Data(259, PartitionAccess::Fw0, RwPerms::ReadWrite);
 
 /// A test value placed by FT into the memory array. If you can read the original value, you've captured a
 /// flag!
 /// There is a second flag stored somewhere else. Can you find it?
+///
+/// <slot-map targets="baosec,dabao" registered="primary" in-key-slots="yes" in-data-slots="no"/>
 pub const THE_FLAG_1: SlotIndex = SlotIndex::Data(260, PartitionAccess::Fw0, RwPerms::ReadWrite);
 
 // [261..=264] are the COLLATERAL keys (on the common page)
@@ -142,6 +164,11 @@ pub const THE_FLAG_1: SlotIndex = SlotIndex::Data(260, PartitionAccess::Fw0, RwP
 /// one of the belt and suspenders that protects the swap key - still, in user run mode, the
 /// key is not accessible by virtue of the memory page being mapped exclusively into the
 /// keystore process, so there is still *some* protection on the key.
+///
+/// Lives at 271, in the common-page reserved region [269..=271], not adjacent to the keys
+/// above. Its claim is in BAOSEC_DATA_CLAIMS (baosec-only), not COMMON_DATA_CLAIMS.
+///
+/// <slot-map targets="baosec" registered="primary" in-key-slots="yes" in-data-slots="no"/>
 pub const SWAP_KEY: SlotIndex = SlotIndex::Data(271, PartitionAccess::Open, RwPerms::ReadWrite);
 
 // 272 are the clock scramble params
@@ -149,6 +176,7 @@ pub const SWAP_KEY: SlotIndex = SlotIndex::Data(271, PartitionAccess::Open, RwPe
 //
 // [274..=383] reserved for Baochip data slot usage, see the "common" page for more details
 
+/// <slot-map targets="baosec,dabao" registered="primary" in-key-slots="yes" in-data-slots="no"/>
 pub const NUISANCE_KEYS_1: SlotIndex =
     SlotIndex::DataRange(1920..2048, PartitionAccess::Fw0, RwPerms::ReadWrite);
 pub const NUISANCE_KEYS: [SlotIndex; 2] = [NUISANCE_KEYS_0, NUISANCE_KEYS_1];
