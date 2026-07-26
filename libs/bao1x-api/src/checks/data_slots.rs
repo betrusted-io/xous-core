@@ -309,11 +309,11 @@ const _: () = assert!(
 );
 const _: () = assert!(
     check_data_map(COMMON_DATA_CLAIMS, BAOSEC_DATA_CLAIMS) != DATA_ERR_PRIMARY_OVERLAP,
-    "baosec data map: two primaries overlap (declare one as alias() if intentional) - run `cargo run -p slot-check`"
+    "baosec data map: two primaries overlap (declare one as alias() if intentional) - run `cargo run -p bao1x-checks`"
 );
 const _: () = assert!(
     check_data_map(COMMON_DATA_CLAIMS, BAOSEC_DATA_CLAIMS) != DATA_ERR_ALIAS_UNBACKED,
-    "baosec data map: an alias() falls outside all primaries - run `cargo run -p slot-check`"
+    "baosec data map: an alias() falls outside all primaries - run `cargo run -p bao1x-checks`"
 );
 
 const _: () = assert!(
@@ -326,11 +326,11 @@ const _: () = assert!(
 );
 const _: () = assert!(
     check_data_map(COMMON_DATA_CLAIMS, DABAO_DATA_CLAIMS) != DATA_ERR_PRIMARY_OVERLAP,
-    "dabao data map: two primaries overlap (declare one as alias() if intentional) - run `cargo run -p slot-check`"
+    "dabao data map: two primaries overlap (declare one as alias() if intentional) - run `cargo run -p bao1x-checks`"
 );
 const _: () = assert!(
     check_data_map(COMMON_DATA_CLAIMS, DABAO_DATA_CLAIMS) != DATA_ERR_ALIAS_UNBACKED,
-    "dabao data map: an alias() falls outside all primaries - run `cargo run -p slot-check`"
+    "dabao data map: an alias() falls outside all primaries - run `cargo run -p bao1x-checks`"
 );
 
 // coverage: the ACL arrays must be a subset of the map

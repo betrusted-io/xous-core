@@ -196,7 +196,7 @@ const _: () = assert!(
 );
 const _: () = assert!(
     check_owc_map(OWC_MAP) != OWC_ERR_OVERLAP,
-    "OWC slot map: two claims overlap - run `cargo run -p owc-check` for the offending pair"
+    "OWC slot map: two claims overlap - run `cargo run -p bao1x-checks` for the offending pair"
 );
 const _: () = assert!(
     check_dupe_pairs(OWC_DUPE_PAIRS),
