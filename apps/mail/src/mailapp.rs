@@ -485,6 +485,8 @@ struct OpenMessage {
 
 pub struct MailApp {
     modals: Modals,
+    /// Used only to check network readiness before a blocking connect.
+    netmgr: net::NetManager,
 
     // Mail (IMAP/SMTP) account settings. Loaded from the pddb on startup
     // (see load_config) and editable under F3 (see settings). Blank
@@ -590,6 +592,7 @@ impl MailApp {
 
         let mut app = MailApp {
             modals,
+            netmgr: net::NetManager::new(),
             imap_user: String::new(),
             imap_pass: String::new(),
             imap_host: String::new(),
@@ -674,6 +677,10 @@ impl MailApp {
     pub fn inbox(&mut self) {
         if self.imap_host.is_empty() {
             self.notify("No IMAP server configured. Set one up under F3 (CONFIG) first.");
+            return;
+        }
+        if !self.network_ready() {
+            self.notify("No network yet. Connect to WiFi, then try again.");
             return;
         }
         // Deal with TLS trust first, so the trust modal (if the chain isn't
@@ -764,6 +771,10 @@ impl MailApp {
     /// Fetch and decode message `recency` (1 = most recent), then display it
     /// in a self-managed modal pager (see `page_message`).
     fn open_message(&mut self, recency: usize) {
+        if !self.network_ready() {
+            self.notify("No network yet. Connect to WiFi, then try again.");
+            return;
+        }
         let (host, port) = (self.imap_host.clone(), self.imap_port);
         self.ensure_trusted(&host, port);
         self.status("Loading message...");
@@ -916,6 +927,10 @@ impl MailApp {
     fn send_and_report(&mut self, to: &str, subject: &str, body: &str) {
         if to.is_empty() {
             self.notify("No recipient entered; nothing sent.");
+            return;
+        }
+        if !self.network_ready() {
+            self.notify("No network yet. Connect to WiFi, then try again.");
             return;
         }
         // Trust the SMTP server's chain (prompting if needed) first.
@@ -1189,7 +1204,17 @@ impl MailApp {
         }
     }
 
-    // ---- TLS trust ----------------------------------------------------
+    // ---- network / TLS trust ------------------------------------------
+
+    /// Returns true if the network is up (a DHCP-bound IPv4 config). This is
+    /// a fast local query to the net service and, unlike an actual connect,
+    /// does NOT block when wifi is down -- so it's safe to call from the
+    /// event loop. The IMAP/SMTP/TLS-probe flows gate on it: without this, an
+    /// attempt while wifi is down stalls the single-threaded event loop
+    /// (queued F-keys never get processed), so the app appears frozen.
+    fn network_ready(&self) -> bool {
+        self.netmgr.get_ipv4_config().map(|conf| conf.dhcp == com_rs::DhcpState::Bound).unwrap_or(false)
+    }
 
     /// Probes `host:port`'s offered TLS certificate chain and, if none of it
     /// is already trusted, shows the GAM "trust this certificate?" modal so

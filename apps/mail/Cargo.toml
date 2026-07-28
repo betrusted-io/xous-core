@@ -41,6 +41,13 @@ modals = { path = "../../services/modals" }
 # us) so account config and TLS trust anchors can be read/written.
 pddb = { path = "../../services/pddb" }
 
+# net + com_rs: used only to check whether the network is up (a DHCP-bound
+# IPv4 config) before attempting a blocking connect -- otherwise, with wifi
+# down, the DNS/connect stalls the single-threaded event loop and the app
+# stops responding to F-keys.
+net = { path = "../../services/net" }
+com_rs = { git = "https://github.com/betrusted-io/com_rs", rev = "891bdd3ca8e41f81510d112483e178aea3e3a921" }
+
 # The synchronous SMTP/IMAP client. This is the "mail-related code" the
 # edlin app was built on; the higher-level MIME/RFC-2047 parsing and
 # orchestration from edlin's cmds.rs is reproduced in src/mailapp.rs.
