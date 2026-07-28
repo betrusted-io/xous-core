@@ -2,12 +2,12 @@ use aes::Aes256;
 use aes::cipher::{BlockDecrypt, BlockEncrypt, KeyInit, generic_array::GenericArray};
 #[cfg(feature = "swap")]
 use aes_gcm_siv::{AeadInPlace, Aes256GcmSiv, Nonce, Tag};
+#[cfg(feature = "swap")]
+use bao1x_api::signatures::*;
 use bao1x_api::{
     BOOT0_PUBKEY_FAIL, BoardTypeCoding, BootWaitCoding, CP_ID, DEVELOPER_MODE, OEM_MODE,
     SLOT_ELEMENT_LEN_BYTES, UUID,
 };
-#[cfg(feature = "swap")]
-use bao1x_api::{signatures::SWAP_VERSION, signatures::SwapSourceHeader};
 #[cfg(feature = "swap")]
 use bao1x_hal::board::SWAP_KEY;
 use bao1x_hal::board::{BOOKEND_END, BOOKEND_START};
@@ -35,6 +35,8 @@ pub struct KeyStore {
     master_key: Option<[u8; KEY_LEN]>,
     #[cfg(feature = "swap")]
     swap_range: MemoryRange,
+    #[cfg(feature = "swap")]
+    boot1_header_range: MemoryRange,
 }
 
 impl KeyStore {
@@ -57,10 +59,19 @@ impl KeyStore {
         )
         .expect("Couldn't map the swap memory range");
 
+        #[cfg(feature = "swap")]
+        let boot1_header_range = xous::syscall::map_memory(
+            xous::MemoryAddress::new(bao1x_api::BOOT1_START),
+            None,
+            4096,
+            xous::MemoryFlags::R,
+        )
+        .expect("Couldn't map the boot1 header");
+
         #[cfg(not(feature = "swap"))]
         let ret = Self { slot_mgr, owc, master_key: None };
         #[cfg(feature = "swap")]
-        let ret = Self { slot_mgr, owc, master_key: None, swap_range };
+        let ret = Self { slot_mgr, owc, master_key: None, swap_range, boot1_header_range };
 
         ret
     }
@@ -525,31 +536,51 @@ impl KeyStore {
         token: [u32; 3],
         key: [u8; 32],
     ) -> Result<(), xous::Error> {
+        use bao1x_hal::board::SWAP_HEADER_LEN;
+        use digest::Digest;
+        use sha2::{Sha256, Sha512};
         use xous_swapper::FlashPage;
         use zeroize::Zeroize;
 
         const REPORT_INTERVAL: usize = 8;
+        let img_offset = SWAP_HEADER_LEN - SIGBLOCK_LEN;
 
         let ssh = self.get_swap_header()?;
         assert!(ssh.mac_offset & 0xFFF == 0, "MAC offset has improper alignment");
         let image_mac_start = ssh.mac_offset as usize + 0x1000;
-        let mut current_mac_offset = image_mac_start;
 
         let zero_cipher = Aes256GcmSiv::new((&[0u8; 32]).into());
         let dest_cipher = Aes256GcmSiv::new(&key.into());
 
         let mut page_buf = FlashPage::new();
         let mut tags = Vec::<Tag>::new();
-        const MAX_TAGS: usize = FLASH_SECTOR_LEN as usize / size_of::<Tag>();
 
         let swapper = xous_swapper::Swapper::new().unwrap();
+
+        // save the first page to write *after* the signature check passes - this considers an attack
+        // where the system is reset after flash has been encrypted-in-place but the signature still
+        // is not good.
+        let mut first_page = [0u8; 4096];
+        // hash in the signed portion of the header
+        let mut h: Sha512 = Sha512::new();
+        let start_hash = img_offset + UNSIGNED_LEN;
+        // log::info!("start hash: {:x} / {:x?}", start_hash, &self.swap_slice()[start_hash..0x1000]);
+        h.update(&self.swap_slice()[start_hash..0x1000]);
+        let mut hashed_count = 0x1000 - start_hash;
+        let end_data_blocks = ssh.mac_offset as usize + 0x1000;
+        assert!(end_data_blocks % 4096 == 0, "data blocks were not correctly padded");
 
         // swap image starts at 0x1000 and continues until mac_offset.
         // The offset of 0x1000 is currently a hard-coded constant. It's used in
         // loader/src/platform/bao1x/swap.rs and also in tools/src/swap_writer.rs
-        for (i, offset) in (0x1000..ssh.mac_offset as usize + 0x1000).step_by(FLASH_SECTOR_LEN).enumerate() {
+        for (i, offset) in (0x1000..end_data_blocks).step_by(FLASH_SECTOR_LEN).enumerate() {
             let ciphertext = &self.swap_slice()[offset..offset + FLASH_SECTOR_LEN];
             page_buf.data.copy_from_slice(ciphertext);
+            // page_buf has our data - add it to the signature check hash
+            // this is always safe because the image is padded to a page-length in size
+            h.update(&page_buf.data);
+            hashed_count += FLASH_SECTOR_LEN;
+
             let mut nonce = [0u8; size_of::<Nonce>()];
             nonce[..4].copy_from_slice(&(offset as u32 - 0x1000).to_be_bytes());
             nonce[4..].copy_from_slice(&ssh.partial_nonce);
@@ -559,6 +590,7 @@ impl KeyStore {
             let tag_loc = image_mac_start + ((offset - 0x1000) / 0x1000) * size_of::<Tag>();
             let tag = &self.swap_slice()[tag_loc..tag_loc + size_of::<Tag>()];
             let nonce = Nonce::from_slice(&nonce);
+
             // log::info!("aad: {:x?}", &aad);
             // log::info!("nonce: {:x?}", &nonce);
             // log::info!("tag: {:x?}", &tag);
@@ -579,27 +611,23 @@ impl KeyStore {
                 // just bail if we can't get the data - even if we're halfway through...
                 return Err(xous::Error::VerificationError);
             }
-            // now page_buf has our data - let's encrypt to the new key
+            // let's encrypt to the new key
             let new_tag = dest_cipher
                 .encrypt_in_place_detached(nonce, &aad, &mut page_buf.data)
                 .expect("couldn't encrypt to new key");
             tags.push(new_tag);
 
             // commit the page buf
-            swapper.write_page(offset, &page_buf)?;
-
-            // check and see if we need to commit tags
-            if tags.len() == MAX_TAGS {
-                // we have enough tags to write over a full page of tags - since we are going in linear
-                // order through memory, it's safe to replace a page of tags after we've read and encrypted
-                // the last page of tags.
-                page_buf.data.zeroize();
-                for (tag, chunk) in tags.iter().zip(page_buf.data.chunks_exact_mut(size_of::<Tag>())) {
-                    chunk.copy_from_slice(&tag[..]);
-                }
-                swapper.write_page(current_mac_offset, &page_buf)?;
-                current_mac_offset += FLASH_SECTOR_LEN;
-                tags.clear();
+            if offset == 0x1000 {
+                // first page isn't actually written until after the signature check
+                first_page.copy_from_slice(&page_buf.data);
+                log::debug!("stashed first encrypted page {:x?}", &first_page[..16]);
+                // "spoil" the first page by zeroizing it. Do it *now* instead of later, because
+                // now we're fully committed to the signature check having to pass at the end for the
+                // resulting image to have a chance of being bootable.
+                swapper.write_page(offset, &FlashPage { data: [0u8; 4096] })?;
+            } else {
+                swapper.write_page(offset, &page_buf)?;
             }
 
             // report status to the caller - %age completion. This is a slow operation and users
@@ -619,12 +647,188 @@ impl KeyStore {
                 .ok();
             }
         }
-        // the final page may not have filled up the whole tag buffer. clear the remaining tags
-        page_buf.data.zeroize();
-        for (tag, chunk) in tags.iter().zip(page_buf.data.chunks_exact_mut(size_of::<Tag>())) {
-            chunk.copy_from_slice(&tag[..]);
+
+        // if we got here, the image was not encrypted, and we need to check the signature
+        // the hash has *already* been accumulated as the data was encrypted, so there's no more TOCTOU.
+        // however we can only derive the signature parameters after confirming that we're not
+        // operating on an encrypted image, so this is all done now.
+        let tag_hex = std::env::var("SWAP_TAG")
+            .unwrap_or_else(|_| panic!("Swap tag not present - is bootloader updated?"));
+        #[cfg(feature = "debug-swap-sig")]
+        log::info!("found tag: {:?}", tag_hex);
+        let tag_storage = hex::decode(tag_hex).expect("invalid tag hex string");
+        assert!(tag_storage.len() == 4, "invalid tag length");
+        let origin_tag: &[u8] = &std::hint::black_box(tag_storage);
+        #[cfg(feature = "debug-swap-sig")]
+        log::info!("tag: {:?}", core::str::from_utf8(origin_tag).unwrap_or("invalid tag"));
+        if origin_tag == *bao1x_api::pubkeys::KEYSLOT_INITIAL_TAGS[bao1x_api::pubkeys::DEVELOPER_KEY_SLOT]
+            && !self.is_developer()
+        {
+            panic!("Developer key on swap, but not in developer mode!");
         }
-        swapper.write_page(current_mac_offset, &page_buf)?;
+
+        let pubkey_ptr = self.boot1_header_range.as_ptr() as *const SignatureInFlash;
+        let pk_src: &SignatureInFlash = unsafe { pubkey_ptr.as_ref().unwrap() };
+        if pk_src.sealed_data.magic != MAGIC_NUMBER {
+            log::error!("Invalid magic number in verifying key record");
+            return Err(xous::Error::InvalidArgument);
+        }
+        let mut sig = SignatureInFlash::default();
+        sig.as_mut()
+            .copy_from_slice(&self.swap_slice()[img_offset..img_offset + size_of::<SignatureInFlash>()]);
+        let signed_len = sig.sealed_data.signed_len;
+        if sig.sealed_data.magic != MAGIC_NUMBER {
+            log::error!("Invalid magic number on incoming record to be verified");
+            return Err(xous::Error::InvalidArgument);
+        }
+        if !sig.is_compatible() {
+            log::info!(
+                "Version {:x} sig is too new for {:x}",
+                sig.sealed_data.corrected_version,
+                BAOCHIP_SIG_VERSION
+            );
+            return Err(xous::Error::InvalidArgument);
+        }
+
+        let function_codes = &[FunctionCode::Swap as u32, FunctionCode::UpdatedSwap as u32];
+        // checking the function code prevents exploiting code meant for other partitions signed
+        // with a valid signature as code for the next stage boot.
+        if !function_codes.contains(&sig.sealed_data.function_code) {
+            log::error!("Function code {} not expected", sig.sealed_data.function_code);
+            return Err(xous::Error::InvalidArgument);
+        }
+        let end = img_offset as usize + UNSIGNED_LEN + signed_len as usize;
+        #[cfg(feature = "debug-swap-sig")]
+        log::info!(
+            "offset: {:x}, unsigned_len: {:x}, signed_len: {:x}",
+            img_offset,
+            UNSIGNED_LEN,
+            signed_len
+        );
+        #[cfg(feature = "debug-swap-sig")]
+        log::info!("end: {:x}", end);
+        assert!(end <= bao1x_api::offsets::baosec::SPI_FLASH_LEN);
+
+        // check one more time because bypassing the first check would give an easy win for encrypting
+        // a developer image
+        if origin_tag == *bao1x_api::pubkeys::KEYSLOT_INITIAL_TAGS[bao1x_api::pubkeys::DEVELOPER_KEY_SLOT]
+            && !self.is_developer()
+        {
+            panic!("Developer key on swap, but not in developer mode!");
+        }
+        // search for the ed25519 key based on tag
+        let mut verifying_key = None;
+        for pkey in pk_src.sealed_data.pubkeys.iter() {
+            if pkey.tag == origin_tag {
+                verifying_key = Some(
+                    ed25519_dalek::VerifyingKey::from_bytes(&pkey.pk)
+                        .or(Err(xous::Error::VerificationError))?,
+                );
+            }
+        }
+
+        #[cfg(feature = "debug-swap-sig")]
+        log::info!("verifying signature");
+        if let Some(verifying_key) = verifying_key {
+            // add the MAC data to the signature check
+            let remainder = signed_len as usize - hashed_count;
+            #[cfg(feature = "debug-swap-sig")]
+            log::info!("update mac: {:x}", remainder);
+            h.update(&self.swap_slice()[end_data_blocks..(end_data_blocks + remainder)]);
+            #[cfg(feature = "debug-swap-sig")]
+            log::info!(
+                "tail of hash: {:x?}",
+                &self.swap_slice()[end_data_blocks..(end_data_blocks + remainder)]
+            );
+            #[cfg(feature = "debug-swap-sig")]
+            log::info!("end hash: {:x}", end_data_blocks + remainder);
+            hashed_count += remainder;
+            #[cfg(feature = "debug-swap-sig")]
+            log::info!("hashed_count: {:x}, signed_len: {:x}", hashed_count, signed_len);
+            assert!(hashed_count == signed_len as usize, "hashed length is incorrect");
+
+            #[cfg(feature = "debug-swap-sig")]
+            log::info!("found sig");
+            let ed25519_signature = ed25519_dalek::Signature::from(sig.signature);
+            #[cfg(feature = "debug-swap-sig")]
+            log::info!("made sig");
+            // check the signature of the re-encrypted data
+            if sig.aad_len == 0 {
+                #[cfg(feature = "debug-swap-sig")]
+                log::info!("ph path");
+                match verifying_key.verify_prehashed(h, None, &ed25519_signature) {
+                    Ok(_) => {
+                        swapper.write_page(0x1000, &FlashPage { data: first_page })?;
+                        log::info!("ed25519ph verification passed");
+                    }
+                    _ => {
+                        log::error!(
+                            "ed25519ph verification failed - boot will fail due to partial sway encryption"
+                        );
+                        // returning here has the additional benefit of failing to commit tags
+                        return Err(xous::Error::VerificationError);
+                    }
+                }
+            } else {
+                #[cfg(feature = "debug-swap-sig")]
+                log::info!("aad path");
+                let sha512_hashed_image = h.finalize();
+                #[cfg(feature = "debug-swap-sig")]
+                log::info!("hash: {:x?}", sha512_hashed_image.as_slice());
+                // create a *new* hasher because a token can only sign a hash, not the full image.
+                let mut h: Sha256 = Sha256::new();
+                h.update(&sha512_hashed_image.as_slice());
+                let hashed_hash = h.finalize();
+
+                let mut msg: Vec<u8> = Vec::new();
+                assert!((sig.aad_len as usize) <= sig.aad.len());
+                msg.extend_from_slice(&sig.aad[..sig.aad_len as usize]);
+                msg.extend_from_slice(hashed_hash.as_slice());
+
+                #[cfg(feature = "debug-swap-sig")]
+                log::info!("verifying sig");
+                match verifying_key.verify_strict(&msg, &ed25519_signature) {
+                    Ok(_) => {
+                        #[cfg(feature = "debug-swap-sig")]
+                        log::info!("committing stashed page: {:x?}", &first_page[..16]);
+                        let page = FlashPage { data: first_page };
+                        swapper.write_page(0x1000, &page)?;
+                        log::info!("FIDO2 ed25519 verification passed");
+                    }
+                    _ => {
+                        log::error!("FIDO2 verification failed");
+                        // returning here has the additional benefit of failing to commit tags
+                        return Err(xous::Error::VerificationError);
+                    }
+                }
+            }
+        } else {
+            log::error!("Couldn't find a verifying key!");
+            return Err(xous::Error::VerificationError);
+        }
+
+        // check this again, because glitching past the initial check could lead to endorsing a developer
+        // image
+        if origin_tag == *bao1x_api::pubkeys::KEYSLOT_INITIAL_TAGS[bao1x_api::pubkeys::DEVELOPER_KEY_SLOT]
+            && !self.is_developer()
+        {
+            panic!("Developer key on swap, but not in developer mode!");
+        }
+
+        #[cfg(feature = "debug-swap-sig")]
+        log::info!("committing tags");
+        // the final page may not have filled up the whole tag buffer. clear the remaining tags
+        let mut current_mac_offset = image_mac_start; // reset to the start of the mac block as we commit the macs
+        for tag_block in tags.chunks(FLASH_SECTOR_LEN / size_of::<Tag>()) {
+            #[cfg(feature = "debug-swap-sig")]
+            log::info!("writing {} tags to {:x}", tag_block.len(), current_mac_offset);
+            page_buf.data.zeroize(); // need to zeorize to keep previous tag iter from contaminating the short-copy at the end
+            for (tag, chunk) in tag_block.iter().zip(page_buf.data.chunks_exact_mut(size_of::<Tag>())) {
+                chunk.copy_from_slice(&tag[..]);
+            }
+            swapper.write_page(current_mac_offset, &page_buf)?;
+            current_mac_offset += FLASH_SECTOR_LEN;
+        }
 
         Ok(())
     }
