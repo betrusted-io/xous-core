@@ -672,6 +672,71 @@ impl MailApp {
         self.gam.redraw().ok();
     }
 
+    /// Like `status()`, but with a horizontal progress bar and percentage
+    /// underneath -- used while streaming a message body, where `done`/`total`
+    /// are byte counts of the IMAP literal being downloaded.
+    fn draw_progress(&self, msg: &str, done: usize, total: usize) {
+        self.clear();
+        let pct: isize =
+            if total == 0 { 100 } else { ((done.min(total) as u64 * 100) / total as u64) as isize };
+
+        let top = self.screensize.y / 3;
+        let mut tv = TextView::new(
+            self.content,
+            TextBounds::GrowableFromTl(Point::new(6, top), (self.screensize.x - 12) as u16),
+        );
+        tv.style = GlyphStyle::Large;
+        tv.draw_border = false;
+        tv.clear_area = true;
+        tv.margin = Point::new(0, 0);
+        write!(tv.text, "{}\n\n{}%", msg, pct).ok();
+        self.gam.post_textview(&mut tv).ok();
+
+        // Bar: a 1px-outlined box with a proportional dark fill inside it.
+        let margin = 12isize;
+        let bar_x0 = margin;
+        let bar_x1 = self.screensize.x - margin;
+        let bar_w = (bar_x1 - bar_x0).max(1);
+        // Clear the "msg\n\npct%" text block above (up to ~4 lines at the
+        // Large glyph height) so the bar never overlaps it.
+        let bar_y0 = top + 120;
+        let bar_h = 18isize;
+        let bar_y1 = bar_y0 + bar_h;
+        self.gam
+            .draw_rectangle(
+                self.content,
+                Rectangle::new_with_style(
+                    Point::new(bar_x0, bar_y0),
+                    Point::new(bar_x1, bar_y1),
+                    DrawStyle {
+                        fill_color: Some(PixelColor::Light),
+                        stroke_color: Some(PixelColor::Dark),
+                        stroke_width: 1,
+                    },
+                ),
+            )
+            .ok();
+        let inner_w = (bar_w - 2).max(1);
+        let fill_w = inner_w * pct / 100;
+        if fill_w > 0 {
+            self.gam
+                .draw_rectangle(
+                    self.content,
+                    Rectangle::new_with_style(
+                        Point::new(bar_x0 + 1, bar_y0 + 1),
+                        Point::new(bar_x0 + 1 + fill_w, bar_y1 - 1),
+                        DrawStyle {
+                            fill_color: Some(PixelColor::Dark),
+                            stroke_color: None,
+                            stroke_width: 0,
+                        },
+                    ),
+                )
+                .ok();
+        }
+        self.gam.redraw().ok();
+    }
+
     // ---- F1: inbox ----------------------------------------------------
 
     pub fn inbox(&mut self) {
@@ -1391,7 +1456,19 @@ impl MailApp {
         let seq = total - (recency as u32 - 1);
 
         self.status("Downloading message...");
-        let responses = client.fetch(&seq.to_string(), "BODY.PEEK[]").map_err(|e| format!("IMAP FETCH failed: {}", e));
+        // Stream the body with a live progress bar. The IMAP `{n}` literal
+        // gives us the total byte count up front, so `done/total` is exact.
+        // Redraw only when the whole percent changes, to avoid flooding GAM.
+        let mut last_pct = usize::MAX;
+        let responses = client
+            .fetch_with_progress(&seq.to_string(), "BODY.PEEK[]", &mut |done, total| {
+                let pct = if total == 0 { 100 } else { (done.min(total) as u64 * 100 / total as u64) as usize };
+                if pct != last_pct {
+                    last_pct = pct;
+                    self.draw_progress("Downloading message...", done, total);
+                }
+            })
+            .map_err(|e| format!("IMAP FETCH failed: {}", e));
         let _ = client.logout();
         let responses = responses?;
 

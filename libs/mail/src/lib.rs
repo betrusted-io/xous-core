@@ -166,7 +166,7 @@ pub struct SmtpClient {
 /// ("250-...\r\n" ... "250 ...\r\n"). Generic over the transport so the
 /// same parser works pre- and post-STARTTLS.
 fn read_smtp_response<S: Read>(r: &mut BufReader<S>) -> io::Result<(u16, String)> {
-    let mut code: u16;
+    let mut code = 0u16;
     let mut text = String::new();
     loop {
         let mut line = String::new();
@@ -343,7 +343,43 @@ fn parse_literal_marker(line: &[u8]) -> Option<usize> {
 /// keep reading — whatever follows the literal up to the next real CRLF
 /// is a continuation of the same logical response (FETCH can carry more
 /// than one literal, e.g. separate BODY[HEADER] and BODY[TEXT] parts).
-fn read_logical_line<S: Read>(r: &mut BufReader<S>) -> io::Result<Vec<ImapChunk>> {
+/// Reads a `{n}` literal's `len` bytes, reporting `(bytes_read, len)` to
+/// `progress` as the data arrives so a caller can drive a progress bar for a
+/// large message body. Semantically identical to `read_exact` otherwise
+/// (errors with `UnexpectedEof` if the stream ends early).
+fn read_literal_chunked<S: Read>(
+    r: &mut BufReader<S>,
+    len: usize,
+    progress: &mut dyn FnMut(usize, usize),
+) -> io::Result<Vec<u8>> {
+    let mut literal = vec![0u8; len];
+    let mut filled = 0;
+    progress(0, len);
+    while filled < len {
+        let n = r.read(&mut literal[filled..])?;
+        if n == 0 {
+            return Err(io::Error::new(io::ErrorKind::UnexpectedEof, "IMAP connection closed mid-literal"));
+        }
+        filled += n;
+        progress(filled, len);
+    }
+    Ok(literal)
+}
+
+/// Reads one full logical response line, following any `{n}` literal embedded
+/// in it and reassembling the surrounding text as separate chunks. Reports
+/// literal-download progress via `progress` (called `(bytes_read, total)` for
+/// each `{n}` literal); pass a no-op closure when progress isn't needed.
+///
+/// This is the piece that has to be right for the protocol to stay in sync: a
+/// plain `read_line()` through a literal would hit a stray CRLF inside binary
+/// content and desync every later response. Instead we read a fragment up to
+/// CRLF; if it ends in `{n}`, strip the marker, read exactly `n` raw bytes
+/// (binary-safe), then keep reading the tail of the same logical response.
+fn read_logical_line_progress<S: Read>(
+    r: &mut BufReader<S>,
+    progress: &mut dyn FnMut(usize, usize),
+) -> io::Result<Vec<ImapChunk>> {
     let mut chunks = Vec::new();
     loop {
         let mut raw = Vec::new();
@@ -361,8 +397,7 @@ fn read_logical_line<S: Read>(r: &mut BufReader<S>) -> io::Result<Vec<ImapChunk>
             if !text.is_empty() {
                 chunks.push(ImapChunk::Text(text));
             }
-            let mut literal = vec![0u8; len];
-            r.read_exact(&mut literal)?;
+            let literal = read_literal_chunked(r, len, progress)?;
             chunks.push(ImapChunk::Literal(literal));
             continue; // resume reading the tail of this same response
         }
@@ -444,6 +479,16 @@ impl ImapClient {
         imap_command(&mut self.stream, &mut self.tag, cmd)
     }
 
+    /// As [`command`], but reports literal-download progress via `progress`
+    /// (called `(bytes_read, total)` for each `{n}` literal received).
+    fn command_progress(
+        &mut self,
+        cmd: &str,
+        progress: &mut dyn FnMut(usize, usize),
+    ) -> io::Result<(String, Vec<Vec<ImapChunk>>)> {
+        imap_command_progress(&mut self.stream, &mut self.tag, cmd, progress)
+    }
+
     /// Convenience wrapper for commands that never return literals
     /// (LOGIN, SELECT, LOGOUT, CAPABILITY) — flattens each response line
     /// to a lossy UTF-8 string.
@@ -497,6 +542,21 @@ impl ImapClient {
         Ok(untagged)
     }
 
+    /// As [`fetch`], but reports body-download progress via `progress` (called
+    /// `(bytes_read, total)` as each `{n}` literal streams in). Use this for a
+    /// full-message `BODY[]`/`BODY.PEEK[]` fetch, where the literal is large
+    /// enough that a progress bar is worthwhile.
+    pub fn fetch_with_progress(
+        &mut self,
+        seq: &str,
+        items: &str,
+        progress: &mut dyn FnMut(usize, usize),
+    ) -> io::Result<Vec<Vec<ImapChunk>>> {
+        let (status, untagged) = self.command_progress(&format!("FETCH {seq} ({items})"), progress)?;
+        Self::expect_ok(&status)?;
+        Ok(untagged)
+    }
+
     pub fn logout(&mut self) -> io::Result<()> { self.command_text("LOGOUT").map(|_| ()) }
 }
 
@@ -508,13 +568,25 @@ fn imap_command<S: Read + Write>(
     tag_counter: &mut u32,
     cmd: &str,
 ) -> io::Result<(String, Vec<Vec<ImapChunk>>)> {
+    imap_command_progress(rw, tag_counter, cmd, &mut |_, _| {})
+}
+
+/// As [`imap_command`], but forwards literal-download progress to `progress`.
+fn imap_command_progress<S: Read + Write>(
+    rw: &mut BufReader<S>,
+    tag_counter: &mut u32,
+    cmd: &str,
+    progress: &mut dyn FnMut(usize, usize),
+) -> io::Result<(String, Vec<Vec<ImapChunk>>)> {
     *tag_counter += 1;
     let tag = format!("a{tag_counter}");
     rw.get_mut().write_all(format!("{tag} {cmd}\r\n").as_bytes())?;
 
     let mut untagged = Vec::new();
     loop {
-        let chunks = read_logical_line(rw)?;
+        // `&mut dyn FnMut` auto-reborrows in argument position, so passing
+        // `progress` each iteration is fine.
+        let chunks = read_logical_line_progress(rw, progress)?;
         // The tag only ever appears as plain text at the start of a
         // response line (never itself inside a literal), so checking the
         // first Text chunk is sufficient.
