@@ -695,7 +695,6 @@ impl MailApp {
         const NEXT_LABEL: &str = "Next 10 >>";
         let mut page = 0usize;
         loop {
-            self.status("Fetching inbox...");
             let result = self.imap_list_page(page, PAGE_SIZE);
 
             let (total, entries) = match result {
@@ -777,7 +776,6 @@ impl MailApp {
         }
         let (host, port) = (self.imap_host.clone(), self.imap_port);
         self.ensure_trusted(&host, port);
-        self.status("Loading message...");
         let result = self.imap_read_body(recency);
 
         match result {
@@ -936,7 +934,6 @@ impl MailApp {
         // Trust the SMTP server's chain (prompting if needed) first.
         let (host, port) = (self.smtp_host.clone(), self.smtp_port);
         self.ensure_trusted(&host, port);
-        self.status("Sending...");
         let result = self.smtp_send(to, subject, body);
         self.notify(&result);
     }
@@ -1239,6 +1236,7 @@ impl MailApp {
             return;
         }
         let tls = tls::Tls::new();
+        self.status(&format!("Checking certificate for\n{host}..."));
         match tls.probe_port(host, port) {
             Ok(certs) if !certs.is_empty() => {
                 if certs.iter().any(|c| tls.is_trusted_cert(c.clone())) {
@@ -1280,16 +1278,19 @@ impl MailApp {
             self.imap_pass.chars().count(),
             page
         );
+        self.status(&format!("Connecting to\n{}...", self.imap_host));
         let mut client = ImapClient::connect(&self.imap_host, self.imap_port).map_err(|e| {
             log::info!("--> IMAP connect error: {}", e);
             format!("IMAP connect failed: {}", e)
         })?;
         log::info!("--> IMAP connected; logging in as '{}'", self.imap_user);
+        self.status("Signing in...");
         client.login(&self.imap_user, &self.imap_pass).map_err(|e| {
             log::info!("--> IMAP login error: {}", e);
             format!("IMAP login failed: {}", e)
         })?;
         log::info!("--> IMAP login OK; selecting INBOX");
+        self.status("Opening inbox...");
         let select_resp = client.select("INBOX").map_err(|e| format!("IMAP SELECT failed: {}", e))?;
         let total = parse_exists(&select_resp).unwrap_or(0);
         if total == 0 {
@@ -1317,6 +1318,7 @@ impl MailApp {
             total
         );
 
+        self.status("Fetching message list...");
         let responses = client
             .fetch(&range, "BODY.PEEK[HEADER.FIELDS (SUBJECT FROM)]")
             .map_err(|e| format!("IMAP FETCH failed: {}", e));
@@ -1358,14 +1360,17 @@ impl MailApp {
             return Err(String::from("Message number must be 1 or greater."));
         }
         log::info!("--> IMAP connect {}:{} (fetch #{})", self.imap_host, self.imap_port, recency);
+        self.status(&format!("Connecting to\n{}...", self.imap_host));
         let mut client = ImapClient::connect(&self.imap_host, self.imap_port).map_err(|e| {
             log::info!("--> IMAP connect error: {}", e);
             format!("IMAP connect failed: {}", e)
         })?;
+        self.status("Signing in...");
         client.login(&self.imap_user, &self.imap_pass).map_err(|e| {
             log::info!("--> IMAP login error: {}", e);
             format!("IMAP login failed: {}", e)
         })?;
+        self.status("Opening inbox...");
         let select_resp = client.select("INBOX").map_err(|e| format!("IMAP SELECT failed: {}", e))?;
         let total = parse_exists(&select_resp).unwrap_or(0);
         if total == 0 {
@@ -1378,6 +1383,7 @@ impl MailApp {
         }
         let seq = total - (recency as u32 - 1);
 
+        self.status("Downloading message...");
         let responses = client.fetch(&seq.to_string(), "BODY.PEEK[]").map_err(|e| format!("IMAP FETCH failed: {}", e));
         let _ = client.logout();
         let responses = responses?;
@@ -1442,6 +1448,7 @@ impl MailApp {
             self.smtp_from, to_addr, subject, body_crlf
         );
 
+        self.status(&format!("Connecting to\n{}...", self.smtp_host));
         let mut client = match SmtpClient::connect(&self.smtp_host, self.smtp_port) {
             Ok(c) => c,
             Err(e) => return format!("SMTP connect failed: {}", e),
@@ -1449,12 +1456,15 @@ impl MailApp {
         // EHLO wants the client's own identity; use the domain half of the
         // From address as a stand-in (the device has no FQDN of its own).
         let ehlo_domain = self.smtp_from.split('@').nth(1).unwrap_or(self.smtp_host.as_str()).to_string();
+        self.status("Greeting server...");
         if let Err(e) = client.ehlo(&ehlo_domain) {
             return format!("SMTP EHLO failed: {}", e);
         }
+        self.status("Signing in...");
         if let Err(e) = client.auth_login(&self.smtp_user, &self.smtp_pass) {
             return format!("SMTP auth failed: {}", e);
         }
+        self.status("Sending message...");
         if let Err(e) = client.send(&self.smtp_from, &[to_addr], &message) {
             return format!("SMTP send failed: {}", e);
         }
