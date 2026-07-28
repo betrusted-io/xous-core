@@ -1210,6 +1210,13 @@ impl MailApp {
     /// attempt while wifi is down stalls the single-threaded event loop
     /// (queued F-keys never get processed), so the app appears frozen.
     fn network_ready(&self) -> bool {
+        // In hosted mode there is no wifi/DHCP: the net service proxies to the
+        // host's real network stack, so treat the network as always up.
+        #[cfg(not(target_os = "xous"))]
+        {
+            return true;
+        }
+        #[cfg(target_os = "xous")]
         self.netmgr.get_ipv4_config().map(|conf| conf.dhcp == com_rs::DhcpState::Bound).unwrap_or(false)
     }
 
