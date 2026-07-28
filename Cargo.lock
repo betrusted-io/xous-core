@@ -2345,6 +2345,32 @@ dependencies = [
 ]
 
 [[package]]
+name = "ed25519-dalek-compat"
+version = "2.2.0"
+dependencies = [
+ "bincode 1.3.3",
+ "blake2",
+ "criterion 0.5.1",
+ "curve25519-dalek-bao1x",
+ "ed25519 2.2.3",
+ "hex 0.4.3",
+ "hex-literal 0.4.1",
+ "merlin 3.0.0",
+ "rand 0.8.5",
+ "rand_core 0.6.4",
+ "serde",
+ "serde_json",
+ "sha2 0.10.8",
+ "sha3",
+ "signature 2.2.0",
+ "subtle",
+ "toml 0.7.8",
+ "utralib 0.1.27",
+ "x25519-dalek",
+ "zeroize",
+]
+
+[[package]]
 name = "ed25519-dalek-loader"
 version = "1.0.1"
 dependencies = [
@@ -3697,6 +3723,7 @@ dependencies = [
  "byteorder",
  "cipher 0.4.4",
  "digest 0.10.7",
+ "ed25519-dalek-compat",
  "hex 0.4.3",
  "hkdf",
  "keystore-api",

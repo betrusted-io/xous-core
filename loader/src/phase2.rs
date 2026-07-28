@@ -61,6 +61,13 @@ pub fn phase_2(cfg: &mut BootConfig, env_variables: EnvVariables, mut _fb: Optio
             }
             let seed_hex = hex::encode(&seed);
             pid_env.add_var("SEED", &seed_hex);
+            #[cfg(feature = "swap")]
+            if let Some(hal) = &cfg.swap_hal {
+                if let Some(tag) = hal.tag {
+                    let tag_hex = hex::encode(tag);
+                    pid_env.add_var("SWAP_TAG", &tag_hex);
+                }
+            }
         }
 
         let env = env_header.to_bytes(&pid_env);

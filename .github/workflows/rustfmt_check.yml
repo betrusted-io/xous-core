@@ -13,10 +13,10 @@ jobs:
           rustup toolchain install nightly
           rustup component add rustfmt --toolchain nightly
 
-      - name: Ensure the `main` branch rustfmt is applied for the run
+      - name: Ensure the `dev` branch rustfmt is applied for the run
         run: |
-          git fetch --no-tags --prune --no-recurse-submodules --depth=1 origin main
-          git checkout origin/main rustfmt.toml
+          git fetch --no-tags --prune --no-recurse-submodules --depth=1 origin dev
+          git checkout origin/dev rustfmt.toml
 
       - name: Generate dummy templates so formating checks don't choke on missing xtask-generated files
         run: cargo xtask dummy-template

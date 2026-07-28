@@ -313,6 +313,9 @@ pub struct SwapSourceHeader {
 impl AsRef<[u8]> for SwapSourceHeader {
     fn as_ref(&self) -> &[u8] { bytemuck::bytes_of(self) }
 }
+impl AsMut<[u8]> for SwapSourceHeader {
+    fn as_mut(&mut self) -> &mut [u8] { bytemuck::bytes_of_mut(self) }
+}
 impl Default for SwapSourceHeader {
     fn default() -> Self {
         Self { version: 0, partial_nonce: [0; 8], mac_offset: 0, aad_len: 0, aad: [0; 64] }

@@ -508,8 +508,12 @@ impl MiniElf {
                         #[cfg(feature = "swap")]
                         if let Some(swap) = allocator.swap_hal.as_mut() {
                             if !section.no_copy() {
-                                let dump_disk =
-                                    swap.decrypt_src_page_at(dump_pa_src & !(PAGE_SIZE - 1)).unwrap();
+                                let dump_disk = swap
+                                    .decrypt_src_page_at::<sha2_bao1x::Sha512>(
+                                        dump_pa_src & !(PAGE_SIZE - 1),
+                                        None,
+                                    )
+                                    .unwrap();
                                 dump_slice(&dump_disk[dump_pa_src & (PAGE_SIZE - 1)..], "    Src [:20]  ");
                             } else {
                                 println!("    -- nocopy --");
@@ -525,8 +529,9 @@ impl MiniElf {
                             );
                             if !section.no_copy() {
                                 let dump_disk = swap
-                                    .decrypt_src_page_at(
+                                    .decrypt_src_page_at::<sha2_bao1x::Sha512>(
                                         (dump_pa_src + section.len() - 20) & !(PAGE_SIZE - 1),
+                                        None,
                                     )
                                     .unwrap();
                                 dump_slice(

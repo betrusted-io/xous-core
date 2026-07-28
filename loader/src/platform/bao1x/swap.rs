@@ -40,6 +40,8 @@ pub struct SwapHal {
     ram_swap_key: [u8; 32],
     src_cipher: Aes256GcmSiv,
     dst_cipher: Aes256GcmSiv,
+    pub tag: Option<[u8; 4]>,
+    pub unencrypted: HardenedBool,
     flash_spim: Spim,
     ram_spim: Spim,
     buf: RawPage,
@@ -228,14 +230,18 @@ impl SwapHal {
                 buf_addr: 0,
                 buf,
                 ram_swap_key: dest_key,
+                tag: None,
+                unencrypted: HardenedBool::TRUE,
             };
             hal.aad_storage[..ssh.aad_len as usize].copy_from_slice(&ssh.aad[..ssh.aad_len as usize]);
             hal.aad_len = ssh.aad_len as usize;
             hal.partial_nonce.copy_from_slice(&ssh.partial_nonce);
 
             // trial decryption with 0 key - if it's valid, then we have been presented a new swap image, and
-            // we TOFU it assuming its signature passes
-            match hal.decrypt_src_page_at(0) {
+            // we have to check the signature while loading the data. For now, we also have a redundant
+            // signature check while the actual loading check is implemented that eliminates the
+            // sigcheck-to-load TOCTOU.
+            match hal.decrypt_src_page_at::<sha2_bao1x::Sha512>(0, None) {
                 Ok(_) => {
                     // check signature only if the swap key is all 0's
                     // this is not very glitch-hardened because at this point, the adversary has full
@@ -319,6 +325,7 @@ impl SwapHal {
                                 }
                                 bollard!(bao1x_hal::sigcheck::die_no_std, 4);
                             }
+                            hal.tag = Some(tag)
                         }
                         Err(e) => {
                             println!("{}LOADER.SWAPSIGFAIL,{}", BOOKEND_START, BOOKEND_END);
@@ -336,7 +343,8 @@ impl SwapHal {
                     let swap_key = slot_mgr.read(&SWAP_KEY).unwrap();
                     // replace the cipher with the new key
                     hal.src_cipher = Aes256GcmSiv::new((*swap_key).into());
-                    if hal.decrypt_src_page_at(0).is_err() {
+                    hal.unencrypted = HardenedBool::FALSE;
+                    if hal.decrypt_src_page_at::<sha2_bao1x::Sha512>(0, None).is_err() {
                         println!("{}LOADER.SWAPDECFAIL,{}", BOOKEND_START, BOOKEND_END);
                         println!("Swap image failed cryptographic integrity checks!");
                         bao1x_hal::sigcheck::die_no_std();
@@ -358,13 +366,31 @@ impl SwapHal {
 
     fn aad(&self) -> &[u8] { &self.aad_storage[..self.aad_len] }
 
+    pub fn read_flash(&mut self, offset: usize, len: usize) {
+        self.flash_spim.mem_read(offset as u32, &mut self.buf.data[..len], false);
+    }
+
     /// `offset` is the offset from the beginning of the encrypted region (not full disk region)
     /// Generally a caller should just .unwrap() the result; an encryption failure is a fatal error
     /// in most cases except when testing the key.
-    pub fn decrypt_src_page_at(&mut self, offset: usize) -> Result<&[u8], Error> {
+    pub fn decrypt_src_page_at<D: digest::Update>(
+        &mut self,
+        offset: usize,
+        h: Option<&mut D>,
+    ) -> Result<&[u8], Error> {
         assert!((offset & 0xFFF) == 0, "offset is not page-aligned");
         self.buf_addr = offset;
         self.flash_spim.mem_read((self.image_start + offset) as u32, &mut self.buf.data, false);
+        if let Some(h) = h {
+            #[cfg(feature = "debug-swap-sig")]
+            crate::println!(
+                "{:x}: {:x?}..{:x?}",
+                self.image_start + offset,
+                &self.buf.data[..6],
+                &self.buf.data[4090..]
+            );
+            h.update(&self.buf.data);
+        }
         let mut nonce = [0u8; size_of::<Nonce>()];
         nonce[..4].copy_from_slice(&(offset as u32).to_be_bytes());
         nonce[4..].copy_from_slice(&self.partial_nonce);

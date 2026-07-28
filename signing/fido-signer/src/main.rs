@@ -543,6 +543,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 h.update(&file[sealed_start..sealed_end]);
                 // finalize it and send it on for signing
                 data_to_sign = Some(h.finalize().as_slice().to_vec());
+                println!("Signing hash: {}", hex::encode(&data_to_sign.clone().unwrap()));
             }
         } else {
             // Not a bao1x image: there is no header, so no PQ slot to patch, no
