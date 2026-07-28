@@ -2,10 +2,9 @@
 
 A graphical IMAP/SMTP mail client for Xous, built on the GAM UI stack.
 
-It reuses the mail plumbing the `edlin` app was built on — the synchronous,
-no-async SMTP/IMAP clients in `libs/mail`, plus the MIME / RFC-2047 /
-quoted-printable parsing from `edlin`'s `cmds.rs` — but replaces edlin's
-line-editor command surface with graphical screens driven by function keys
+It leverages the synchronous, no-async SMTP/IMAP clients in `libs/mail`,
+plus MIME / RFC-2047 / quoted-printable parsing
+It has graphical screens driven by function keys
 (the same convention `apps/vault` uses):
 
 | Key | Legend | Screen   | What it does                                             |
@@ -54,11 +53,10 @@ with it included. To try it in hosted mode, add `mailapp` to your
 ## Account settings & security
 
 Settings are entered under F3 and stored in the pddb dict `mail`, key
-`config`, as `key=value` lines (`imap_host=...`, `imap_pass=...`, etc.) — the
-same on-disk shape edlin used for its `mail` file. On real hardware the pddb
-encrypts this at rest.
+`config`, as `key=value` lines (`imap_host=...`, `imap_pass=...`, etc.)
+On real hardware the pddb encrypts this at rest.
 
-As with edlin, once loaded the credentials live decrypted in the app's RAM
+Once loaded the credentials live decrypted in the app's RAM
 for the process lifetime, and pre-filled password fields under F3 show a
 `*****` sentinel rather than the stored password — but this is still a device
 you shouldn't hand to someone else with mail configured.
@@ -67,7 +65,7 @@ TLS trust-on-first-use for the mail servers' certificates is handled
 automatically by `libs/mail` (it prompts with a GAM modal showing the offered
 chain the first time it sees an untrusted one, exactly like the HTTPS flow).
 
-## Known gaps (inherited from the edlin mail code)
+## Known gaps
 
 - Outgoing messages carry no `Date:` / `Message-ID:` header — the device
   needs an RTC-backed clock wired in to generate a compliant `Date:`; some
