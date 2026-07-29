@@ -653,7 +653,7 @@ fn copy_processes(cfg: &mut BootConfig, mut _fb: Option<&mut dyn FrameBuffer>) {
                     use digest::Digest;
 
                     let mut last_decrypt_address = None;
-                    let mut expected_block_address = 0x1000; // hard coded constant
+                    let mut expected_block_address = 0x1000; // hard coded constant - the physical address read
                     let owc = bao1x_hal::acram::OneWayCounter::new();
                     let mut hashed_count = 0;
                     let (dev_mode1, dev_mode2) = owc.hardened_get(bao1x_api::DEVELOPER_MODE).unwrap();
@@ -860,11 +860,20 @@ fn copy_processes(cfg: &mut BootConfig, mut _fb: Option<&mut dyn FrameBuffer>) {
                             //   - the available decrypted data is larger than the target region to encrypt
                             //   - the available decrypted data is smaller than the target region to encrypt
                             //   - the available decrypted data is equal to the target region to encrypt
+
                             let src_swap_img_page = src_swap_img_addr & !(PAGE_SIZE - 1);
                             let src_swap_img_offset = src_swap_img_addr & (PAGE_SIZE - 1);
                             // it's almost free to check, so we check at every loop start
                             if last_decrypt_address != Some(src_swap_img_page) {
+                                // src_swap_img_page is in offsets relative to start of ELF - add 0x1000 to
+                                // get absolute block
                                 let phys_address = src_swap_img_page + 0x1000;
+
+                                if expected_block_address > phys_address {
+                                    // haven't seen this in practice - but let's make some noise if it
+                                    // happens, so we can write code to handle it
+                                    crate::println!("***** UNHANDLED: BACKWARDS BLOCK ADDRESSING *****");
+                                }
                                 // "catch up" any front-padding blocks skipped by the ELF format
                                 if let Some(h) = h.as_mut() {
                                     while expected_block_address < phys_address {
@@ -873,19 +882,30 @@ fn copy_processes(cfg: &mut BootConfig, mut _fb: Option<&mut dyn FrameBuffer>) {
                                             .unwrap()
                                             .read_flash(expected_block_address, PAGE_SIZE);
                                         h.update(cfg.swap_hal.as_ref().unwrap().buf_as_ref());
-                                        expected_block_address += PAGE_SIZE;
-                                        hashed_count += PAGE_SIZE;
                                         #[cfg(feature = "debug-swap-sig")]
                                         crate::println!(
                                             "catch-up from: {:x} - total {:x}",
-                                            src_swap_img_page + 0x1000,
+                                            expected_block_address,
                                             hashed_count
                                         );
+                                        #[cfg(feature = "debug-swap-sig")]
+                                        crate::println!(
+                                            "  {:x}: {:x?}..{:x?}",
+                                            expected_block_address,
+                                            &cfg.swap_hal.as_ref().unwrap().buf_as_ref()[..6],
+                                            &cfg.swap_hal.as_ref().unwrap().buf_as_ref()[4090..]
+                                        );
+                                        expected_block_address += PAGE_SIZE;
+                                        hashed_count += PAGE_SIZE;
                                     }
                                 }
-                                if (cfg.swap_hal.as_ref().expect("swap HAL uninit").decrypt_page_addr()
-                                    != src_swap_img_page)
-                                    && !section.no_copy()
+                                // always load the page - we need it to do the hash verification.
+                                // this causes a small amount of inefficiency as we're decrypting about
+                                // 2-3 extra pages that we don't strictly have to decrypt, but this
+                                // overhead is small compared to the gains in logical simplicity.
+                                /* if (cfg.swap_hal.as_ref().expect("swap HAL uninit").decrypt_page_addr()
+                                != src_swap_img_page)
+                                && !section.no_copy() */
                                 {
                                     cfg.swap_hal
                                         .as_mut()
@@ -923,8 +943,8 @@ fn copy_processes(cfg: &mut BootConfig, mut _fb: Option<&mut dyn FrameBuffer>) {
                                 last_decrypt_address = Some(src_swap_img_page);
                                 #[cfg(feature = "debug-swap-sig")]
                                 crate::println!(
-                                    "hashed from: {:x} - total {:x}",
-                                    src_swap_img_page + 0x1000,
+                                    "loaded from: {:x} - total {:x}",
+                                    expected_block_address - 0x1000,
                                     hashed_count
                                 );
                             }
@@ -992,7 +1012,7 @@ fn copy_processes(cfg: &mut BootConfig, mut _fb: Option<&mut dyn FrameBuffer>) {
                         assert!(end_data_blocks & 0xFFF == 0);
                         #[cfg(feature = "debug-swap-sig")]
                         crate::println!(
-                            "to verify: {:x}; end_data_blocks: {:x}",
+                            "expected_block_address: {:x}; end_data_blocks: {:x}",
                             expected_block_address,
                             end_data_blocks
                         );
@@ -1000,7 +1020,7 @@ fn copy_processes(cfg: &mut BootConfig, mut _fb: Option<&mut dyn FrameBuffer>) {
                             cfg.swap_hal.as_mut().unwrap().read_flash(expected_block_address, PAGE_SIZE);
                             #[cfg(feature = "debug-swap-sig")]
                             crate::println!(
-                                "{:x}: {:x?}..{:x?}",
+                                "  {:x}: {:x?}..{:x?}",
                                 expected_block_address,
                                 &cfg.swap_hal.as_ref().unwrap().buf_as_ref()[..6],
                                 &cfg.swap_hal.as_ref().unwrap().buf_as_ref()[4090..]
@@ -1031,7 +1051,7 @@ fn copy_processes(cfg: &mut BootConfig, mut _fb: Option<&mut dyn FrameBuffer>) {
                             crate::println!("tail-add {:x}", len);
                             #[cfg(feature = "debug-swap-sig")]
                             crate::println!(
-                                "{:x}: {:x?}..{:x?}",
+                                "  {:x}: {:x?}..{:x?}",
                                 expected_block_address,
                                 &cfg.swap_hal.as_ref().unwrap().buf_as_ref()[..6],
                                 &cfg.swap_hal.as_ref().unwrap().buf_as_ref()[len - 6..len]

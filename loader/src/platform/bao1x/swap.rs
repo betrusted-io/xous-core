@@ -384,7 +384,7 @@ impl SwapHal {
         if let Some(h) = h {
             #[cfg(feature = "debug-swap-sig")]
             crate::println!(
-                "{:x}: {:x?}..{:x?}",
+                "  {:x}: {:x?}..{:x?}",
                 self.image_start + offset,
                 &self.buf.data[..6],
                 &self.buf.data[4090..]
