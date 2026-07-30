@@ -463,6 +463,333 @@ fn decode_rfc2047(input: &str) -> String {
     out
 }
 
+/// Reduces an HTML message body to readable plain text for the reader:
+/// drops `<script>`/`<style>` element contents and HTML comments, turns
+/// block-level tags (`<br>`, `<p>`, `<div>`, `<li>`, `<tr>`, headings, ...)
+/// into line breaks, removes every other tag, decodes the common HTML
+/// entities, then collapses the resulting whitespace so it paginates cleanly
+/// on the narrow LCD. This is a deliberately lightweight, best-effort
+/// converter (no DOM / CSS) -- enough to make an HTML-only message readable,
+/// not a full renderer.
+fn strip_html(input: &str) -> String {
+    // 1. Drop <script>/<style> element contents and HTML comments outright,
+    //    so their internals never leak into the text.
+    let without_blocks = remove_html_comments(&remove_html_element(&remove_html_element(input, "script"), "style"));
+
+    // 2. Walk the remaining markup: copy text runs, and replace each tag
+    //    with a newline (block-level tags) or nothing (inline tags).
+    let mut out = String::with_capacity(without_blocks.len());
+    let mut rest = without_blocks.as_str();
+    while let Some(lt) = rest.find('<') {
+        out.push_str(&rest[..lt]);
+        let after = &rest[lt..];
+        match after.find('>') {
+            Some(gt) => {
+                if tag_breaks_line(&after[1..gt]) {
+                    out.push('\n');
+                }
+                rest = &after[gt + 1..];
+            }
+            None => {
+                // Unterminated '<': treat the remainder as literal text.
+                out.push_str(after);
+                rest = "";
+                break;
+            }
+        }
+    }
+    out.push_str(rest);
+
+    // 3. Decode entities, then normalize whitespace.
+    collapse_whitespace(&decode_html_entities(&out))
+}
+
+/// Removes every `<tag ...>...</tag>` element (contents included) from
+/// `input`, matching the tag name case-insensitively. An unterminated
+/// element drops everything from its start to the end. Used for `<script>`
+/// and `<style>`, whose bodies must never reach the reader as text.
+fn remove_html_element(input: &str, tag: &str) -> String {
+    let open = format!("<{tag}");
+    let close = format!("</{tag}");
+    let mut out = String::with_capacity(input.len());
+    let mut rest = input;
+    while let Some(start) = find_ascii_ci(rest, &open) {
+        out.push_str(&rest[..start]);
+        let after = &rest[start..];
+        match find_ascii_ci(after, &close) {
+            Some(close_rel) => match after[close_rel..].find('>') {
+                Some(gt) => rest = &after[close_rel + gt + 1..],
+                None => return out, // malformed closing tag: drop the rest
+            },
+            None => return out, // unclosed element: drop the rest
+        }
+    }
+    out.push_str(rest);
+    out
+}
+
+/// Removes HTML comments (`<!-- ... -->`). An unterminated comment drops to
+/// the end of the input.
+fn remove_html_comments(input: &str) -> String {
+    let mut out = String::with_capacity(input.len());
+    let mut rest = input;
+    while let Some(start) = rest.find("<!--") {
+        out.push_str(&rest[..start]);
+        match rest[start + 4..].find("-->") {
+            Some(end_rel) => rest = &rest[start + 4 + end_rel + 3..],
+            None => return out,
+        }
+    }
+    out.push_str(rest);
+    out
+}
+
+/// Whether a tag (its inner text, without the angle brackets -- e.g. `p`,
+/// `/div`, `br /`, `td colspan="2"`) is block-level, so removing it should
+/// leave a line break behind. Inline tags (`a`, `span`, `b`, ...) return
+/// false and simply vanish.
+fn tag_breaks_line(tag: &str) -> bool {
+    let name: String = tag
+        .trim_start_matches('/')
+        .chars()
+        .take_while(|c| c.is_ascii_alphanumeric())
+        .collect::<String>()
+        .to_ascii_lowercase();
+    matches!(
+        name.as_str(),
+        "br" | "p"
+            | "div"
+            | "tr"
+            | "td"
+            | "th"
+            | "li"
+            | "ul"
+            | "ol"
+            | "dl"
+            | "dd"
+            | "dt"
+            | "table"
+            | "thead"
+            | "tbody"
+            | "caption"
+            | "blockquote"
+            | "pre"
+            | "hr"
+            | "h1"
+            | "h2"
+            | "h3"
+            | "h4"
+            | "h5"
+            | "h6"
+            | "section"
+            | "article"
+            | "header"
+            | "footer"
+            | "figure"
+            | "figcaption"
+            | "address"
+            | "form"
+            | "fieldset"
+    )
+}
+
+/// Decodes the HTML entities common in mail: the named ones (`&amp;`,
+/// `&lt;`, `&nbsp;`, a few typographic ones) and numeric character
+/// references (`&#39;`, `&#x2019;`). Unknown or malformed entities are left
+/// verbatim.
+fn decode_html_entities(input: &str) -> String {
+    let mut out = String::with_capacity(input.len());
+    let mut rest = input;
+    while let Some(amp) = rest.find('&') {
+        out.push_str(&rest[..amp]);
+        let after = &rest[amp + 1..];
+        // A real entity is short and ';'-terminated; bound the search so a
+        // stray '&' in prose doesn't swallow the rest of the line.
+        match after.find(';') {
+            Some(semi) if semi <= 12 => match decode_html_entity(&after[..semi]) {
+                Some(decoded) => {
+                    out.push_str(&decoded);
+                    rest = &after[semi + 1..];
+                }
+                None => {
+                    out.push('&');
+                    rest = after;
+                }
+            },
+            _ => {
+                out.push('&');
+                rest = after;
+            }
+        }
+    }
+    out.push_str(rest);
+    out
+}
+
+/// Decodes one entity body (the text between `&` and `;`). Returns None for
+/// anything unrecognized so the caller can emit it unchanged.
+fn decode_html_entity(entity: &str) -> Option<String> {
+    // Numeric character reference: &#123; or &#x1F600;
+    if let Some(num) = entity.strip_prefix('#') {
+        let code = match num.strip_prefix(['x', 'X']) {
+            Some(hex) => u32::from_str_radix(hex, 16).ok()?,
+            None => num.parse::<u32>().ok()?,
+        };
+        return char::from_u32(code).map(|c| c.to_string());
+    }
+    let ch = match entity.to_ascii_lowercase().as_str() {
+        "amp" => '&',
+        "lt" => '<',
+        "gt" => '>',
+        "quot" => '"',
+        "apos" => '\'',
+        "nbsp" => ' ',
+        "mdash" => '\u{2014}',
+        "ndash" => '\u{2013}',
+        "hellip" => '\u{2026}',
+        "copy" => '\u{00A9}',
+        "reg" => '\u{00AE}',
+        "trade" => '\u{2122}',
+        "lsquo" | "rsquo" | "sbquo" => '\'',
+        "ldquo" | "rdquo" | "bdquo" => '"',
+        _ => return None,
+    };
+    Some(ch.to_string())
+}
+
+/// Collapses the whitespace left by tag removal: within each line, runs of
+/// spaces/tabs become a single space and the ends are trimmed; across lines,
+/// a run of blank lines is reduced to at most one, and leading/trailing
+/// blank lines are dropped. This keeps stripped HTML from paginating into a
+/// mostly-empty reader.
+fn collapse_whitespace(input: &str) -> String {
+    let mut out = String::with_capacity(input.len());
+    let mut blank_run = 0usize;
+    for raw in input.split('\n') {
+        // Squeeze intra-line whitespace to single spaces and trim the ends.
+        let mut line = String::with_capacity(raw.len());
+        let mut prev_space = false;
+        for ch in raw.chars() {
+            if ch.is_whitespace() {
+                if !prev_space {
+                    line.push(' ');
+                    prev_space = true;
+                }
+            } else {
+                line.push(ch);
+                prev_space = false;
+            }
+        }
+        let line = line.trim();
+        if line.is_empty() {
+            // Allow at most one blank line between paragraphs.
+            blank_run += 1;
+            if blank_run == 1 && !out.is_empty() {
+                out.push('\n');
+            }
+        } else {
+            blank_run = 0;
+            out.push_str(line);
+            out.push('\n');
+        }
+    }
+    out.trim_end().to_string()
+}
+
+/// Flattens Markdown-style inline links `[label](url)` to just their visible
+/// `label`, dropping the bracket/paren syntax and the URL. Only a well-formed
+/// link -- `]` immediately followed by `(`, with a non-empty label and url --
+/// is rewritten; a lone `[...]` or `(...)` is left untouched. Nested brackets
+/// aren't handled (label runs to the first `]`, url to the first `)`), which
+/// is fine for the mail-generated links this targets. Reference-style links
+/// (`[label][id]`) are not touched.
+fn flatten_markdown_links(input: &str) -> String {
+    let bytes = input.as_bytes();
+    let mut out = String::with_capacity(input.len());
+    let mut i = 0;
+    while i < input.len() {
+        if bytes[i] == b'[' {
+            // Try to parse `[label](url)` starting here.
+            if let Some(close_rel) = input[i + 1..].find(']') {
+                let label_end = i + 1 + close_rel; // index of ']'
+                if input[label_end + 1..].starts_with('(') {
+                    let url_start = label_end + 2; // just past "]("
+                    if let Some(paren_rel) = input[url_start..].find(')') {
+                        let label = &input[i + 1..label_end];
+                        let url = &input[url_start..url_start + paren_rel];
+                        if !label.is_empty() && !url.is_empty() {
+                            out.push_str(label);
+                            i = url_start + paren_rel + 1; // past ')'
+                            continue;
+                        }
+                    }
+                }
+            }
+            // Not a link: emit the '[' literally and move on.
+            out.push('[');
+            i += 1;
+        } else {
+            // Copy the text run up to the next '['.
+            let rel = input[i..].find('[').unwrap_or(input.len() - i);
+            out.push_str(&input[i..i + rel]);
+            i += rel;
+        }
+    }
+    out
+}
+
+/// Removes parenthesized URLs -- `(https://...)`, `(www...)`, `(mailto:...)`
+/// -- from `input`, along with one immediately-preceding space so a bare
+/// `label (https://...)` collapses cleanly to `label`. Only a `(...)` group
+/// whose trimmed contents actually look like a URL (see [`looks_like_url`])
+/// is removed; ordinary parentheticals like `(see below)` are left intact.
+fn strip_parenthesized_urls(input: &str) -> String {
+    let bytes = input.as_bytes();
+    let mut out = String::with_capacity(input.len());
+    let mut i = 0;
+    while i < input.len() {
+        if bytes[i] == b'(' {
+            if let Some(close_rel) = input[i + 1..].find(')') {
+                let content = &input[i + 1..i + 1 + close_rel];
+                if looks_like_url(content.trim()) {
+                    // Drop a single preceding space so we don't leave a double
+                    // space or a space before punctuation behind.
+                    if out.ends_with(' ') {
+                        out.pop();
+                    }
+                    i = i + 1 + close_rel + 1; // past the ')'
+                    continue;
+                }
+            }
+            // Not a URL: emit the '(' literally and move on.
+            out.push('(');
+            i += 1;
+        } else {
+            // Copy the text run up to the next '('.
+            let rel = input[i..].find('(').unwrap_or(input.len() - i);
+            out.push_str(&input[i..i + rel]);
+            i += rel;
+        }
+    }
+    out
+}
+
+/// Whether `s` (the trimmed contents of a `(...)` group) looks like a URL:
+/// a single whitespace-free token beginning with a known scheme or `www.`.
+/// The no-whitespace rule keeps a real parenthetical phrase (which has
+/// spaces) from being mistaken for a URL.
+fn looks_like_url(s: &str) -> bool {
+    if s.is_empty() || s.chars().any(|c| c.is_whitespace()) {
+        return false;
+    }
+    let lower = s.to_ascii_lowercase();
+    lower.starts_with("http://")
+        || lower.starts_with("https://")
+        || lower.starts_with("mailto:")
+        || lower.starts_with("ftp://")
+        || lower.starts_with("www.")
+}
+
 // =======================================================================
 // The app model
 // =======================================================================
@@ -506,6 +833,30 @@ pub struct MailApp {
     smtp_from: String,
     smtp_host: String,
     smtp_port: u16,
+
+    /// When true (the default), an HTML message body is stripped down to
+    /// readable plain text before display; when false the raw HTML source is
+    /// shown. Toggled under F3 (CONFIG) -> "Reading options". Persisted in the
+    /// pddb config alongside the account settings. text/plain parts are never
+    /// affected (there's no markup to strip).
+    strip_html: bool,
+
+    /// When true (the default), Markdown-style inline links `[label](url)` in
+    /// the displayed body are flattened to just `label`. These come from the
+    /// sender's own `text/plain` alternative (which `find_text_part` prefers),
+    /// not from any conversion we do. Applies to whatever body is shown --
+    /// after HTML stripping, if any. Toggled under F3 (CONFIG) alongside
+    /// [`strip_html`].
+    flatten_md_links: bool,
+
+    /// When true (the default), any remaining parenthesized URL -- `(https://
+    /// ...)`, `(www...)`, `(mailto:...)` -- is removed from the displayed
+    /// body, even without a `[label]` in front (which `flatten_md_links`
+    /// handles). Catches the bare `label (https://...)` link style. Only
+    /// parenthesized groups whose contents actually look like a URL are
+    /// removed; ordinary parentheticals are left alone. Runs after
+    /// [`flatten_md_links`].
+    strip_paren_urls: bool,
 
     /// Last inbox listing, so a picked label maps back to a recency index.
     inbox: Vec<InboxEntry>,
@@ -602,6 +953,9 @@ impl MailApp {
             smtp_from: String::new(),
             smtp_host: String::new(),
             smtp_port: DEFAULT_SMTP_PORT,
+            strip_html: true,
+            flatten_md_links: true,
+            strip_paren_urls: true,
             inbox: Vec::new(),
             open_msg: None,
             trusted: HashSet::new(),
@@ -1006,9 +1360,10 @@ impl MailApp {
     // ---- F3: settings -------------------------------------------------
 
     pub fn settings(&mut self) {
-        // Two groups so neither form is taller than the screen.
+        // Separate groups so no form is taller than the screen.
         self.modals.add_list_item("IMAP (incoming) server").ok();
         self.modals.add_list_item("SMTP (outgoing) server").ok();
+        self.modals.add_list_item("Reading options").ok();
         // get_radiobutton() renders and blocks on the modal; get_radio_index()
         // only reads back which item was chosen *after* that. Calling the
         // latter alone (as before) showed no modal at all -- the F3 no-op bug.
@@ -1018,8 +1373,42 @@ impl MailApp {
         match self.modals.get_radio_index() {
             Ok(0) => self.edit_imap(),
             Ok(1) => self.edit_smtp(),
+            Ok(2) => self.edit_reading(),
             _ => {} // dismissed / error
         }
+    }
+
+    /// F3 -> "Reading options": a checkbox toggling how message bodies are
+    /// cleaned up for the reader. Each item is pre-checked with its current
+    /// state; the returned set of checked items becomes the new setting (so
+    /// unchecking one turns it off). Dismissing leaves everything unchanged.
+    fn edit_reading(&mut self) {
+        const STRIP: &str = "Strip HTML from messages";
+        const FLATTEN: &str = "Flatten [text](url) links to text";
+        const PAREN: &str = "Remove (url) in parentheses";
+        self.modals.add_stateful_list_item(self.strip_html, STRIP).ok();
+        self.modals.add_stateful_list_item(self.flatten_md_links, FLATTEN).ok();
+        self.modals.add_stateful_list_item(self.strip_paren_urls, PAREN).ok();
+        let checked = match self.modals.get_checkbox("Reading options") {
+            Ok(c) => c,
+            Err(_) => return, // dismissed: leave the settings unchanged
+        };
+        self.strip_html = checked.iter().any(|s| s == STRIP);
+        self.flatten_md_links = checked.iter().any(|s| s == FLATTEN);
+        self.strip_paren_urls = checked.iter().any(|s| s == PAREN);
+        log::info!(
+            "--> reading options: strip_html={} flatten_md_links={} strip_paren_urls={}",
+            self.strip_html,
+            self.flatten_md_links,
+            self.strip_paren_urls
+        );
+        self.save_config();
+        self.notify(&format!(
+            "Reading options saved.\nStrip HTML: {}\nFlatten links: {}\nRemove (url): {}",
+            on_off(self.strip_html),
+            on_off(self.flatten_md_links),
+            on_off(self.strip_paren_urls),
+        ));
     }
 
     fn edit_imap(&mut self) {
@@ -1156,7 +1545,7 @@ impl MailApp {
             }
         }
         let body = format!(
-            "imap_host={}\nimap_user={}\nimap_pass={}\nimap_port={}\nsmtp_host={}\nsmtp_user={}\nsmtp_pass={}\nsmtp_from={}\nsmtp_port={}\n",
+            "imap_host={}\nimap_user={}\nimap_pass={}\nimap_port={}\nsmtp_host={}\nsmtp_user={}\nsmtp_pass={}\nsmtp_from={}\nsmtp_port={}\nstrip_html={}\nflatten_md_links={}\nstrip_paren_urls={}\n",
             self.imap_host,
             self.imap_user,
             self.imap_pass,
@@ -1166,9 +1555,12 @@ impl MailApp {
             self.smtp_pass,
             self.smtp_from,
             self.smtp_port,
+            self.strip_html,
+            self.flatten_md_links,
+            self.strip_paren_urls,
         );
         log::info!(
-            "--> saving config to '{}/{}': imap_host='{}' imap_user='{}' imap_pass={} chars imap_port={} smtp_host='{}' smtp_user='{}' smtp_pass={} chars smtp_from='{}' smtp_port={} (total {} bytes)",
+            "--> saving config to '{}/{}': imap_host='{}' imap_user='{}' imap_pass={} chars imap_port={} smtp_host='{}' smtp_user='{}' smtp_pass={} chars smtp_from='{}' smtp_port={} strip_html={} flatten_md_links={} strip_paren_urls={} (total {} bytes)",
             MAIL_DICT,
             MAIL_CONFIG_KEY,
             self.imap_host,
@@ -1180,6 +1572,9 @@ impl MailApp {
             self.smtp_pass.chars().count(),
             self.smtp_from,
             self.smtp_port,
+            self.strip_html,
+            self.flatten_md_links,
+            self.strip_paren_urls,
             body.len(),
         );
         match File::create(Self::config_path()) {
@@ -1212,7 +1607,7 @@ impl MailApp {
         log::info!("--> loading config from '{}/{}' ({} bytes)", MAIL_DICT, MAIL_CONFIG_KEY, buf.len());
         self.apply_config_lines(&buf);
         log::info!(
-            "--> config loaded: imap_host='{}' imap_user='{}' imap_pass={} chars imap_port={} smtp_host='{}' smtp_user='{}' smtp_pass={} chars smtp_from='{}' smtp_port={}",
+            "--> config loaded: imap_host='{}' imap_user='{}' imap_pass={} chars imap_port={} smtp_host='{}' smtp_user='{}' smtp_pass={} chars smtp_from='{}' smtp_port={} strip_html={} flatten_md_links={} strip_paren_urls={}",
             self.imap_host,
             self.imap_user,
             self.imap_pass.chars().count(),
@@ -1222,6 +1617,9 @@ impl MailApp {
             self.smtp_pass.chars().count(),
             self.smtp_from,
             self.smtp_port,
+            self.strip_html,
+            self.flatten_md_links,
+            self.strip_paren_urls,
         );
     }
 
@@ -1259,6 +1657,24 @@ impl MailApp {
                 "smtp_port" => {
                     if let Ok(p) = value.parse::<u16>() {
                         self.smtp_port = p;
+                    }
+                }
+                "strip_html" => {
+                    // Accept "true"/"false" (what we write) plus a few
+                    // friendly aliases; anything unrecognized leaves the
+                    // default (true) in place.
+                    if let Some(b) = parse_bool(value) {
+                        self.strip_html = b;
+                    }
+                }
+                "flatten_md_links" => {
+                    if let Some(b) = parse_bool(value) {
+                        self.flatten_md_links = b;
+                    }
+                }
+                "strip_paren_urls" => {
+                    if let Some(b) = parse_bool(value) {
+                        self.strip_paren_urls = b;
                     }
                 }
                 _ => {}
@@ -1512,6 +1928,30 @@ impl MailApp {
             }
             _ => part_body,
         };
+
+        // find_text_part prefers a text/plain alternative, but many messages
+        // are HTML-only -- in which case the "body" above is raw HTML markup.
+        // When the "strip HTML" reading option is on (F3 -> Reading options,
+        // the default), reduce it to readable plain text. A text/plain part is
+        // left untouched (there's nothing to strip). Detected by the resolved
+        // part's Content-Type so we never mangle a real plaintext body that
+        // merely contains angle brackets.
+        let is_html = header_value(&part_headers, "content-type")
+            .map(|v| v.to_lowercase().contains("text/html"))
+            .unwrap_or(false);
+        let body = if is_html && self.strip_html { strip_html(&body) } else { body };
+
+        // Flatten Markdown-style inline links `[label](url)` (from the
+        // sender's own text/plain alternative, or left behind after stripping
+        // HTML) down to just `label`. Independent of strip_html since these
+        // most often appear in a plain-text part.
+        let body = if self.flatten_md_links { flatten_markdown_links(&body) } else { body };
+
+        // Remove any leftover parenthesized URLs, e.g. the bare `label
+        // (https://...)` link style that has no `[label]` for the flatten
+        // pass to catch. Runs last so it also mops up parens exposed by the
+        // flatten step.
+        let body = if self.strip_paren_urls { strip_parenthesized_urls(&body) } else { body };
         Ok((from, subject, body))
     }
 
@@ -1682,6 +2122,20 @@ fn wrap_lines(text: &str, cols: usize) -> Vec<String> {
     }
     out
 }
+
+/// Parses a boolean config value, accepting what we write ("true"/"false")
+/// plus a few friendly aliases. Returns None for anything unrecognized so the
+/// caller can keep the field's current default.
+fn parse_bool(value: &str) -> Option<bool> {
+    match value.to_ascii_lowercase().as_str() {
+        "true" | "yes" | "1" | "on" => Some(true),
+        "false" | "no" | "0" | "off" => Some(false),
+        _ => None,
+    }
+}
+
+/// "on"/"off" label for a boolean setting, for user-facing notifications.
+fn on_off(b: bool) -> &'static str { if b { "on" } else { "off" } }
 
 /// A run of asterisks the same length (in characters) as `s`. Used to
 /// pre-fill the password field in the settings form so its length is

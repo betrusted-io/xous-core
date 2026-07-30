@@ -11,7 +11,7 @@ It has graphical screens driven by function keys
 |-----|--------|----------|----------------------------------------------------------|
 | F1  | INBOX  | Inbox    | Lists the most recent messages (sender + subject), 10 per page; opening one fetches, decodes and displays its body in a paged reader. |
 | F2  | WRITE  | Compose  | A To / Subject / Body form, then sends via SMTP.         |
-| F3  | CONFIG | Settings | IMAP and SMTP server, username, password and port forms, saved to the pddb. |
+| F3  | CONFIG | Settings | IMAP and SMTP server, username, password and port forms, plus reading options (strip HTML, flatten `[text](url)` links, remove `(url)` in parentheses), saved to the pddb. |
 | F4  | REPLY  | Reply    | Pre-fills a compose form from the message currently open under F1 (To = sender, Subject = "Re: ...", original quoted below), then sends. |
 
 ## UI architecture
@@ -72,5 +72,16 @@ chain the first time it sees an untrusted one, exactly like the HTTPS flow).
   spam filters may downgrade mail without them.
 - Only INBOX is listed/read; there's no folder selection yet.
 - Message bodies are rendered as plain text (the parser walks to a
-  `text/plain` part and transfer-decodes quoted-printable / base64);
-  attachments and `text/html` rendering are out of scope.
+  `text/plain` part and transfer-decodes quoted-printable / base64).
+  When only a `text/html` part is available, its markup is stripped to
+  readable plain text — tags removed, block elements turned into line
+  breaks, entities decoded. This is on by default and can be turned off
+  under F3 → "Reading options" (which then shows the raw HTML source
+  instead). Full HTML rendering and attachments remain out of scope.
+- Senders' `text/plain` alternatives often spell links out as Markdown-style
+  `[label](url)`. A second reading option (also on by default, under F3 →
+  "Reading options") flattens these to just `label` in the displayed body.
+- A third reading option (also on by default) then removes any remaining
+  parenthesized URL — `label (https://...)`, `(www...)`, `(mailto:...)` —
+  even when there's no `[label]` in front. Ordinary parentheticals such as
+  `(see below)` are left intact.
