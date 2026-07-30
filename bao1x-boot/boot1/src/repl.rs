@@ -861,7 +861,7 @@ impl Repl {
                 for (i, chunk) in ifr.chunks(32).enumerate() {
                     // these "redundant" asserts make it harder to abuse this print as a memory dumping
                     // primitive, e.g. by glitching or other similar attack
-                    assert!(ifr.as_ptr() as usize == 0x6040_0000);
+                    assert!(core::hint::black_box(ifr.as_ptr()) as usize == 0x6040_0000);
                     crate::println!("  {:03x}: {:02x?}", i * 32, chunk);
                     assert!(i < 32);
                 }
