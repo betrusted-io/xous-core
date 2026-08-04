@@ -56,11 +56,20 @@ board-baosec = [
     "utralib/bao1x",
     "utralib/std",
     "bao1x-hal",
+    "bao1x-hal/board-baosec",
     "bao1x-hal-service",
+    "bao1x-hal-service/board-baosec",
     "pddb?/board-baosec",
 ]
 oem-baosec-lite = ["bao1x-hal/oem-baosec-lite"]
-board-dabao = ["utralib/bao1x", "utralib/std", "bao1x-hal", "bao1x-hal-service"]
+board-dabao = [
+    "utralib/bao1x",
+    "utralib/std",
+    "bao1x-hal",
+    "bao1x-hal/board-dabao",
+    "bao1x-hal-service",
+    "bao1x-hal-service/board-dabao",
+]
 hosted-baosec = [
     "utralib/hosted",
     "utralib/std",
