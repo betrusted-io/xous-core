@@ -101,11 +101,11 @@ mod tests {
     #[test]
     fn persona_a_ccid_fits_cumulative() {
         let mut ledger = EpBudgetLedger::new("baosec-ccid");
-        ledger.reserve_before_alloc("CCID", 3);
+        ledger.reserve_before_alloc("CCID", 2);
         ledger.reserve_before_alloc("FIDO", 2);
         ledger.reserve_before_alloc("NKRO", 2);
         ledger.finalize();
-        assert_eq!(ledger.total(), 7);
+        assert_eq!(ledger.total(), 6);
     }
 
     #[test]
@@ -118,33 +118,33 @@ mod tests {
         assert_eq!(ledger.total(), 7);
     }
 
-    /// Regression for the cumulative gap: a fake extra class on a 7/8 stack.
+    /// Regression for the cumulative gap: a fake extra class on a 6/8 stack.
     /// Independent per-class checks all pass; cumulative reserve must panic.
     #[test]
     fn fake_extra_class_caught_by_cumulative_not_by_independent() {
-        // OLD: CCID(3), HID(4), FAKE(2) each ≤8 — would all "pass"
-        assert!(old_independent_subtotal_ok(&[3, 4, 2]));
+        // OLD: CCID(2), HID(4), FAKE(3) each ≤8 — would all "pass"
+        assert!(old_independent_subtotal_ok(&[2, 4, 3]));
 
         let mut ledger = EpBudgetLedger::new("baosec-ccid + fake");
-        ledger.reserve_before_alloc("CCID", 3);
+        ledger.reserve_before_alloc("CCID", 2);
         ledger.reserve_before_alloc("FIDO", 2);
         ledger.reserve_before_alloc("NKRO", 2);
         let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             let mut l = ledger.clone();
-            l.reserve_before_alloc("FAKE_EXTRA", 2);
+            l.reserve_before_alloc("FAKE_EXTRA", 3);
         }));
         assert!(
             r.is_err(),
-            "cumulative ledger must fire when adding a class that pushes 7+2 over CRG_EP_NUM"
+            "cumulative ledger must fire when adding a class that pushes 6+3 over CRG_EP_NUM"
         );
     }
 
     #[test]
     fn live_mismatch_detected() {
         let mut ledger = EpBudgetLedger::new("mismatch");
-        ledger.reserve_before_alloc("CCID", 3);
+        ledger.reserve_before_alloc("CCID", 2);
         let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            ledger.assert_matches_live(2);
+            ledger.assert_matches_live(1);
         }));
         assert!(r.is_err());
     }

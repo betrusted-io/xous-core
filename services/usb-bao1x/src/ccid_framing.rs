@@ -5,8 +5,17 @@
 use std::collections::VecDeque;
 
 /// Maximum assembled CCID message size on the wire (header + payload).
-pub const CCID_WIRE_MAX: usize = 530;
+///
+/// Option A (short APDU): keep equal to descriptor `dwMaxCCIDMessageLength`
+/// (`0x10F` = 271). Short APDU max is 5+255 data + 10-byte CCID header = 270,
+/// which fits. Extended APDU would need Option B (raise both + `dwFeatures`).
+pub const CCID_WIRE_MAX: usize = 0x10F;
 pub const CCID_HEADER_LEN: usize = 10;
+/// Bulk endpoint wMaxPacketSize.
+///
+/// High-speed bulk MPS is 512 bytes (USB 2.0). CCID message max is
+/// `CCID_WIRE_MAX` (271 bytes); frames larger than one packet are chunked
+/// across multiple 512-byte bulk transfers. Dabao enumerates at high-speed.
 pub const CCID_BULK_MAX_PACKET: usize = 512;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

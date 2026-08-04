@@ -159,7 +159,9 @@ def verify_ccid_descriptor(dev: "usb.core.Device") -> dict:
   raw = bytes(ccid_desc)
   bcd_ccid = struct.unpack_from("<H", raw, 2)[0]
   dw_protocols = struct.unpack_from("<I", raw, 6)[0]
-  max_msg = struct.unpack_from("<I", raw, 42)[0]
+  # USB CCID 1.1: dwMaxCCIDMessageLength is at offset 44 (after bNumClockSupported /
+  # bNumDataRatesSupported). Older firmware omitted those bytes and used offset 42.
+  max_msg = struct.unpack_from("<I", raw, 44)[0]
   return {
     "bcd_ccid": bcd_ccid,
     "dw_protocols": dw_protocols,

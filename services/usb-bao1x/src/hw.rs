@@ -40,10 +40,11 @@ pub(crate) const EP_NKRO: usize = 2;
 /// Cite: usbd-serial `cdc_acm.rs` interrupt + bulk OUT + bulk IN.
 #[cfg(not(feature = "ccid-openpgp"))]
 pub(crate) const EP_DEBUG_CDC: usize = 3;
-/// Unidirectional non-EP0 endpoints claimed by CCID (bulk OUT+IN + interrupt IN).
-/// Cite: `ccid_transport.rs` `alloc.bulk` ×2 + `alloc.interrupt`.
+/// Unidirectional non-EP0 endpoints claimed by CCID (bulk OUT+IN only).
+/// Cite: `ccid_transport.rs` `alloc.bulk` ×2. Interrupt IN omitted — see
+/// `CcidTransportClass` (Corigine IN/OUT pairing collision with HID).
 #[cfg(feature = "ccid-openpgp")]
-pub(crate) const EP_CCID: usize = 3;
+pub(crate) const EP_CCID: usize = 2;
 
 /// Per-class sanity check (kept). Prefer [`EpBudgetLedger`] for cumulative totals.
 pub(crate) fn assert_composite_ep_budget(label: &str, claimed: usize) {
@@ -60,7 +61,6 @@ pub(crate) fn make_ccid_transport<'a>(
     // Construction order (CCID image), alloc sites in CcidTransportClass::new:
     //   1) alloc.bulk OUT
     //   2) alloc.bulk IN
-    //   3) alloc.interrupt IN
     assert_class_ep_budget("CCID", EP_CCID);
     ledger.reserve_before_alloc("CCID", EP_CCID);
     CcidTransportClass::new(alloc, complete_rx, notify_cid)
@@ -153,8 +153,8 @@ impl<'a> Bao1xUsb<'a> {
         // to concurrently add that in - you have to kick out one of the interfaces above to add mass
         // storage!)
         //
-        // Persona A (ccid-openpgp): Corigine CRG_EP_NUM=8 leaves no room for CDC serial alongside
-        // CCID+FIDO+NKRO. Debug goes through xous-log UART / DUART instead.
+        // Persona A (ccid-openpgp): CCID(2)+FIDO(2)+NKRO(2)=6/8. No CDC serial; debug via
+        // xous-log UART / DUART.
 
         ledger.finalize();
         // Live counter is shared across CorigineWrapper clones (UsbBusAllocator vs outer cw).
@@ -290,6 +290,10 @@ impl<'a> Bao1xUsb<'a> {
     /// Pending interrupt events are not cleared here. An event raised while
     /// the interrupt is masked remains pending and is processed after the
     /// previous interrupt-enable state is restored.
+    ///
+    /// Persona A (`ccid-openpgp`): no CDC `serial_port` field — these helpers
+    /// are omitted; callers use UART / `xous-log` instead.
+    #[cfg(not(feature = "ccid-openpgp"))]
     pub fn serial_write_irq_safe(&mut self, data: &[u8]) -> usb_device::Result<usize> {
         // IRQARRAY1 is currently dedicated to the Corigine USB implementation,
         // so this code assumes there are no concurrent writers to EV_ENABLE.
@@ -312,6 +316,7 @@ impl<'a> Bao1xUsb<'a> {
 
     /// Flushes the USB CDC serial transmit buffer without allowing the USB
     /// interrupt handler to access the same `usbd-serial` state concurrently.
+    #[cfg(not(feature = "ccid-openpgp"))]
     pub fn serial_flush_irq_safe(&mut self) -> usb_device::Result<()> {
         let previous_enable = self.irq_csr.r(utra::irqarray1::EV_ENABLE);
 
