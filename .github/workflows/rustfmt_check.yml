@@ -19,6 +19,12 @@ jobs:
           DEFAULT_BRANCH="${{ github.event.repository.default_branch }}"
           git fetch --no-tags --prune --no-recurse-submodules --depth=1 origin "$DEFAULT_BRANCH"
           git checkout "origin/$DEFAULT_BRANCH" rustfmt.toml
+          # Forks may lag upstream: keep vendored ed25519-dalek-compat ignored.
+          if ! grep -q 'bao1x-boot/ed25519-dalek-compat/\*\*' rustfmt.toml; then
+            sed -i '/bao1x-boot\/ed25519-dalek-bao1x\/\*\*/a\    "bao1x-boot/ed25519-dalek-compat/**",' rustfmt.toml
+            echo "Inserted bao1x-boot/ed25519-dalek-compat/** into rustfmt.toml ignore"
+            grep -n 'ed25519-dalek' rustfmt.toml
+          fi
 
       - name: Generate dummy templates so formating checks don't choke on missing xtask-generated files
         run: cargo xtask dummy-template
