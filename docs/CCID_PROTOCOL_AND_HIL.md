@@ -208,8 +208,9 @@ the handler is running.
 
 | Build target | Features | CCID behavior | Intended use |
 |--------------|----------|---------------|--------------|
-| `cargo xtask baosec` | none (default) | No CCID interface; unchanged vs upstream `dev` | Default production image |
-| `cargo xtask baosec-ccid` | `ccid-openpgp` | Frames go to IPC handler only | CCID transport (no USB CDC) |
+| `cargo xtask baosec` | none (default) | No CCID interface; unchanged vs upstream `dev` | Default baosec image |
+| `cargo xtask dabao-ccid` | `ccid-openpgp` | Frames go to IPC handler only | **Hardware-confirmed** CCID on Dabao (no USB CDC) |
+| `cargo xtask baosec-ccid` | `ccid-openpgp` | Frames go to IPC handler only | Baosec CCID transport (no USB CDC) |
 | `cargo xtask ccid-hil` | `ccid-openpgp` + **`ccid-echo`** | IRQ path **echoes host frames on bulk IN** without handler | Lab / bench HIL only |
 
 **`ccid-echo` must never ship in production images.**
@@ -223,8 +224,10 @@ bytes back on bulk IN. That:
 - Must not be combined with tools (`pcscd`, GnuPG) that interpret responses as
   genuine card replies.
 
-Production CCID builds use the dedicated `baosec-ccid` xtask target, which adds
-`ccid-openpgp` but **does not** add `ccid-echo`. Only `ccid-hil` enables echo.
+Production CCID builds use `dabao-ccid` or `baosec-ccid`, which add
+`ccid-openpgp` but **do not** add `ccid-echo`. Only `ccid-hil` enables echo.
+Dabao (`1d50:6197`) is the hardware target confirmed for CCID enumeration in
+[`CCID_TEST_REPORT.md`](CCID_TEST_REPORT.md).
 
 **Release checklist:** verify the flashed image was built with `ccid-hil` only on
 test benches; confirm `ccid-echo` is absent from production feature sets.
@@ -356,10 +359,11 @@ Manufacturer string: `Baochip`.
 On Linux, expect something like:
 
 ```bash
-lsusb -d 1d50:6198
-# ...
-# class 0x0B CCID Interface on baosec-ccid / ccid-hil
-# no second CDC ACM for debug or provisioning on those images
+lsusb -d 1d50:6197   # dabao (hardware-confirmed CCID)
+# or: lsusb -d 1d50:6198   # baosec
+# class 0x0B CCID Interface on dabao-ccid / baosec-ccid / ccid-hil
+# no CDC ACM for debug or provisioning on those images
+# CCID bulk wMaxPacketSize = 512 (high-speed)
 ```
 
 ---
@@ -370,16 +374,20 @@ Defined in `services/usb-bao1x/Cargo.toml`:
 
 | Feature | Depends on | Effect |
 |---------|------------|--------|
-| `ccid-openpgp` | `pddb` | CCID bulk + PDDB helpers; **no USB CDC** (Persona A) |
+| `ccid-openpgp` | (none) | CCID bulk transport; **no USB CDC** (Persona A); no `pddb` |
+| `ccid-pddb` | `dep:pddb`, `ccid-openpgp` | Optional offline PDDB provisioning helpers (baosec) |
 | `ccid-echo` | `ccid-openpgp` | Echo every received `PC_to_RDR` frame on bulk IN (HIL only) |
 
 Build commands:
 
 ```bash
+# Dabao CCID (hardware-confirmed: 1d50:6197, HS bulk MPS 512)
+cargo xtask dabao-ccid
+
 # Default baosec image (no CCID; FIDO+NKRO+debug CDC)
 cargo xtask baosec
 
-# Production CCID transport (handler must be added separately; UART debug)
+# Baosec CCID transport (handler must be added separately; UART debug)
 cargo xtask baosec-ccid
 
 # HIL test image (adds ccid-echo; no external handler needed for USB tests)

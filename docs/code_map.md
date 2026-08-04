@@ -45,25 +45,26 @@ open next.
 Flashed image?
   |
   +-- Unknown / wrong target
-  |     --> Confirm: cargo xtask baosec | baosec-ccid | ccid-hil
+  |     --> Confirm: cargo xtask dabao | dabao-ccid | baosec | baosec-ccid | ccid-hil
   |         (see CCID_TEST_REPORT.md "Image targets")
-  |         baosec = no CCID (upstream dev parity)
-  |         baosec-ccid / ccid-hil = CCID transport enabled
+  |         dabao / baosec = no CCID
+  |         dabao-ccid / baosec-ccid / ccid-hil = CCID transport enabled
+  |         Hardware-confirmed CCID enum: Dabao dabao-ccid (1d50:6197, HS bulk MPS 512)
   |
-  +-- Known target --> Host: lsusb -d 1d50:6198
+  +-- Known target --> Host: lsusb -d 1d50:6197 (dabao) or 1d50:6198 (baosec)
         |
         +-- NO LINE (device not visible at all)
         |     --> BASE USB LAYER — not CCID-specific
-        |         1. Flash cargo xtask baosec (baseline). Still nothing?
+        |         1. Flash cargo xtask dabao or baosec (baseline). Still nothing?
         |            Problem is pre-CCID: board power, cable, SE0, Corigine driver.
-        |         2. If baosec works but baosec-ccid/ccid-hil does not:
+        |         2. If stock works but *-ccid / ccid-hil does not:
         |            Endpoint budget or CCID boot path — see symptom table rows
         |            "Nothing enumerates" and "CCID image breaks enumeration".
         |         Files: main.rs boot, hw.rs init/poll, driver.rs handle_event_inner
         |
         +-- DEVICE VISIBLE, lsusb -v shows HID + serial, NO interface class 0x0B
-        |     --> Wrong image (baosec) OR ccid-openpgp not in feature set
-        |         Fix: cargo xtask baosec-ccid or ccid-hil
+        |     --> Wrong image (stock dabao/baosec) OR ccid-openpgp not in feature set
+        |         Fix: cargo xtask dabao-ccid, baosec-ccid, or ccid-hil
         |         Files: xtask/src/main.rs, usb-bao1x/Cargo.toml
         |
         +-- DEVICE VISIBLE, class 0x0B (CCID) present
@@ -182,13 +183,13 @@ Shared queues on `Bao1xUsb` (`hw.rs`):
 | [`services/usb-bao1x/Cargo.toml`](../services/usb-bao1x/Cargo.toml) | Feature flags: `ccid-openpgp`, `ccid-echo`; optional `pddb` dep |
 | [`services/usb-bao1x/src/api.rs`](../services/usb-bao1x/src/api.rs) | IPC contract: `Opcode::{CcidRxDeferred,CcidTx,IrqCcidRx}`, `CcidMsgIpc`, `CcidCode` |
 | [`services/usb-bao1x/src/ep_budget.rs`](../services/usb-bao1x/src/ep_budget.rs) | Cumulative EP ledger; regression: fake class on 7/8 |
-| [`services/usb-bao1x/src/ccid_framing.rs`](../services/usb-bao1x/src/ccid_framing.rs) | Wire math: `CCID_WIRE_MAX`, `append_bulk_out`, `drain_complete_frames`, `next_tx_chunk`; **unit tests** |
-| [`services/usb-bao1x/src/ccid_transport.rs`](../services/usb-bao1x/src/ccid_transport.rs) | USB class 0x0B descriptors, bulk OUT assembly, bulk IN chunking, `enqueue_response` |
+| [`services/usb-bao1x/src/ccid_framing.rs`](../services/usb-bao1x/src/ccid_framing.rs) | Wire math: `CCID_WIRE_MAX` (271), `CCID_BULK_MAX_PACKET` (**512** HS), `append_bulk_out`, `drain_complete_frames`, `next_tx_chunk`; **unit tests** |
+| [`services/usb-bao1x/src/ccid_transport.rs`](../services/usb-bao1x/src/ccid_transport.rs) | USB class 0x0B descriptors, bulk OUT assembly, bulk IN chunking (512-byte packets), `enqueue_response` |
 | [`services/usb-bao1x/src/ccid_store.rs`](../services/usb-bao1x/src/ccid_store.rs) | PDDB dict `usb.ccid`; `is_ccid_provisioned`; offline `save_provisioned_pins` |
 | [`services/usb-bao1x/src/hw.rs`](../services/usb-bao1x/src/hw.rs) | Composite gadget, EP budget assert, `device.poll` (HID+CCID or HID+serial) |
 | [`services/usb-bao1x/src/main.rs`](../services/usb-bao1x/src/main.rs) | Boot, SE0, OKV1 log/warn, IPC loop, serial opcodes gated off on CCID |
 | [`services/usb-bao1x/src/lib.rs`](../services/usb-bao1x/src/lib.rs) | Public `ccid_framing` module; U2F client API (template for handler IPC) |
-| [`xtask/src/main.rs`](../xtask/src/main.rs) | `baosec` = no CCID; `baosec-ccid` adds `ccid-openpgp`; `ccid-hil` adds echo + `oem-baosec-lite`; `pddb` before `usb-bao1x` |
+| [`xtask/src/main.rs`](../xtask/src/main.rs) | `dabao` / `baosec` = no CCID; `dabao-ccid` / `baosec-ccid` add `ccid-openpgp`; `ccid-hil` adds echo + `oem-baosec-lite` |
 
 ---
 
@@ -223,7 +224,7 @@ Shared queues on `Bao1xUsb` (`hw.rs`):
 | **CCID image breaks enumeration; `baosec` works** | Endpoint budget: Persona A must stay at CCID+FIDO+NKRO (7/8). Check `EpBudgetLedger` / accidental CDC add. Boot: `pddb` before `usb-bao1x`. |
 | Device visible but **stuck at "new full-speed USB"** / never configured | `driver.rs` EP0 / `set_device_address`; `composite_handler` double-lock (`double_lock_detected` in main loop). Host `dmesg` for STALL. |
 | **Double lock** log in main loop | `hw.rs` `composite_handler` ~306 `try_lock` failure path |
-| No CCID interface in `lsusb -v` | Built `baosec` (no CCID) instead of `baosec-ccid` / `ccid-hil`; missing `ccid-openpgp` feature |
+| No CCID interface in `lsusb -v` | Built stock `dabao` / `baosec` (no CCID) instead of `dabao-ccid` / `baosec-ccid` / `ccid-hil`; missing `ccid-openpgp` feature |
 | `echo mismatch` / smoke test fail | Image has `ccid-echo`? `main.rs` `IrqCcidRx` echo branch; host timing (`ccid_smoke.py`) |
 | Handler never receives frames | Handler on `_Xous USB device driver_`? `CcidRxDeferred` + `RxWait`; production must **not** use `ccid-echo` |
 | `CcidCode::Denied` on receive | Only one listener PID; `main.rs` `CcidRxDeferred` |
@@ -249,19 +250,22 @@ Run on the machine with the device plugged in. Interpret via
 
 ```bash
 # Step 1 — is anything visible?
-lsusb -d 1d50:6198
+lsusb -d 1d50:6197   # dabao (hardware-confirmed CCID)
+# lsusb -d 1d50:6198   # baosec
 
 # Step 2 — interfaces (stock: HID+CDC; ccid images: HID+CCID 0x0B, no CDC)
-lsusb -d 1d50:6198 -v 2>/dev/null | grep -E 'bInterfaceClass|iInterface|idProduct'
+# Expect CCID bulk wMaxPacketSize 0x0200 (512) on high-speed
+lsusb -d 1d50:6197 -v 2>/dev/null | grep -E 'bInterfaceClass|iInterface|idProduct|wMaxPacketSize'
 
 # Step 3 — kernel view (stall, reset loops)
 dmesg -T | tail -30
 
-# Step 4 — CCID transport only (ccid-hil or baosec-ccid + ccid-echo image)
-python3 tools/ccid_smoke.py
+# Step 4 — CCID transport only (ccid-hil or *-ccid + ccid-echo image)
+python3 tools/ccid_smoke.py --vid 0x1d50 --pid 0x6197
 ```
 
-Expected `idProduct` for baosec boards: `0x6198` (`hw.rs` `UsbVidPid(0x1d50, pid)`).
+Expected `idProduct`: dabao `0x6197`, baosec `0x6198` (`hw.rs` `UsbVidPid(0x1d50, pid)`).
+Confirmed on hardware: Dabao `dabao-ccid`, HS 480 Mbps, CCID bulk MPS 512.
 
 ---
 
@@ -297,11 +301,13 @@ Local equivalents:
 
 ```bash
 cargo test -p usb-bao1x --lib ccid_framing
+cargo check -p usb-bao1x --features hosted-baosec,ccid-openpgp
 cargo check -p usb-bao1x --features board-baosec,ccid-openpgp,bao1x --target riscv32imac-unknown-xous-elf
+cargo xtask dabao-ccid --no-verify      # hardware-confirmed CCID on Dabao
 cargo xtask baosec --no-verify          # baseline USB (no CCID)
-cargo xtask baosec-ccid --no-verify     # CCID production transport
+cargo xtask baosec-ccid --no-verify     # baosec CCID transport
 cargo xtask ccid-hil --no-verify        # CCID + echo for bench
-python3 tools/ccid_smoke.py
+python3 tools/ccid_smoke.py --vid 0x1d50 --pid 0x6197
 ```
 
 ---

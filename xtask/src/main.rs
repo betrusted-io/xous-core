@@ -789,6 +789,45 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             builder.add_feature("ccid-openpgp");
         }
 
+        Some("dabao-ccid") => {
+            // Same package set as dabao (no pddb service — dabao has no SPI flash).
+            // USB CCID transport only; does not enable ccid-pddb.
+            let board = "board-dabao";
+            let sigblock_size = bao1x_api::signatures::SIGBLOCK_LEN;
+            update_flash_origin(
+                "loader/src/platform/bao1x/link.x",
+                (bao1x_api::LOADER_START + sigblock_size + STATICS_LEN) as u32,
+            )?;
+            builder.set_board(board);
+            builder.add_feature(board);
+            builder.add_loader_feature(board);
+            builder.add_kernel_feature(board);
+            builder.add_detached_app_feature(board);
+            builder.set_sigblock_size(sigblock_size);
+            builder.add_feature("ccid-openpgp");
+
+            let bao_rram_pkgs =
+                ["xous-ticktimer", "keystore", "xous-log", "xous-names", "usb-bao1x", "bao1x-hal-service"]
+                    .to_vec();
+            let bao_app_pkgs: Vec<&'static str> = [].to_vec();
+
+            builder.add_loader_feature("debug-print");
+            builder.add_kernel_feature("v2p");
+            builder.add_kernel_feature("print-panics");
+            builder.add_kernel_feature("debug-proc");
+            builder.target_bao1x_soc();
+
+            for service in bao_rram_pkgs {
+                builder.add_service(service, LoaderRegion::Flash);
+            }
+            builder.add_apps(&bao_app_pkgs);
+
+            for app in get_cratespecs() {
+                let (name, region) = crate::builder::region_from_name(&app, LoaderRegion::Flash);
+                builder.add_app(name, region);
+            }
+        }
+
         Some("baosec-lite") => {
             baosec_common(&mut builder)?;
             builder.add_feature("oem-baosec-lite");
@@ -1026,6 +1065,7 @@ Hardware images:
  baosec                  Baosec application target image (no CCID; same as upstream dev).
  baosec-ccid             Baosec with ccid-openpgp transport + provisioning (no ccid-echo).
  dabao                   Dabao application target image.
+ dabao-ccid              Dabao with ccid-openpgp USB transport (no pddb / no SPI flash).
  bao1x-baremetal-baosec  Baremetal image for baosec boards.
  bao1x-baremetal-dabao   Baremetal image for dabao boards.
  bao1x-boot0             Boot0 partition for baochip1x targets.

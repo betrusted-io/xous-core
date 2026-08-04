@@ -23,6 +23,9 @@ bao1x-hal = { path = "../../libs/bao1x-hal", features = [
 bao1x-api = { path = "../../libs/bao1x-api" }
 bao1x-hal-service = { path = "../bao1x-hal-service", optional = true }
 bao1x-emu = { path = "../bao1x-emu", optional = true }
+# Optional: only to forward `hosted-baosec` onto `ux-api` (pulled by `bao1x-emu`).
+# Without this, `ux-api` builds with `std` but no board feature, so `blitstr2` is missing.
+ux-api = { path = "../../libs/ux-api", optional = true }
 xous-usb-hid = { git = "https://github.com/betrusted-io/xous-usb-hid.git", branch = "main" }
 rkyv = { version = "0.8.8", default-features = false, features = [
     "std",
@@ -44,7 +47,7 @@ usbd-serial = { git = "https://github.com/betrusted-io/usbd-serial.git", branch 
     "max-packet-size-512",
 ] }
 
-# CCID USB transport + PDDB-backed provisioning strings (no OpenPGP/crypto in this service).
+# Optional PDDB helpers for offline CCID provisioning tooling (not required for USB transport).
 pddb = { path = "../pddb", optional = true, default-features = false, features = ["mbbb"] }
 
 [features]
@@ -58,7 +61,14 @@ board-baosec = [
 ]
 oem-baosec-lite = ["bao1x-hal/oem-baosec-lite"]
 board-dabao = ["utralib/bao1x", "utralib/std", "bao1x-hal", "bao1x-hal-service"]
-hosted-baosec = ["utralib/hosted", "utralib/std", "bao1x-emu", "pddb?/hosted-baosec"]
+hosted-baosec = [
+    "utralib/hosted",
+    "utralib/std",
+    "bao1x-emu",
+    "dep:ux-api",
+    "ux-api/hosted-baosec",
+    "pddb?/hosted-baosec",
+]
 # none of these other modes are actually supported, but are listed here
 # to allow direct re-use of API code
 precursor = ["utralib/precursor", "utralib/std"]
@@ -78,8 +88,11 @@ usbd-debug = ["usb-device/baochip-debug", "debug-print-usb"]
 prototyping = [
 ] # temporary feature-out for figuring out the code; remove this if you don't recognize it anymore
 
-# Generic USB CCID bulk transport + PDDB helpers (Persona A: no USB CDC on CCID images).
-ccid-openpgp = ["dep:pddb"]
+# Generic USB CCID bulk transport (Persona A: no USB CDC on CCID images).
+# Does not require pddb — dabao has no SPI flash / gen2 PDDB path.
+ccid-openpgp = []
+# Optional offline PDDB provisioning helpers (baosec images with a PDDB service).
+ccid-pddb = ["dep:pddb", "ccid-openpgp"]
 # HIL personality: echo PC_to_RDR frames on bulk IN (requires ccid-openpgp).
 ccid-echo = ["ccid-openpgp"]
 

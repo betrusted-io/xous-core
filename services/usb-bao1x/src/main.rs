@@ -1,5 +1,5 @@
 mod api;
-#[cfg(all(feature = "ccid-openpgp", target_os = "xous"))]
+#[cfg(all(feature = "ccid-pddb", target_os = "xous"))]
 mod ccid_store;
 #[cfg(all(feature = "ccid-openpgp", target_os = "xous"))]
 mod ccid_transport;
@@ -97,8 +97,6 @@ pub(crate) fn main_hw() -> ! {
         .map(|(_key, value)| value)
         .expect("Missing PUBLIC_SERIAL in environment");
 
-    let native_kbd = bao1x_api::keyboard::Keyboard::new(&xns).expect("couldn't connect to keyboard service");
-
     let usb_mapping = xous::syscall::map_memory(
         xous::MemoryAddress::new(bao1x_hal::usb::utra::CORIGINE_USB_BASE),
         None,
@@ -155,22 +153,9 @@ pub(crate) fn main_hw() -> ! {
     //    another crate that implements the USB stack which can't handle Box'd structures.
     //  - It is safe to call `.init()` repeatedly because within `init()` we have an atomic bool that tracks
     //    if the interrupt handler has been hooked, and ignores further requests to hook it.
-    // Persona A: CCID images allocate CCID+FIDO+NKRO only (7/8 Corigine slots). USB CDC (debug and
-    // provisioning) is not present — console/log mirroring stays on xous-log UART/DUART
-    // (services/xous-log/.../bao1x). PIN lines in PDDB are offline-only on these images.
-    #[cfg(feature = "ccid-openpgp")]
-    let pddb = pddb::Pddb::new();
-    #[cfg(feature = "ccid-openpgp")]
-    if crate::ccid_store::is_ccid_provisioned(&pddb) {
-        log::info!("CCID: PDDB already provisioned (OKV1); USB composite is CCID+FIDO+NKRO (no CDC)");
-    } else {
-        // Fail closed for USB provisioning (matches LogString "prefer discard" style): continue without
-        // a provisioning interface rather than exceeding the endpoint budget.
-        log::warn!(
-            "CCID: PDDB not OKV1-provisioned; USB PIN provisioning CDC is unavailable on CCID images \
-             (endpoint budget). Provision offline / with a non-CCID image, then reflash. Debug: UART."
-        );
-    }
+    // Persona A: CCID images allocate CCID+FIDO+NKRO only (6/8 Corigine slots; CCID bulk-only).
+    // USB CDC (debug and provisioning) is not present — console/log mirroring stays on
+    // xous-log UART/DUART (services/xous-log/.../bao1x). PIN lines in PDDB are offline-only.
     #[cfg(feature = "ccid-openpgp")]
     let ccid_rx_q = Rc::new(RefCell::new(VecDeque::new()));
 
@@ -200,7 +185,18 @@ pub(crate) fn main_hw() -> ! {
             ccid_rx_q,
         )
     });
+
+    // Match boot1 SE0 / EMS4000 sequencing (bao1x-boot/boot1/src/main.rs ~220–247):
+    // setup_usb_pins → Low → delay(X≈500) → controller init → delay(Y=150) → High.
+    let iox = bao1x_api::IoxHal::new();
+    let (se0_port, se0_pin) = bao1x_hal::board::setup_usb_pins(&iox);
+    iox.set_gpio_pin_value(se0_port, se0_pin, bao1x_api::IoxValue::Low);
+    // boot1 Low hold before glue::setup is ~500 ms (OLED or non-OLED path).
+    tt.sleep_ms(500).ok();
     cu.init();
+    // boot1 delay(150) after glue::setup before SE0 High (main.rs:243).
+    tt.sleep_ms(150).ok();
+    iox.set_gpio_pin_value(se0_port, se0_pin, bao1x_api::IoxValue::High);
 
     // Serial driver variables (USB CDC debug — not allocated on Persona A ccid-openpgp images)
     #[cfg(not(feature = "ccid-openpgp"))]
@@ -320,7 +316,6 @@ pub(crate) fn main_hw() -> ! {
         }
     });
 
-    let iox = bao1x_api::IoxHal::new();
     #[cfg(all(feature = "board-baosec", not(feature = "oem-baosec-lite")))]
     let mut i2c = bao1x_hal::i2c::I2c::new();
     #[cfg(all(feature = "board-baosec", not(feature = "oem-baosec-lite")))]
@@ -336,9 +331,8 @@ pub(crate) fn main_hw() -> ! {
         pmic
     };
 
-    let (se0_port, se0_pin) = bao1x_hal::board::setup_usb_pins(&iox);
-    iox.set_gpio_pin_dir(se0_port, se0_pin, bao1x_api::IoxDir::Input); // release SE0 state, allowing for enumeration
-    // NOTE: if SE0 is required, the KPC has to be un-configured to allow the SE0 I/O to actually be driven
+    // Defer Keyboard::new until after SE0 High: KBD server sets SFR_IOX=1 (PF incl. SE0/PF5).
+    let native_kbd = bao1x_api::keyboard::Keyboard::new(&xns).expect("couldn't connect to keyboard service");
 
     log::debug!("Entering main loop");
 
@@ -362,6 +356,20 @@ pub(crate) fn main_hw() -> ! {
                 VbusIrq::Remove => {
                     log::info!("VBUS removed. Resetting stack.");
                     cu.unplug();
+                    #[cfg(all(feature = "ccid-openpgp", not(feature = "ccid-echo")))]
+                    {
+                        // unplug() calls ccid.reset(); hang up deferred waiter explicitly too.
+                        if let Some(mut listener) = ccid_listener.take() {
+                            let mut response = unsafe {
+                                Buffer::from_memory_message_mut(listener.body.memory_message_mut().unwrap())
+                            };
+                            let mut deferred_buf = response.to_original::<CcidMsgIpc, _>().unwrap();
+                            deferred_buf.code = CcidCode::Hangup;
+                            response.replace(deferred_buf).unwrap();
+                        }
+                        ccid_listener_pid = None;
+                        let _ = cu.ccid.take_session_hangup();
+                    }
                 }
                 VbusIrq::InsertAndRemove => {
                     panic!("Unexpected report from vbus_irq status");
@@ -377,6 +385,21 @@ pub(crate) fn main_hw() -> ! {
                     let vbus_irq = VbusIrq::from(scalar.arg1);
                     if vbus_irq == VbusIrq::Remove {
                         cu.unplug();
+                        #[cfg(all(feature = "ccid-openpgp", not(feature = "ccid-echo")))]
+                        {
+                            if let Some(mut listener) = ccid_listener.take() {
+                                let mut response = unsafe {
+                                    Buffer::from_memory_message_mut(
+                                        listener.body.memory_message_mut().unwrap(),
+                                    )
+                                };
+                                let mut deferred_buf = response.to_original::<CcidMsgIpc, _>().unwrap();
+                                deferred_buf.code = CcidCode::Hangup;
+                                response.replace(deferred_buf).unwrap();
+                            }
+                            ccid_listener_pid = None;
+                            let _ = cu.ccid.take_session_hangup();
+                        }
                     }
                 }
             }
@@ -564,6 +587,29 @@ pub(crate) fn main_hw() -> ! {
             Opcode::CcidRxTimeout => {}
             #[cfg(feature = "ccid-openpgp")]
             Opcode::IrqCcidRx => {
+                // arg1 != 0: USB reset/unplug via CcidTransportClass::reset() — hang up deferred waiter.
+                let reset_hangup = msg.body.scalar_message().map(|s| s.arg1 != 0).unwrap_or(false);
+                #[cfg(not(feature = "ccid-echo"))]
+                {
+                    if reset_hangup || cu.ccid.take_session_hangup() {
+                        if let Some(mut listener) = ccid_listener.take() {
+                            let mut response = unsafe {
+                                Buffer::from_memory_message_mut(listener.body.memory_message_mut().unwrap())
+                            };
+                            let mut deferred_buf = response.to_original::<CcidMsgIpc, _>().unwrap();
+                            deferred_buf.code = CcidCode::Hangup;
+                            response.replace(deferred_buf).unwrap();
+                        }
+                        ccid_listener_pid = None;
+                        continue;
+                    }
+                }
+                #[cfg(feature = "ccid-echo")]
+                {
+                    if reset_hangup || cu.ccid.take_session_hangup() {
+                        continue;
+                    }
+                }
                 if let Some(frame) = cu.ccid_rx.borrow_mut().pop_front() {
                     #[cfg(feature = "ccid-echo")]
                     {
@@ -932,6 +978,7 @@ pub(crate) fn main_hw() -> ! {
                     }
                 }
             }
+            #[cfg(not(feature = "ccid-openpgp"))]
             Opcode::SerialSendDataBlocking => {
                 let mut buffer =
                     unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
@@ -999,6 +1046,7 @@ pub(crate) fn main_hw() -> ! {
             | Opcode::SerialClearHooks
             | Opcode::SerialFlush
             | Opcode::SerialSendData
+            | Opcode::SerialSendDataBlocking
             | Opcode::IrqSerialRx => {
                 log::warn!("USB serial unavailable on CCID Persona A image (use UART / xous-log)");
             }
