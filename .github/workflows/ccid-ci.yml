@@ -47,8 +47,11 @@ jobs:
       - name: CCID hosted compile check
         run: cargo check -p usb-bao1x --features hosted-baosec,ccid-openpgp
 
+      # Include modals so ux-api gets default-widgets (ActionType variants), matching
+      # production baosec feature unification. Isolated usb-bao1x+board-baosec leaves
+      # ActionType empty and fails enum_dispatch exhaustiveness.
       - name: CCID board compile check
-        run: cargo check -p usb-bao1x --features board-baosec,ccid-openpgp,bao1x --target riscv32imac-unknown-xous-elf
+        run: cargo check -p usb-bao1x -p modals --features board-baosec,ccid-openpgp,bao1x --target riscv32imac-unknown-xous-elf
 
       - name: CCID production image compile check
         run: cargo xtask baosec-ccid --no-verify

@@ -79,6 +79,7 @@ board-baosec = [
     "bmp180",
     "utralib/bao1x",
     "ux-api/board-baosec",
+    "ux-api/bao1x",
     "ux-api/std",
 ] # USB form factor token
 # "lite" variant of baosec. Shares the same basic flags but some things remapped when this is added.
