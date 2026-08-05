@@ -9,8 +9,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use num_traits::ToPrimitive;
 use usb_bao1x::ccid_framing::{
-    CCID_BULK_MAX_PACKET as CCID_BULK_MAX_PACKET_BYTES, append_bulk_out, consume_tx_chunk,
-    drain_complete_frames, next_tx_chunk,
+    CCID_BULK_MAX_PACKET as CCID_BULK_MAX_PACKET_BYTES, CCID_HEADER_LEN, append_bulk_out, consume_tx_chunk,
+    frame_total_len, is_get_slot_status, next_tx_chunk, rdr_to_pc_slot_status_ok,
 };
 use usb_device::Result as UsbResult;
 use usb_device::UsbError;
@@ -190,17 +190,75 @@ impl<'a, B: UsbBus> CcidTransportClass<'a, B> {
         g.tx_pending = !g.tx_buf.is_empty();
     }
 
+    /// USB endpoint index for CCID bulk OUT (for Corigine `ep_out_ready` force-rearm).
+    pub(crate) fn bulk_out_index(&self) -> usize { self.bulk_out.address().index() }
+
+    /// Arm Corigine bulk OUT by attempting a read (side effect queues a receive TRB).
+    ///
+    /// The bao1x `UsbBus::read` path only calls `bulk_xfer(CRG_OUT, …)` when the endpoint
+    /// is not already marked ready and `address_is_set` is true. Without at least one
+    /// successful arm after SET_ADDRESS / SET_CONFIGURATION, the host's first CCID bulk
+    /// OUT times out (`LIBUSB_ERROR_TIMEOUT`). Buffer length must be the bulk max packet
+    /// size — the driver sizes the TRB from `buf.len()`.
+    ///
+    /// Call sites: once after SE0 release in `main`, and from `endpoint_out` (re-arm
+    /// after receiving data). Do not call from `poll()` — that runs in the USB IRQ
+    /// path and a register-touching `read()` there breaks SET_ADDRESS timing (-71).
+    pub(crate) fn prime_bulk_out(&self) {
+        let mut tmp = [0u8; CCID_BULK_MAX_PACKET as usize];
+        match self.bulk_out.read(&mut tmp) {
+            Ok(0) | Err(UsbError::WouldBlock) => {
+                // No payload (or already armed). WouldBlock still arms when needed
+                // once `address_is_set` is true; before that it is a no-op.
+            }
+            Ok(n) => {
+                // Rare: data arrived during prime — fold into the normal RX path.
+                let mut g = self.inner.borrow_mut();
+                if append_bulk_out(&mut g.rx_assembly, &tmp[..n]).is_ok() {
+                    Self::drain_complete_messages(&mut g, &*self.complete_rx, self.notify_cid);
+                }
+            }
+            Err(_) => {}
+        }
+    }
+
     fn drain_complete_messages(
         g: &mut CcidTransportInner,
         complete_rx: &RefCell<VecDeque<Vec<u8>>>,
         notify_cid: xous::CID,
-    ) {
-        let new_frames = {
-            let mut q = complete_rx.borrow_mut();
-            let before = q.len();
-            drain_complete_frames(&mut g.rx_assembly, &mut *q);
-            q.len() - before
-        };
+    ) -> bool {
+        // Returns true if any GetSlotStatus was answered inline (caller must poll_bulk_in).
+        let mut answered_inline = false;
+        let mut new_frames = 0usize;
+        loop {
+            let Some(total) = frame_total_len(&g.rx_assembly) else {
+                if g.rx_assembly.len() >= CCID_HEADER_LEN {
+                    g.rx_assembly.clear();
+                }
+                break;
+            };
+            if g.rx_assembly.len() < total {
+                break;
+            }
+            let frame = g.rx_assembly[..total].to_vec();
+            g.rx_assembly.drain(..total);
+
+            // libccid CreateChannel uses two GetSlotStatus probes with a 100 ms
+            // ReadUSB timeout. Answer those in IRQ context — do not wake the stub.
+            if is_get_slot_status(&frame) {
+                let slot = frame[5];
+                let seq = frame[6];
+                let resp = rdr_to_pc_slot_status_ok(slot, seq);
+                g.tx_buf.clear();
+                g.tx_buf.extend_from_slice(&resp);
+                g.tx_pending = true;
+                answered_inline = true;
+                continue;
+            }
+
+            complete_rx.borrow_mut().push_back(frame);
+            new_frames += 1;
+        }
         if new_frames > 0 {
             xous::try_send_message(
                 notify_cid,
@@ -208,6 +266,7 @@ impl<'a, B: UsbBus> CcidTransportClass<'a, B> {
             )
             .ok();
         }
+        answered_inline
     }
 
     fn poll_bulk_in(&self) {
@@ -275,16 +334,30 @@ impl<'a, B: UsbBus> UsbClass<B> for CcidTransportClass<'a, B> {
         if addr != self.bulk_out.address() {
             return;
         }
-        let mut tmp = vec![0u8; CCID_BULK_MAX_PACKET as usize];
+        // Stack buffer: IRQ context must not allocate (same size as bulk max packet).
+        let mut tmp = [0u8; CCID_BULK_MAX_PACKET as usize];
         if let Ok(n) = self.bulk_out.read(&mut tmp) {
             if n == 0 {
+                // Still re-arm so the next host write has a TRB.
+                self.prime_bulk_out();
                 return;
             }
-            let mut g = self.inner.borrow_mut();
-            if append_bulk_out(&mut g.rx_assembly, &tmp[..n]).is_err() {
-                return;
+            let answered_inline = {
+                let mut g = self.inner.borrow_mut();
+                if append_bulk_out(&mut g.rx_assembly, &tmp[..n]).is_err() {
+                    drop(g);
+                    self.prime_bulk_out();
+                    return;
+                }
+                Self::drain_complete_messages(&mut g, &*self.complete_rx, self.notify_cid)
+            };
+            // Flush SlotStatus (and any other pending IN) before leaving IRQ.
+            if answered_inline {
+                self.poll_bulk_in();
             }
-            Self::drain_complete_messages(&mut g, &*self.complete_rx, self.notify_cid);
+            // Corigine `read` re-arms after consuming a packet; call again so a failed
+            // internal re-arm still leaves OUT ready for the next WriteUSB.
+            self.prime_bulk_out();
         }
     }
 }

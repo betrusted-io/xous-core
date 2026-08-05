@@ -822,9 +822,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
             builder.add_apps(&bao_app_pkgs);
 
-            for app in get_cratespecs() {
-                let (name, region) = crate::builder::region_from_name(&app, LoaderRegion::Flash);
-                builder.add_app(name, region);
+            // Positional cratespecs (e.g. galdralag-stub:/abs/path) are boot services so the
+            // CCID APDU handler is running when usb-bao1x enumerates — not detached apps.
+            for svc in get_cratespecs() {
+                let (name, region) = crate::builder::region_from_name(&svc, LoaderRegion::Flash);
+                builder.add_service(name, region);
             }
         }
 
@@ -1066,6 +1068,7 @@ Hardware images:
  baosec-ccid             Baosec with ccid-openpgp transport + provisioning (no ccid-echo).
  dabao                   Dabao application target image.
  dabao-ccid              Dabao with ccid-openpgp USB transport (no pddb / no SPI flash).
+                         Positional cratespecs are added as Flash services (e.g. galdralag-stub).
  bao1x-baremetal-baosec  Baremetal image for baosec boards.
  bao1x-baremetal-dabao   Baremetal image for dabao boards.
  bao1x-boot0             Boot0 partition for baochip1x targets.

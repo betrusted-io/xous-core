@@ -99,6 +99,34 @@ pub fn make_get_slot_status(seq: u8) -> [u8; CCID_HEADER_LEN] {
     frame
 }
 
+/// PC_to_RDR_GetSlotStatus (0x65).
+pub const PC_TO_RDR_GET_SLOT_STATUS: u8 = 0x65;
+/// RDR_to_PC_SlotStatus (0x81).
+pub const RDR_TO_PC_SLOT_STATUS: u8 = 0x81;
+
+/// True if `frame` is a well-formed GetSlotStatus (header only, dwLength 0).
+pub fn is_get_slot_status(frame: &[u8]) -> bool {
+    if frame.len() != CCID_HEADER_LEN || frame[0] != PC_TO_RDR_GET_SLOT_STATUS {
+        return false;
+    }
+    let dw = u32::from_le_bytes([frame[1], frame[2], frame[3], frame[4]]);
+    dw == 0
+}
+
+/// Fixed RDR_to_PC_SlotStatus: command OK, ICC present/active (bStatus/bError/bClock = 0).
+///
+/// Built without heapless/usb-personality so the IRQ path can answer libccid's
+/// CreateChannel GetSlotStatus probes (100 ms) without waking the stub.
+pub fn rdr_to_pc_slot_status_ok(slot: u8, seq: u8) -> [u8; CCID_HEADER_LEN] {
+    let mut frame = [0u8; CCID_HEADER_LEN];
+    frame[0] = RDR_TO_PC_SLOT_STATUS;
+    // dwLength = 0 already zeroed
+    frame[5] = slot;
+    frame[6] = seq;
+    // bStatus = 0, bError = 0, bClockStatus = 0
+    frame
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -167,5 +195,17 @@ mod tests {
         let mut remain = buf;
         consume_tx_chunk(&mut remain, chunk_len);
         assert_eq!(remain.len(), 600 - CCID_BULK_MAX_PACKET);
+    }
+
+    #[test]
+    fn get_slot_status_detect_and_reply() {
+        let req = make_get_slot_status(7);
+        assert!(is_get_slot_status(&req));
+        let resp = rdr_to_pc_slot_status_ok(0, 7);
+        assert_eq!(resp[0], RDR_TO_PC_SLOT_STATUS);
+        assert_eq!(resp[5], 0);
+        assert_eq!(resp[6], 7);
+        assert_eq!(&resp[1..5], &[0, 0, 0, 0]);
+        assert!(!is_get_slot_status(&resp));
     }
 }

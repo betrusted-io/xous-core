@@ -338,6 +338,9 @@ impl<'a> Bao1xUsb<'a> {
 pub enum UsbIrqReq {
     FidoTx,
     KbdTx,
+    /// Flush CCID bulk IN (`poll_bulk_in`) after `CcidTx` from main context.
+    #[cfg(feature = "ccid-openpgp")]
+    CcidTx,
 }
 
 pub const CORIGINE_IRQ_MASK: u32 = 0x1;
@@ -518,6 +521,13 @@ pub(crate) fn composite_handler(_irq_no: usize, arg: *mut usize) {
                 keyboard.write_report(kbd_events).ok();
                 usb.kbd_tx_queue.borrow_mut().clear();
                 keyboard.tick().ok();
+            }
+            #[cfg(feature = "ccid-openpgp")]
+            Some(UsbIrqReq::CcidTx) => {
+                // Main-context CcidTx only queues bytes; bulk IN is written from IRQ
+                // via UsbClass::poll → poll_bulk_in (same role as FidoTx write_report).
+                usb.ccid.poll();
+                usb.irq_serviced.store(true, Ordering::SeqCst);
             }
             None => (),
         }

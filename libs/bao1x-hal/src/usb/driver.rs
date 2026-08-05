@@ -2560,6 +2560,43 @@ impl UsbBus for CorigineWrapper {
         }
         crate::println!("enabled EPs: {:b}", self.core().csr.r(EPENABLE));
         crate::println!("running EPs: {:b}", self.core().csr.r(EPRUNNING));
+
+        // Queue the first receive TRB for each bulk OUT now that enq_pt is valid.
+        // Boot1 does the same after enable (bulk_xfer on USB_RECV). UsbBus::read
+        // cannot be called re-entrantly from here; mirror its BulkOutbound arm path.
+        for (index, &maybe_ep) in self.ep_meta.iter().enumerate() {
+            let Some((EpType::BulkOutbound, max_packet_size)) = maybe_ep else {
+                continue;
+            };
+            let ep_num = CorigineUsb::pei_to_ep(index + 2);
+            let ep_idx = ep_num as usize;
+            if ep_idx >= self.ep_out_ready.len() {
+                continue;
+            }
+            // Mark ready before queueing so a concurrent read() does not double-arm.
+            if self.ep_out_ready[ep_idx].swap(true, Ordering::SeqCst) {
+                continue;
+            }
+            let len = CRG_UDC_APP_BUF_LEN.min(max_packet_size);
+            let mut hw = self.core();
+            match hw.get_app_buf_ptr(ep_num, CRG_OUT) {
+                Some(addr) => {
+                    udc_pointer_check!(addr, len);
+                    hw.bulk_xfer(ep_num, CRG_OUT, addr, len, CRG_INT_TARGET, 0);
+                    crate::println!(
+                        "primed bulk OUT ep{} after set_address @ {:x} len {}",
+                        ep_num,
+                        addr,
+                        len
+                    );
+                }
+                None => {
+                    drop(hw);
+                    self.ep_out_ready[ep_idx].store(false, Ordering::SeqCst);
+                    crate::println!("failed to prime bulk OUT ep{} (no app buf)", ep_num);
+                }
+            }
+        }
     }
 
     /// Writes a single packet of data to the specified endpoint and returns number of bytes

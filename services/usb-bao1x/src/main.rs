@@ -198,6 +198,16 @@ pub(crate) fn main_hw() -> ! {
     tt.sleep_ms(150).ok();
     iox.set_gpio_pin_value(se0_port, se0_pin, bao1x_api::IoxValue::High);
 
+    // Prime CCID bulk OUT once before the main loop / first host traffic.
+    // Corigine UsbBus::read only queues a receive TRB after SET_ADDRESS
+    // (`address_is_set`); this call is a best-effort early attempt. A one-shot
+    // prime also runs in the main loop on the first LinkStatus that reports
+    // Configured (outside the USB IRQ path).
+    #[cfg(feature = "ccid-openpgp")]
+    {
+        cu.ccid.prime_bulk_out();
+    }
+
     // Serial driver variables (USB CDC debug — not allocated on Persona A ccid-openpgp images)
     #[cfg(not(feature = "ccid-openpgp"))]
     let mut serial_listener: Option<xous::MessageEnvelope> = None;
@@ -219,6 +229,9 @@ pub(crate) fn main_hw() -> ! {
     let mut ccid_listener_pid: Option<NonZeroU8> = None;
     #[cfg(all(feature = "ccid-openpgp", not(feature = "ccid-echo")))]
     let mut ccid_listener: Option<xous::MessageEnvelope> = None;
+    // One-shot CCID bulk-OUT arm after first Configured (main context, not IRQ).
+    #[cfg(feature = "ccid-openpgp")]
+    let mut ccid_primed = false;
 
     let mut autotype_delay_ms = 30;
 
@@ -356,6 +369,10 @@ pub(crate) fn main_hw() -> ! {
                 VbusIrq::Remove => {
                     log::info!("VBUS removed. Resetting stack.");
                     cu.unplug();
+                    #[cfg(feature = "ccid-openpgp")]
+                    {
+                        ccid_primed = false;
+                    }
                     #[cfg(all(feature = "ccid-openpgp", not(feature = "ccid-echo")))]
                     {
                         // unplug() calls ccid.reset(); hang up deferred waiter explicitly too.
@@ -385,6 +402,10 @@ pub(crate) fn main_hw() -> ! {
                     let vbus_irq = VbusIrq::from(scalar.arg1);
                     if vbus_irq == VbusIrq::Remove {
                         cu.unplug();
+                        #[cfg(feature = "ccid-openpgp")]
+                        {
+                            ccid_primed = false;
+                        }
                         #[cfg(all(feature = "ccid-openpgp", not(feature = "ccid-echo")))]
                         {
                             if let Some(mut listener) = ccid_listener.take() {
@@ -592,6 +613,7 @@ pub(crate) fn main_hw() -> ! {
                 #[cfg(not(feature = "ccid-echo"))]
                 {
                     if reset_hangup || cu.ccid.take_session_hangup() {
+                        ccid_primed = false;
                         if let Some(mut listener) = ccid_listener.take() {
                             let mut response = unsafe {
                                 Buffer::from_memory_message_mut(listener.body.memory_message_mut().unwrap())
@@ -607,6 +629,7 @@ pub(crate) fn main_hw() -> ! {
                 #[cfg(feature = "ccid-echo")]
                 {
                     if reset_hangup || cu.ccid.take_session_hangup() {
+                        ccid_primed = false;
                         continue;
                     }
                 }
@@ -649,6 +672,14 @@ pub(crate) fn main_hw() -> ! {
                 }
                 let data = core::mem::take(&mut ipc.data);
                 cu.ccid.enqueue_response(data);
+                // Kick soft IRQ so poll_bulk_in runs and queues the EP1 IN TRB.
+                // Without this, tx_pending sits until some later USB IRQ and the
+                // host ReadUSB times out (U2F uses the same FidoTx pattern).
+                cu.sw_irq(UsbIrqReq::CcidTx);
+                while !cu.irq_serviced.load(Ordering::SeqCst) {
+                    xous::yield_slice();
+                }
+                cu.irq_serviced.store(false, Ordering::SeqCst);
                 ipc.code = CcidCode::TxAck;
                 buffer.replace(ipc).unwrap();
             }
@@ -1054,7 +1085,21 @@ pub(crate) fn main_hw() -> ! {
                 if let Some(scalar) = msg.body.scalar_message_mut() {
                     // to get the raw device state:
                     // cu.device.bus().core().get_device_state()
-                    scalar.arg1 = cu.device.state() as usize;
+                    let state = cu.device.state();
+                    scalar.arg1 = state as usize;
+                    // One-shot bulk-OUT arm in main context after Configured (not IRQ).
+                    #[cfg(feature = "ccid-openpgp")]
+                    {
+                        use usb_device::device::UsbDeviceState;
+                        if state == UsbDeviceState::Configured {
+                            if !ccid_primed {
+                                cu.ccid.prime_bulk_out();
+                                ccid_primed = true;
+                            }
+                        } else {
+                            ccid_primed = false;
+                        }
+                    }
                 }
             }
             Opcode::GetLedState => {
