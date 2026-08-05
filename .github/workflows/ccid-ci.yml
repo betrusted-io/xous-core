@@ -35,7 +35,11 @@ jobs:
 
       - uses: Swatinem/rust-cache@v1
 
+      # GITHUB_TOKEN raises the releases API quota; anonymous shared-runner IPs
+      # often 403 when Build matrix + CCID CI hit betrusted-io/rust together.
       - name: Install RISC-V toolkit
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: cargo xtask install-toolkit --force --no-verify
 
       - name: CCID framing unit tests

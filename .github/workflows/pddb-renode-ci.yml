@@ -69,10 +69,14 @@ jobs:
       # fork library/std/src/sys/fs/xous.rs); if a new toolkit fixes one, its
       # test flips XFAIL -> XPASS and the run goes red until the registry is
       # updated -- the signal that the toolchain moved. (jq is preinstalled on
-      # ubuntu-latest; the releases API is public, no token needed.)
+      # ubuntu-latest.)
       - name: Resolve and install the latest betrusted-io/rust toolchain
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          TAG=$(curl -fsSL https://api.github.com/repos/betrusted-io/rust/releases/latest | jq -r .tag_name)
+          TAG=$(curl -fsSL -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            https://api.github.com/repos/betrusted-io/rust/releases/latest | jq -r .tag_name)
           RUSTC_VER=$(echo "$TAG" | cut -d. -f1,2,3)
           echo "latest betrusted-io/rust release: $TAG -> rustc $RUSTC_VER"
           rustup toolchain install "$RUSTC_VER" --profile minimal
@@ -86,6 +90,8 @@ jobs:
       - uses: Swatinem/rust-cache@v2
 
       - name: Install RISC-V toolkit
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: cargo xtask install-toolkit --force --no-verify
 
       - name: Clean out old target directory (in case of libstd change)

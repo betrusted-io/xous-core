@@ -24,7 +24,9 @@ lazy_static! {
 /// GET GitHub REST `releases` JSON with optional bearer auth.
 /// In GitHub Actions, set `GITHUB_TOKEN` (see workflow) to avoid anonymous rate limits (403).
 fn github_releases_get_json(url: &str) -> Result<serde_json::Value, String> {
-    let mut req = ureq::get(url).set("Accept", "application/vnd.github.v3+json");
+    let mut req = ureq::get(url)
+        .set("Accept", "application/vnd.github.v3+json")
+        .set("User-Agent", "xous-core-xtask-install-toolkit");
     let token = std::env::var("GITHUB_TOKEN")
         .ok()
         .filter(|t| !t.is_empty())
