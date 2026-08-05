@@ -99,11 +99,12 @@ OpenPGP application logic runs in a **separate Xous service** on the device.
 | USB CCID descriptors, bulk IN/OUT, frame assembly | Transport | **Yes** (`ccid_transport.rs`, `ccid_framing.rs`) |
 | Deferred IPC for complete host frames | Transport API | **Yes** (`CcidRxDeferred` / `CcidTx`) |
 | Persist / read opaque PIN lines in PDDB (`OKV1`) | Provisioning storage | **Yes** (`ccid_store.rs`); **no USB CDC capture** on CCID images (Persona A) |
-| Parse `PC_to_RDR_*` message types | Protocol | **No** |
+| Parse most `PC_to_RDR_*` message types | Protocol | **No** (exception: GetSlotStatus answered inline) |
+| `PC_to_RDR_GetSlotStatus` → `RDR_to_PC_SlotStatus` | Transport | **Yes** (IRQ path; see framing / CreateChannel note) |
 | T=1 block protocol, APDU parsing | Card protocol | **No** |
-| OpenPGP card emulation, key storage, crypto | Application | **No** (external service, e.g. `baochip-openpgp`) |
+| OpenPGP card emulation, key storage, crypto | Application | **No** (external service, e.g. `baochip-openpgp` / stub) |
 | `pcscd` driver, GnuPG integration | Host stack | **No** |
-| CCID interrupt notifications (insert/remove) | Transport | **No** (stub endpoint only) |
+| CCID interrupt notifications (insert/remove) | Transport | **No** (interrupt IN endpoint omitted) |
 
 The Cargo feature is named `ccid-openpgp` for product alignment, but **no
 OpenPGP or Galdralag crates** are linked into xous-core. All cryptography stays
@@ -307,15 +308,23 @@ reset or a product-specific PDDB update path outside this PR.
 
 Data flow for a normal (non-echo) production image:
 
-1. Host sends CCID bulk OUT data; `ccid_transport` reassembles a complete
+1. After USB `SET_ADDRESS`, Corigine bulk OUT endpoints are **primed** in
+   `set_device_address` (first receive TRB after `ep_enable`). Without this,
+   host `WriteUSB` times out and `pcscd` never finishes `RFAddReader`.
+2. Host sends CCID bulk OUT data; `ccid_transport` reassembles a complete
    `PC_to_RDR` frame.
-2. Frame is queued; `IrqCcidRx` notifies `usb-bao1x`.
-3. A deferred listener (external handler) receives the raw frame bytes via
-   `CcidRxDeferred`.
-4. Handler parses the CCID message, runs APDU logic, builds an `RDR_to_PC`
+3. **`PC_to_RDR_GetSlotStatus` (0x65)** is answered **inline in the IRQ path**
+   with a fixed `RDR_to_PC_SlotStatus` (does not wake the stub / handler).
+   libccid CreateChannel issues two GetSlotStatus probes with a **100 ms**
+   ReadUSB timeout (`readTimeout * 100 / DEFAULT_COM_READ_TIMEOUT`); IPC
+   round-trips are too slow for that window.
+4. Other complete frames are queued; `IrqCcidRx` notifies `usb-bao1x`.
+5. A deferred listener (external handler / stub) receives the raw frame bytes
+   via `CcidRxDeferred`.
+6. Handler parses the CCID message, runs APDU logic, builds an `RDR_to_PC`
    response frame.
-5. Handler sends raw response bytes with `CcidTx`; transport chunks them on
-   bulk IN.
+7. Handler sends raw response bytes with `CcidTx`; transport chunks them on
+   bulk IN (main loop triggers a soft IRQ so `poll_bulk_in` runs promptly).
 
 ---
 
@@ -327,9 +336,10 @@ That hardware budget is why CCID images drop USB CDC.
 | Image / feature set | Classes | Unidirectional EPs | Fits? |
 |---------------------|---------|--------------------|-------|
 | `baosec` (no `ccid-openpgp`) | FIDO (2) + NKRO (2) + debug CDC (3) | **7 / 8** | yes |
-| `baosec-ccid` / `ccid-hil` (`ccid-openpgp`) | CCID (3) + FIDO (2) + NKRO (2) | **7 / 8** | yes |
-| (rejected) CCID + FIDO + NKRO + debug CDC | 3+2+2+3 | **10 / 8** | no |
-| (rejected) above + provision CDC | +3 | **13 / 8** | no |
+| `baosec-ccid` / `ccid-hil` / `dabao-ccid` (`ccid-openpgp`) | CCID (2) + FIDO (2) + NKRO (2) | **6 / 8** | yes |
+| (rejected) CCID interrupt + FIDO + NKRO | interrupt IN collided with NKRO | broke enum | — |
+| (rejected) CCID + FIDO + NKRO + debug CDC | 2+2+2+3 | **9 / 8** | no |
+| (rejected) above + provision CDC | +3 | **12 / 8** | no |
 
 **Persona A (`ccid-openpgp`):** composite is **CCID + FIDO + NKRO only**. Debug
 CDC and provisioning CDC are **not** allocated. Debug/`log` output uses the
@@ -418,14 +428,15 @@ descriptors).
 | dwMaxCCIDMessageLength | 0x10F (271) | Max payload in one CCID message |
 | dwFeatures | 0x000400FE | Short APDU; character level; etc. |
 | Bulk max packet | 512 bytes | High-speed |
-| Wire maximum | 530 bytes | 10-byte header + payload (`CCID_WIRE_MAX`) |
+| Wire maximum | 271 bytes (`0x10F`) | Short APDU `CCID_WIRE_MAX` |
 
 Endpoints:
 
 - **Bulk OUT** — host sends `PC_to_RDR_*` frames (possibly split across 512-byte
-  USB transactions)
+  USB transactions). Primed after `set_device_address` / `ep_enable`.
 - **Bulk IN** — device sends `RDR_to_PC_*` frames (chunked at 512 bytes)
-- **Interrupt IN** — present in descriptor; notifications not implemented
+- **Interrupt IN** — **omitted** (Corigine `alloc_ep` pairing caused NKRO EP
+  collision / host `EPROTO` when a lone CCID interrupt IN was allocated)
 
 ---
 
@@ -442,7 +453,7 @@ Every CCID bulk message:
  bytes 10..   : payload (dwLength bytes)
 ```
 
-Total size = 10 + `dwLength`, capped at 530 bytes.
+Total size = 10 + `dwLength`, capped at `CCID_WIRE_MAX` (271 bytes).
 
 The device **buffers partial bulk OUT packets** until a full frame is available,
 then delivers the complete byte vector to software. Replies are queued as one
@@ -460,9 +471,22 @@ traffic:
 | 0x80 | RDR_to_PC_DataBlock | Reader to host | Response data (often APDU response) |
 | 0x81 | RDR_to_PC_SlotStatus | Reader to host | Slot status reply |
 
-xous-core **does not interpret** these types. It forwards complete frames over
-IPC. Only the external handler (or the `ccid-echo` test personality) inspects
-`bMessageType`.
+**Exception:** `PC_to_RDR_GetSlotStatus` (0x65) is detected in
+`ccid_transport` / `ccid_framing` and answered **inline in the USB IRQ** with
+`rdr_to_pc_slot_status_ok` (fixed 10-byte `RDR_to_PC_SlotStatus`). That path
+does **not** route to the deferred stub/handler.
+
+All other message types are forwarded as complete frames over IPC. Only the
+external handler (or the `ccid-echo` test personality) interprets them.
+
+#### Why GetSlotStatus is inline (100 ms libccid window)
+
+On CreateChannel, libccid sends two GetSlotStatus resync probes and waits only
+`readTimeout * 100 / DEFAULT_COM_READ_TIMEOUT` (typically **100 ms** when the
+default read timeout is 3 s). Answering via `CcidRxDeferred` → stub → `CcidTx`
+misses that window and used to make `RFAddReader` fail even when the rest of
+the stack worked. Inline IRQ replies keep CreateChannel within budget so
+`pcscd` can finish reader init and then exchange ATR / APDUs with the handler.
 
 ### Example CCID hex dumps
 
@@ -488,7 +512,9 @@ Full frame (10 bytes):
   65 00 00 00 00 00 01 00 00 00
 ```
 
-On a `ccid-echo` HIL image, bulk IN returns the **same 10 bytes** unchanged.
+On production / stub images, GetSlotStatus is answered inline (see above).
+On a `ccid-echo` HIL image without that branch dominating, bulk IN may return
+the **same 10 bytes** unchanged for echo testing.
 
 #### PC_to_RDR_XfrBlock (host to device)
 
@@ -563,15 +589,10 @@ Assembled IPC frame:      65 00 00 00 00 00 01 00 00 00
 
 #### Multi-packet bulk IN (device to host)
 
-Replies are streamed in 512-byte chunks. A 530-byte response (maximum wire
-size) uses two IN transactions:
-
-```
-Chunk 1: 512 bytes (bytes 0..511 of the RDR_to_PC frame)
-Chunk 2:  18 bytes (bytes 512..529)
-```
-
-Capture with `usbmon` or pyusb read loops if debugging partial reads on the host.
+Replies are streamed in 512-byte chunks. Frames up to `CCID_WIRE_MAX` (271)
+fit in one high-speed bulk packet; larger TX buffers (unit-test / stress)
+still chunk at 512. Capture with `usbmon` or pyusb read loops if debugging
+partial reads on the host.
 
 ---
 
@@ -875,21 +896,25 @@ TX chunking. It does **not** validate APDU semantics or crypto.
 
 ## Host software path (pcscd / GnuPG)
 
-Once an OpenPGP handler service ships on the device, the expected Linux path is:
+Expected Linux path (confirmed on Dabao with `dabao-ccid` + out-of-tree stub):
 
-1. Plug in Baosec; kernel loads generic CCID support or a project-specific udev
-   rule binds the interface.
-2. `pcscd` detects the reader (`pcsc_scan`).
-3. `gpg --card-status` issues CCID exchanges that become APDUs on the device.
+1. Plug in Dabao (`1d50:6197`); kernel binds the CCID interface.
+2. `pcscd` runs `RFAddReader` successfully (CreateChannel GetSlotStatus probes
+   answered inline; bulk OUT primed after address set).
+3. `pcsc_scan` shows reader `Baochip Dabao CCID (HBZFHW)`, card inserted, ATR
+   `3B DA 18 FF 81 B1 FE 75 1F 03 00 31 C5 73 C0 01 40 00 90 00 0C`, identified
+   as **OpenPGP Card V2**.
+4. Full `gpg --card-status` / production OpenPGP crypto still needs the real
+   handler (stub proves ATR + SELECT only).
 
-That end-to-end path is **out of scope** for xous-core CI today. This repository
-tests:
+This repository's automated CI still covers:
 
-- Framing logic (unit tests)
+- Framing logic (unit tests — **8/8** `ccid_framing`)
 - USB enumeration and bulk echo (`ccid-echo` image + Python HIL)
 
-Full `gpg --card-status` regression belongs in the OpenPGP handler repository
-once it exists.
+Hardware pcscd / `pcsc_scan` results are recorded in
+[`CCID_TEST_REPORT.md`](CCID_TEST_REPORT.md). Full GnuPG regression belongs in
+the OpenPGP handler repository.
 
 ---
 
@@ -927,7 +952,7 @@ python3 tools/test_ep_budget_cumulative.py
 python3 tools/sim_persona_a_composite.py
 ```
 
-- `ccid_framing`: partial-frame handling, oversize rejection, reassembly, TX chunking, `OKV1` marker.
+- `ccid_framing`: partial-frame handling, oversize rejection, reassembly, TX chunking, `OKV1` marker, GetSlotStatus helpers (**8/8**).
 - `ep_budget`: cumulative ledger + proof that independent subtotals miss 7+2 overflow.
 - Python scripts: static EP totals per xtask image; mock Persona A composite asserts.
 ### Tier 2: Compile gates (no hardware)
@@ -1110,7 +1135,7 @@ Logs: `/tmp/ccid-hil-out/`
 | EP arithmetic (optional local) | Developer machine | `check_ep_budget.py`, `test_ep_budget_cumulative.py`, `sim_persona_a_composite.py` |
 | Compile + image | GitHub-hosted | `ccid-ci.yml`, `build.yml` / `baosec` |
 | HIL transport | Pi self-hosted | Enum, no-CDC (HIL-02), echo, stress |
-| OpenPGP E2E | Out of tree | `gpg --card-status` with handler service |
+| OpenPGP E2E | Out of tree + Dabao HIL | Stub: `pcsc_scan` ATR / OpenPGP Card V2; full GnuPG = handler repo |
 
 See also [`docs/CCID_TEST_REPORT.md`](CCID_TEST_REPORT.md) for recorded
 verification results and [`docs/code_map.md`](code_map.md) for source navigation.
