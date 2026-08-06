@@ -68,20 +68,17 @@ impl Repl {
             if self.cmdline.len() != 0 {
                 self.cmdline.pop();
             }
-        } else {
-            // everything else
-            match char::from_u32(c as u32) {
-                Some(c) => {
-                    if self.local_echo {
-                        crate::print!("{}", c);
-                    }
-                    self.cmdline.push(c);
-                }
-                None => {
-                    crate::println!("Warning: bad char received, ignoring")
-                }
+        } else if (0x20..=0x7e).contains(&c) {
+            // Printable ASCII only. Anything else (notably 0xFF framing noise that couples onto
+            // the idle UART RX line during USB enumeration) is dropped, so line noise can neither
+            // echo-storm the console nor grow `cmdline` without bound and exhaust the heap.
+            let c = c as char;
+            if self.local_echo {
+                crate::print!("{}", c);
             }
+            self.cmdline.push(c);
         }
+        // else: non-printable byte (control chars, 0x7f, 0x80..=0xff) — silently ignored
     }
 
     pub fn process(&mut self) -> Result<(), Error> {
