@@ -1469,12 +1469,26 @@ impl CorigineUsb {
                 | self.csr.ms(EVENTCONFIG_USB2_RESUME_NO_PLC_ENABLE, 1),
         );
 
+        // NOTE: RUN_STOP (the upstream pullup / "connect") is deliberately NOT
+        // asserted here.
+        //
+        // The pullup must be the *last* bring-up step. Asserting it here races
+        // the host: the core becomes visible before it can service SETUP
+        // packets, and if the port is still held in SE0 the running core
+        // mistakes the masked bus for host reset signalling, fails high-speed
+        // chirp sequence, and drops to full-speed.
+        //
+        // `start()` only arms the event ring, interrupter and EP0; assert the
+        // pullup via `pullup(true)` once the SoC interrupt is unmasked and any
+        // external SE0 port mask has been released.
+        //
+        // It's important to note that the resulting behavior is
+        // non-deterministic. That is, sometimes the link recovers and manages
+        // to negotiate HS, sometimes is drops to FS, sometimes it confuses xHCI
+        // (the host) enough to force it to disable the port.
         self.csr.wo(
             USBCMD,
-            self.csr.r(USBCMD)
-                | self.csr.ms(USBCMD_SYS_ERR_ENABLE, 1)
-                | self.csr.ms(USBCMD_INT_ENABLE, 1)
-                | self.csr.ms(USBCMD_RUN_STOP, 1),
+            self.csr.r(USBCMD) | self.csr.ms(USBCMD_SYS_ERR_ENABLE, 1) | self.csr.ms(USBCMD_INT_ENABLE, 1),
         );
 
         /*
@@ -1502,6 +1516,23 @@ impl CorigineUsb {
 
         self.set_addr(0, CRG_INT_TARGET);
     }
+
+    /// Assert (`connect = true`) or de-assert the upstream pullup by toggling
+    /// `USBCMD.RUN_STOP`.
+    ///
+    /// It makes the device visible on the bus and therefore MUST be the final
+    /// bring-up step. `start()` no longer touches RUN_STOP, so the required
+    /// order is:
+    ///
+    /// ```text
+    /// reset -> init -> start -> (unmask SoC IRQ) -> (release external SE0) -> pullup(true)
+    /// ```
+    ///
+    /// Asserting the pullup any earlier races the host into enumerating a core
+    /// that cannot yet answer to SETUP packets, and - while an external SE0
+    /// line still masks the port - makes the running core misread the held bus
+    /// as host reset signalling, botching high-speed chirp.
+    pub fn pullup(&mut self, connect: bool) { self.csr.rmwf(USBCMD_RUN_STOP, if connect { 1 } else { 0 }); }
 
     pub fn issue_command(&mut self, cmd: CmdType, p0: u32, p1: u32) -> core::result::Result<(), Error> {
         // don't allow overlapping commands. This can hang the system if the USB core is wedged.
@@ -2503,6 +2534,8 @@ impl UsbBus for CorigineWrapper {
             hw.reset();
             hw.init(None); // default to high speed
             hw.start();
+            // cable-driven (VBUS) connect: nothing gates the port, so assert the pullup now.
+            hw.pullup(true);
             hw.update_current_speed();
             // IRQ enable must happen without dependency on the hardware lock
             hw.irq_csr.clone()
@@ -2879,6 +2912,8 @@ impl UsbBus for CorigineWrapper {
             hw.reset();
             hw.init(None);
             hw.start();
+            // cable-driven (VBUS) connect: nothing gates the port, so assert the pullup now.
+            hw.pullup(true);
             hw.update_current_speed();
             // IRQ enable must happen without dependency on the hardware lock
             hw.irq_csr.clone()

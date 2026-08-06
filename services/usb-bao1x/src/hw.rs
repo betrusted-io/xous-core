@@ -150,6 +150,8 @@ impl<'a> Bao1xUsb<'a> {
 
         self.wrapper.core().init(None);
         self.wrapper.core().start();
+        // cable-driven (VBUS) connect: assert the pullup as the final step.
+        self.wrapper.core().pullup(true);
         self.wrapper.core().update_current_speed();
 
         // irq must me enabled without dependency on the hw lock
@@ -172,6 +174,8 @@ impl<'a> Bao1xUsb<'a> {
         self.wrapper.core().reset();
         self.wrapper.core().init(None);
         self.wrapper.core().start();
+        // cable-driven (VBUS) connect: assert the pullup as the final step.
+        self.wrapper.core().pullup(true);
         self.wrapper.core().update_current_speed();
 
         // reset all shared data structures

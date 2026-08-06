@@ -1073,6 +1073,8 @@ impl Repl {
                 iox.set_gpio_pin_value(bao1x_api::IoxPort::PF, 5, bao1x_api::IoxValue::Low);
                 // force USB speed to full speed
                 crate::glue::setup(Some(bao1x_hal::usb::driver::PortSpeed::Fs));
+                // SE0 is already released at this point, so assert the pullup immediately.
+                crate::glue::connect();
 
                 let slot_mgr = bao1x_hal::acram::SlotManager::new();
                 let mut rram = bao1x_hal::rram::Reram::new();

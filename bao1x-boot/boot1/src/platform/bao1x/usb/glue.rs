@@ -128,15 +128,40 @@ pub fn setup(speed: Option<bao1x_hal::usb::driver::PortSpeed>) -> (UsbDeviceStat
             let usb = &mut *core::ptr::addr_of_mut!(*usb_ref);
             usb.reset();
             usb.init(speed);
+            // Arm the event ring, interrupter and EP0, but do NOT assert the pullup (RUN_STOP)
+            // here: it is deferred to `connect()`, which the caller invokes only after the
+            // external SE0 port mask has been released.
             usb.start();
-            usb.update_current_speed();
-            // IRQ enable must happen without dependency on the hardware lock
+            // IRQ enable must happen without dependency on the hardware lock, and must be armed
+            // before the pullup is asserted.
             usb.irq_csr.wo(utralib::utra::irqarray1::EV_PENDING, 0xffff_ffff); // blanket clear
             usb.irq_csr.wfo(utralib::utra::irqarray1::EV_ENABLE_USBC_DUPE, 1);
 
             let last_usb_state = usb.get_device_state();
             let portsc = usb.portsc_val();
-            crate::println_d!("USB state: {:?}, {:x}", last_usb_state, portsc);
+            crate::println_d!("USB armed (pullup deferred): {:?}, {:x}", last_usb_state, portsc);
+            (last_usb_state, portsc)
+        } else {
+            panic!("USB core not allocated, can't proceed!");
+        }
+    }
+}
+
+/// Assert the upstream pullup (RUN_STOP) — the final USB bring-up step.
+///
+/// Must be called *after* [`setup`] and after the external SE0 port mask has been released (and
+/// the bus given a moment to settle). Deferring RUN_STOP to this point lets the first bus reset
+/// the running core observes be the host's genuine reset, so high-speed chirp can complete
+/// instead of collapsing to full-speed.
+pub fn connect() -> (UsbDeviceState, u32) {
+    unsafe {
+        if let Some(ref mut usb_ref) = crate::platform::bao1x::usb::USB {
+            let usb = &mut *core::ptr::addr_of_mut!(*usb_ref);
+            usb.pullup(true);
+            usb.update_current_speed();
+            let last_usb_state = usb.get_device_state();
+            let portsc = usb.portsc_val();
+            crate::println_d!("USB pullup asserted: {:?}, {:x}", last_usb_state, portsc);
             (last_usb_state, portsc)
         } else {
             panic!("USB core not allocated, can't proceed!");

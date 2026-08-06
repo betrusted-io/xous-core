@@ -235,16 +235,20 @@ pub unsafe extern "C" fn rust_entry() -> ! {
     }
 
     delay(250);
-    // setup the USB port
-    let (mut last_usb_state, mut portsc) = match one_way.get_decoded::<UsbDefaultSpeed>() {
+    // Arm the USB core while the port is still held in SE0 (RUN_STOP stays de-asserted here).
+    let _ = match one_way.get_decoded::<UsbDefaultSpeed>() {
         Ok(UsbDefaultSpeed::Full) => glue::setup(Some(PortSpeed::Fs)),
         _ => glue::setup(Some(PortSpeed::Hs)),
     };
-    delay(150);
 
-    // release SE0
+    // release SE0 so the bus returns to a clean idle before we assert the pullup
     iox.set_gpio_pin(se0_baosec.0, se0_baosec.1, bao1x_api::IoxValue::High);
     iox.set_gpio_pin(se0_dabao.0, se0_dabao.1, bao1x_api::IoxValue::High);
+    delay(150); // let the bus settle to disconnected-idle before presenting the device
+
+    // Assert the pullup (RUN_STOP) as the final bring-up step. The running core's first observed
+    // bus reset is now the host's genuine reset, so high-speed chirp can complete.
+    let (mut last_usb_state, mut portsc) = glue::connect();
     // return the pin to an input
     match board_type {
         BoardTypeCoding::Dabao | BoardTypeCoding::Oem => {
