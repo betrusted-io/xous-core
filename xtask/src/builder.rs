@@ -1009,7 +1009,7 @@ impl Builder {
                                 "boot0"
                             } else if name == "bao1x-boot1" {
                                 "boot1"
-                            } else if name == "baremetal" || name == "bao1x-alt-boot1" {
+                            } else if name == "baremetal" || name == "bao1x-alt-boot1" || name == "erasure" {
                                 "baremetal"
                             } else {
                                 return Err(String::from("Target subtype not supported").into());
