@@ -5,7 +5,7 @@ mod handlers;
 pub use driver::*;
 pub use handlers::*;
 
-use crate::irq::*;
+use crate::platform::irq::*;
 
 const USB_TYPE_MASK: u8 = 0x03 << 5;
 const USB_TYPE_STANDARD: u8 = 0x00 << 5;

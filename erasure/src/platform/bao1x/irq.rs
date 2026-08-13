@@ -4,7 +4,7 @@ use riscv::register::{mcause, mie, mstatus};
 use vexriscv::register::vexriscv::{mim, mip};
 
 #[cfg(feature = "bao1x-usb")]
-use crate::usb::USB;
+use crate::platform::usb::USB;
 use crate::*;
 
 pub fn irq_setup() {

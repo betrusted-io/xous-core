@@ -2325,19 +2325,14 @@ version = "0.1.0"
 dependencies = [
  "bao1x-api 0.1.0",
  "bao1x-hal",
- "base64 0.22.1",
  "critical-section",
  "digest 0.10.7",
- "ed25519-dalek-bao1x",
- "hex-literal 1.0.0",
  "linked_list_allocator",
  "riscv",
  "sha2",
  "sha2-bao1x",
  "utralib 0.1.27",
- "ux-api",
  "xous 0.9.70 (registry+https://github.com/rust-lang/crates.io-index)",
- "xous-bio-bdma",
  "xous-riscv",
 ]
 
