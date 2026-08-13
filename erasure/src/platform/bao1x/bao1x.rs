@@ -186,6 +186,9 @@ mod panic_handler {
     use core::panic::PanicInfo;
     #[panic_handler]
     fn handle_panic(_arg: &PanicInfo) -> ! {
+        // Skip printing the panic message in non-repl mode. This dramatically cuts code size
+        // because all the panic messages then get dropped as dead code.
+        #[cfg(feature = "repl")]
         crate::println!("{}", _arg);
         loop {}
     }
