@@ -12,10 +12,6 @@ fn main() {
         println!("cargo:rustc-link-search={}", out_dir.display());
         #[cfg(feature = "bao1x")]
         let p = PathBuf::from("src/platform/bao1x/link.x");
-        #[cfg(feature = "artybio")]
-        let p = PathBuf::from("src/platform/artybio/link.x");
-        #[cfg(feature = "artyvexii")]
-        let p = PathBuf::from("src/platform/artyvexii/link.x");
 
         println!("cargo:rerun-if-changed={}", p.clone().into_os_string().into_string().unwrap());
         println!("cargo:rustc-link-arg=-Tlink.x");
