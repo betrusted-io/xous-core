@@ -1,0 +1,30 @@
+[package]
+name = "dc34-api"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+xous = "0.9.66"
+xous-ipc = "0.10.6"
+log = "0.4.14"
+num-derive = { version = "0.4.2", default-features = false }
+num-traits = { version = "0.2.14", default-features = false }
+rkyv = { version = "0.8.8", default-features = false, features = [
+    "std",
+    "alloc",
+] }
+bao1x-api = { git = "https://github.com/betrusted-io/xous-core", rev = "616bf65f6e379165464f50b1e79ec42aff77a683" }
+pddb = { git = "https://github.com/betrusted-io/xous-core", rev = "616bf65f6e379165464f50b1e79ec42aff77a683" }
+bytemuck = { version = "1.24.0", features = ["derive"] }
+rand = { version = "0.8.5", features = ["getrandom"] }
+rand_core = "0.6.4"
+getrandom = "=0.2.12"
+hex-literal = "1.0"
+
+[patch.crates-io.getrandom]
+git = "https://github.com/betrusted-io/xous-core"
+rev = "616bf65f6e379165464f50b1e79ec42aff77a683"
+
+[patch."https://github.com/betrusted-io/xous-core"]
+bao1x-api = { path = "../xous-core/libs/bao1x-api" }
+pddb = { path = "../xous-core/services/pddb", features = ["board-baosec"] }
