@@ -1,0 +1,104 @@
+target
+**/*.rs.bk
+/emulation/peripherals.csproj
+/emulation/obj
+# auto-generated
+services/xous-ticktimer/src/version.rs
+bao1x-boot/boot0/src/version.rs
+bao1x-boot/boot1/src/version.rs
+apps/i18n.json
+services/gam/src/apps.rs
+services/status/src/app_autogen.rs
+services/cram-console/src/app_autogen.rs
+
+# shouldn't be committed
+apps/vault/tools/crypto_data
+tools/v2p.txt
+*nocheckin.bin
+key.txt
+
+*.map
+
+# Emacs
+*~
+
+# local utility shellscripts
+update-precursors.sh
+buildpush.ps1
+# local-only routines used to start builds
+/*.ps1
+/*.bat
+/*.sh
+# notes to myself
+/*.txt
+tools/test-backup-analyze.sh
+todo.md
+notes/
+# no uf2 files in the root directory
+/*.uf2
+
+# SSH id file for convenience
+/id_pi
+
+# pddb debug files
+tools/pddb-images/
+__pycache__/
+
+# PDDB backup files
+*.pddb
+
+# PDDB for mtxcli (only for testing in hosted mode)
+/kernel/mtxcli
+
+# performance monitoring page table
+tools/ct_data/v2p.txt
+
+# renode will tickle this every time you run it, but you shouldn't commit that back to the tree
+/emulation/linux-server-rootfs.jffs2
+
+# don't record weirdnesses dealing with vscode
+.vscode
+.vs
+settings.json
+
+# Emacs backup files
+*~
+
+# don't commit local modifications to the Renode filesystem template
+emulation/linux-server-rootfs.jffs2
+
+# bloat analyzer reports
+reports/
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+*.pyc
+MANIFEST
+
+# Deployment credentials
+signing/credentials
+# Signer target directory
+signing/fido-signer/target
+
+# vscode extension support
+tools-bao/.venv/
+
+# Zig artifacts
+.zig-cache/
+zig-out/
