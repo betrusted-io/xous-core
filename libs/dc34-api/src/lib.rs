@@ -1,8 +1,9 @@
+use std::io::{Read, Write};
+
 use bao1x_api::IoxPort;
 use bytemuck::{Pod, Zeroable};
 use hex_literal::hex;
 use rand::Rng;
-use std::io::{Read, Write};
 
 pub const DC34_DICT: &str = "dc34";
 pub const DC34_SECRET: &str = "k0";
@@ -25,12 +26,8 @@ pub const FACTORY_ONE_WAY: usize = 128;
 // chosen by fair dice roll. guaranteed to be random.
 pub const DC34_HEADER: [u8; 16] = hex!("49db7671 f34435ed 5fddffdf cbb7508a");
 
-pub const SAO_GPIO: [(IoxPort, u8); 4] = [
-    (IoxPort::PC, 5),
-    (IoxPort::PC, 6),
-    (IoxPort::PC, 14),
-    (IoxPort::PC, 15),
-];
+pub const SAO_GPIO: [(IoxPort, u8); 4] =
+    [(IoxPort::PC, 5), (IoxPort::PC, 6), (IoxPort::PC, 14), (IoxPort::PC, 15)];
 
 pub const LED_SERVER: &'static str = "_oem_led_";
 #[derive(Debug, Copy, Clone, num_derive::FromPrimitive, num_derive::ToPrimitive)]
@@ -111,6 +108,7 @@ impl BadgeType {
             Self::None => 128..=160,
         }
     }
+
     pub fn sat_range(&self) -> std::ops::RangeInclusive<u8> {
         match self {
             Self::Goon => 160..=255,
@@ -123,6 +121,7 @@ impl BadgeType {
             Self::None => 32..=255,
         }
     }
+
     pub fn chaser_range(&self) -> std::ops::RangeInclusive<u8> {
         match self {
             Self::Goon => 90..=255,
@@ -135,6 +134,7 @@ impl BadgeType {
             Self::None => 90..=255,
         }
     }
+
     pub fn nonlin_range(&self) -> std::ops::RangeInclusive<u8> {
         match self {
             Self::Goon => 0..=255,
@@ -147,6 +147,7 @@ impl BadgeType {
             Self::None => 0..=255,
         }
     }
+
     pub fn cd_dir_range(&self) -> std::ops::RangeInclusive<u8> {
         match self {
             Self::Goon => 0..=255,
@@ -159,6 +160,7 @@ impl BadgeType {
             Self::None => 0..=255,
         }
     }
+
     pub fn cd_period_max(&self) -> u8 {
         match self {
             Self::Goon => 4,
@@ -183,15 +185,11 @@ pub enum MutationRate {
     Apocalyptic = 240,
 }
 impl PartialOrd for MutationRate {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        Some(self.cmp(other))
-    }
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> { Some(self.cmp(other)) }
 }
 
 impl Ord for MutationRate {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        (*self as u8).cmp(&(*other as u8))
-    }
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering { (*self as u8).cmp(&(*other as u8)) }
 }
 impl MutationRate {
     pub fn to_bit_changes(self) -> u8 {
@@ -203,13 +201,11 @@ impl MutationRate {
             MutationRate::Apocalyptic => 0x1f,
         }
     }
+
     pub fn roll(&self) -> bool {
-        if *self == MutationRate::None {
-            false
-        } else {
-            rand::thread_rng().gen::<u8>() < *self as u8
-        }
+        if *self == MutationRate::None { false } else { rand::thread_rng().gen::<u8>() < *self as u8 }
     }
+
     // arbitrary mapping from a state parameter in the main loop. Tune this to
     // make things "fun". Want to make about 8 toggles equal one level, each toggle
     // increments by 4.
@@ -224,9 +220,7 @@ impl MutationRate {
     }
 }
 
-#[derive(
-    Default, Pod, Zeroable, Copy, Clone, Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize,
-)]
+#[derive(Default, Pod, Zeroable, Copy, Clone, Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 #[repr(C)]
 pub struct Haploid {
     pub cd_period: u8,
@@ -275,13 +269,9 @@ impl Haploid {
         h
     }
 
-    pub fn serialize(&self) -> Vec<u8> {
-        bytemuck::bytes_of(self).to_vec()
-    }
+    pub fn serialize(&self) -> Vec<u8> { bytemuck::bytes_of(self).to_vec() }
 
-    pub fn deserialize(bytes: &[u8]) -> Option<Self> {
-        bytemuck::try_from_bytes(bytes).ok().copied()
-    }
+    pub fn deserialize(bytes: &[u8]) -> Option<Self> { bytemuck::try_from_bytes(bytes).ok().copied() }
 
     /// always returns a length-4 serialization, suitable for Xous args
     pub fn serialize_u32(&self) -> [u32; 4] {
@@ -298,11 +288,8 @@ impl Haploid {
     /// gracefully handles 4 args by truncating the extra args that are just padding inserted by
     /// serialize_u32()
     pub fn deserialize_u32(words: &[u32]) -> Option<Self> {
-        let bytes: Vec<u8> = words
-            .iter()
-            .flat_map(|w| w.to_le_bytes())
-            .take(std::mem::size_of::<Haploid>())
-            .collect();
+        let bytes: Vec<u8> =
+            words.iter().flat_map(|w| w.to_le_bytes()).take(std::mem::size_of::<Haploid>()).collect();
         bytemuck::try_from_bytes(&bytes).ok().copied()
     }
 }
@@ -325,12 +312,7 @@ impl Diploid {
             // add -> saturated colors are dominant
             sat: self.0[0].sat.saturating_add(self.0[1].sat),
             // inverse add -> slower hue cycling is dominant
-            hue_ratedir: (2
-                + (14
-                    - self.0[0]
-                        .hue_ratedir
-                        .saturating_add(self.0[1].hue_ratedir)
-                        .min(14)))
+            hue_ratedir: (2 + (14 - self.0[0].hue_ratedir.saturating_add(self.0[1].hue_ratedir).min(14)))
                 % 14,
             // min -> wider color range is dominant
             hue_base: self.0[0].hue_base.min(self.0[1].hue_base),
@@ -345,15 +327,18 @@ impl Diploid {
         e.hue_bound = e.hue_bound.max(e.hue_base);
         e
     }
+
     pub fn send(&self, conn: xous::CID, opcode: usize) {
         let buf = xous_ipc::Buffer::into_buf(self.clone()).unwrap();
         buf.lend(conn, opcode as u32).unwrap();
     }
+
     pub fn receive(mem: &xous::MemoryMessage) -> Self {
         let buffer = unsafe { xous_ipc::Buffer::from_memory_message(mem) };
         let gene = buffer.to_original::<Diploid, _>().unwrap();
         gene
     }
+
     pub fn meiosis(&self) -> Haploid {
         let mut gamete = Haploid::default();
         let parent: usize = rand::thread_rng().gen_range(0..2);
@@ -375,11 +360,8 @@ impl Diploid {
 }
 
 impl Diploid {
-    pub fn serialize(&self) -> Vec<u8> {
-        [self.0[0].serialize(), self.0[1].serialize()]
-            .concat()
-            .to_vec()
-    }
+    pub fn serialize(&self) -> Vec<u8> { [self.0[0].serialize(), self.0[1].serialize()].concat().to_vec() }
+
     pub fn deserialize(bytes: &[u8]) -> Option<Self> {
         let size = std::mem::size_of::<Haploid>();
         if bytes.len() < size * 2 {
@@ -400,22 +382,11 @@ impl AssertSendSync for Diploid {}
 pub fn init_light_gene(badge_type: BadgeType) {
     let pddb = pddb::Pddb::new();
     let mut badge_key = pddb
-        .get(
-            DC34_DICT,
-            DC34_BADGE,
-            None,
-            true,
-            true,
-            Some(1),
-            None::<fn()>,
-        )
+        .get(DC34_DICT, DC34_BADGE, None, true, true, Some(1), None::<fn()>)
         .expect("couldn't get PDDB key");
     badge_key.write(&[badge_type as u8]).ok();
 
-    let individual = Diploid([
-        Haploid::from_type(&badge_type),
-        Haploid::from_type(&badge_type),
-    ]);
+    let individual = Diploid([Haploid::from_type(&badge_type), Haploid::from_type(&badge_type)]);
     log::info!("Created individual: {:?} / {:?}", badge_type, individual);
     save_light_gene(individual);
 }
@@ -424,15 +395,7 @@ pub fn init_light_gene(badge_type: BadgeType) {
 pub fn get_light_gene() -> Option<Diploid> {
     let pddb = pddb::Pddb::new();
     let mut gene_key = pddb
-        .get(
-            DC34_DICT,
-            DC34_GENE,
-            None,
-            true,
-            true,
-            Some(1),
-            None::<fn()>,
-        )
+        .get(DC34_DICT, DC34_GENE, None, true, true, Some(1), None::<fn()>)
         .expect("couldn't get PDDB key");
     let mut buf = [0u8; std::mem::size_of::<Haploid>() * 2];
     gene_key.read_exact(&mut buf).ok()?;
@@ -445,15 +408,7 @@ pub fn get_light_gene() -> Option<Diploid> {
 pub fn save_light_gene(gene: Diploid) {
     let pddb = pddb::Pddb::new();
     let mut gene_key = pddb
-        .get(
-            DC34_DICT,
-            DC34_GENE,
-            None,
-            true,
-            true,
-            Some(1),
-            None::<fn()>,
-        )
+        .get(DC34_DICT, DC34_GENE, None, true, true, Some(1), None::<fn()>)
         .expect("couldn't get PDDB key");
     gene_key.write_all(&gene.serialize()).ok();
 }
@@ -461,15 +416,7 @@ pub fn save_light_gene(gene: Diploid) {
 pub fn save_k0(k0: &[u8; 32]) {
     let pddb = pddb::Pddb::new();
     let mut k0_key = pddb
-        .get(
-            DC34_DICT,
-            DC34_SECRET,
-            None,
-            true,
-            true,
-            Some(32),
-            None::<fn()>,
-        )
+        .get(DC34_DICT, DC34_SECRET, None, true, true, Some(32), None::<fn()>)
         .expect("couldn't get PDDB key");
     k0_key.write_all(k0).ok();
 
@@ -481,27 +428,11 @@ pub fn save_k0(k0: &[u8; 32]) {
     // aren't supposed to be yours, but you can't share them with
     // anyone else.
     let mut badge_key = pddb
-        .get(
-            DC34_DICT,
-            DC34_BADGE,
-            None,
-            true,
-            true,
-            Some(1),
-            None::<fn()>,
-        )
+        .get(DC34_DICT, DC34_BADGE, None, true, true, Some(1), None::<fn()>)
         .expect("couldn't get PDDB key");
     badge_key.write(&[BadgeType::None as u8]).ok();
     let mut key = pddb
-        .get(
-            DC34_DICT,
-            DC34_TOUR,
-            None,
-            true,
-            true,
-            Some(1),
-            None::<fn()>,
-        )
+        .get(DC34_DICT, DC34_TOUR, None, true, true, Some(1), None::<fn()>)
         .expect("couldn't get PDDB key");
     key.write(&[0]).ok();
     pddb.sync().ok();
@@ -511,15 +442,7 @@ pub fn get_k0() -> Option<[u8; 32]> {
     let mut k0_buf = [0u8; 32];
     let pddb = pddb::Pddb::new();
     let mut k0_key = pddb
-        .get(
-            DC34_DICT,
-            DC34_SECRET,
-            None,
-            true,
-            true,
-            Some(1),
-            None::<fn()>,
-        )
+        .get(DC34_DICT, DC34_SECRET, None, true, true, Some(1), None::<fn()>)
         .expect("couldn't get PDDB key");
     let result = k0_key.read(&mut k0_buf);
     match result {
@@ -570,9 +493,7 @@ fn mutation_func(gene: u8, bits: u8) -> u8 {
     gray_decode(gray_encode(gene) ^ (bits << (rand::thread_rng().gen_range(0..=7))))
 }
 
-fn gray_encode(n: u8) -> u8 {
-    n ^ (n >> 1)
-}
+fn gray_encode(n: u8) -> u8 { n ^ (n >> 1) }
 
 fn gray_decode(mut n: u8) -> u8 {
     let mut p = n;
