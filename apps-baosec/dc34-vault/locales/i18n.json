@@ -1,0 +1,779 @@
+{
+    "vault2.fido.pin_uv_auth": {
+        "en": "PIN creation",
+        "en-tts": "PIN creation",
+        "fr": "Création du PIN",
+        "ja": "PIN作成",
+        "zh": "创建 PIN"
+    },
+    "vault2.fido.make_credentials": {
+        "en": "Make credential",
+        "en-tts": "Make credential",
+        "fr": "Créer un identifiant",
+        "ja": "認証情報を作成",
+        "zh": "创建凭据"
+    },
+    "vault2.fido.exclude_list": {
+        "en": "Exclude credentials",
+        "en-tts": "Exclude credentials",
+        "fr": "Exclure les identifiants",
+        "ja": "認証情報を除外",
+        "zh": "排除凭据"
+    },
+    "vault2.fido.get_assertion": {
+        "en": "Allow?",
+        "en-tts": "Allow?",
+        "fr": "Autoriser ?",
+        "ja": "許可しますか？",
+        "zh": "允许？"
+    },
+    "vault2.u2f.factoryreset": {
+        "en": "Factory reset?",
+        "en-tts": "Factory reset?",
+        "fr": "Réinitialisation d'usine ?",
+        "ja": "工場出荷時設定にリセットしますか？",
+        "zh": "恢复出厂设置？"
+    },
+    "vault2.u2f.authenticator_selection": {
+        "en": "Make primary authenticator?",
+        "en-tts": "Make primary authenticator?",
+        "fr": "Définir comme authentificateur principal ?",
+        "ja": "プライマリ認証器に設定しますか？",
+        "zh": "设为主认证器？"
+    },
+    "vault2.u2f.vendor_configure": {
+        "en": "Allow vendor configuration?",
+        "en-tts": "Allow vendor configuration?",
+        "fr": "Autoriser la configuration du fournisseur ?",
+        "ja": "ベンダー設定を許可しますか？",
+        "zh": "允许供应商配置？"
+    },
+    "vault.add_new": {
+        "en": "<Add New...>",
+        "en-tts": "<Add New...>",
+        "fr": "<Ajouter…>",
+        "ja": "<新規追加…>",
+        "zh": "<新增…>"
+    },
+    "vault.autotyping": {
+        "en": "Autotyping...",
+        "en-tts": "Autotyping...",
+        "fr": "Autotypage",
+        "ja": "今すぐ自動入力...",
+        "zh": "现在自动输入..."
+    },
+    "vault.basis.already_exists": {
+        "en": "Basis already exists! No action taken.",
+        "en-tts": "Basis already exists! No action taken.",
+        "fr": "La base existe déjà! Aucune mesure n’a été prise.",
+        "ja": "ベースはすでに存在します！ アクションは実行されません。",
+        "zh": "基础已经存在！ 不采取行动。"
+    },
+    "vault.basis.create": {
+        "en": "Enter name of Basis to create:",
+        "en-tts": "Enter name of Basis to create:",
+        "fr": "Entrez le nom de la base à créer:",
+        "ja": "作成する基準の名前を入力します:",
+        "zh": "输入要创建的基础名称："
+    },
+    "vault.basis.created_mount": {
+        "en": "Basis created. Mount it now?",
+        "en-tts": "Basis created. Mount it now?",
+        "fr": "Base créée. Monter maintenant?",
+        "ja": "ベーシスが作成されました。 今それをマウントしますか？",
+        "zh": "创建的基础。 现在装吗？"
+    },
+    "vault.basis.name": {
+        "en": "Enter name of Basis to unlock:",
+        "en-tts": "Enter name of Basis to unlock:",
+        "fr": "Entrez le nom de la base à débloquer:",
+        "ja": "ロックを解除する基準の名前を入力してください:",
+        "zh": "输入要解锁的基础名称:"
+    },
+    "vault.basis.none": {
+        "en": "No active secret Bases. Would you like to create one?",
+        "en-tts": "No active secret Bases. Would you like to create one?",
+        "fr": "Pas de bases secrètes actives. Voudriez-vous en créer une?",
+        "ja": "アクティブな秘密の根拠はありません。 作成しますか？",
+        "zh": "没有有效的秘密基础。 你想创建一个吗？"
+    },
+    "vault.basis.unmount": {
+        "en": "Select the Bases to unmount:",
+        "en-tts": "Select the Bases to unmount:",
+        "fr": "Sélectionner les bases à démonter:",
+        "ja": "アンマウントするベースを選択します:",
+        "zh": "选择要卸载的基础:"
+    },
+    "vault.bip39.input": {
+        "en": "Enter your BIP39 password:",
+        "en-tts": "Enter your BIP39 password:",
+        "fr": "Saisissez votre mot de passe BIP39: *MT*",
+        "ja": "BIP39 パスワードを入力してください:",
+        "zh": "输入您的 BIP39 密码："
+    },
+    "vault.bip39.output": {
+        "en": "Password as BIP39:",
+        "en-tts": "Password as BIP39:",
+        "fr": "Mot de passe en tant que BIP39: *MT*",
+        "ja": "BIP39としてのパスワード:",
+        "zh": "密码为 BIP39:"
+    },
+    "vault.bip39.output_error": {
+        "en": "Password field is not encodable as BIP39.",
+        "en-tts": "Password field is not encodable as BIP39.",
+        "fr": "Le champ Mot de passe n'est pas encodable en tant que BIP39. *MT*",
+        "ja": "パスワードフィールドはBIP39としてエンコードできません。",
+        "zh": "密码字段不可编码为 BIP39。"
+    },
+    "vault.cancel": {
+        "en": "Cancel",
+        "en-tts": "Cancel",
+        "fr": "Annuler",
+        "ja": "キャンセル",
+        "zh": "取消"
+    },
+    "vault.completed": {
+        "en": "Operation completed.",
+        "en-tts": "Operation completed.",
+        "fr": "Opération effectuée",
+        "ja": "操作が完了しました.",
+        "zh": "操作完成."
+    },
+    "vault.configure": {
+        "en": "Configure",
+        "en-tts": "Configure",
+        "fr": "Configurer",
+        "ja": "設定する",
+        "zh": "配置"
+    },
+    "vault.delete.confirm": {
+        "en": "Delete?",
+        "en-tts": "Delete?",
+        "fr": "Supprimer?",
+        "ja": "削除しますか？",
+        "zh": "删除？"
+    },
+    "vault.edit": {
+        "en": "Edit",
+        "en-tts": "Edit",
+        "fr": "Modifier",
+        "ja": "編集",
+        "zh": "编辑"
+    },
+    "vault.edit_dialog": {
+        "en": "Make your changes and press enter.\nUse the d-pad to navigate entries.",
+        "en-tts": "Make your changes and press enter.\nUse the d-pad to navigate entries. *EN*",
+        "fr": "Effectuez vos modifications et appuyez sur Entrée.\nUtilisez la touche D pour naviguer dans les entrées.",
+        "ja": "変更を加えてEnterキーを押します。 D-PADを使用してエントリをナビゲートします。",
+        "zh": "进行更改并按 Enter。 使用 D-PAD 导航条目。"
+    },
+    "vault.error.add_fido2": {
+        "en": "FIDO tokens are added through the web.",
+        "en-tts": "FIDO tokens are added through the web.",
+        "fr": "Les jetons FIDO sont ajoutés via le web.",
+        "ja": "FIDOトークンはWebを使用して追加されます.",
+        "zh": "FIDO 令牌是使用网络添加的."
+    },
+    "vault.error.basis_unlock_error": {
+        "en": "Basis does not exist. Or maybe wrong password?",
+        "en-tts": "Basis does not exist. Or maybe wrong password?",
+        "fr": "La base n’existe pas. Ou peut-être le mauvais mot de passe?",
+        "ja": "根拠は存在しません。 または多分間違ったパスワード？",
+        "zh": "基础不存在。 或者密码错误？"
+    },
+    "vault.error.fido2": {
+        "en": "Can't edit FIDO2 tokens.",
+        "en-tts": "Can't edit FIDO2 tokens.",
+        "fr": "Impossible de modifier les jetons FIDO2.",
+        "ja": "FIDO2トークンを編集できません。",
+        "zh": "无法编辑 FIDO2 令牌。"
+    },
+    "vault.error.internal_error": {
+        "en": "Internal error.",
+        "en-tts": "Internal error.",
+        "fr": "Erreur interne.",
+        "ja": "内部エラー.",
+        "zh": "内部错误."
+    },
+    "vault.error.mount_pddb": {
+        "en": "PDDB not mounted. Please setup passwords, and then format the PDDB.",
+        "en-tts": "PDDB not mounted. Please setup passwords and then format the PDDB.",
+        "fr": "PDDB non monté. Veuillez configurer les mots de passe, puis formater le PDDB.",
+        "ja": "PDDBがマウントされていません。 ルートキーを初期化してから、PDDBを初期化してください。",
+        "zh": "未安装 PDDB。 请初始化根密钥，然后初始化 PDDB。"
+    },
+    "vault.error.not_found": {
+        "en": "Entry not found.",
+        "en-tts": "Entry not found.",
+        "fr": "Entrée non trouvée.",
+        "ja": "エントリが見つかりません.",
+        "zh": "找不到条目."
+    },
+    "vault.error.nothing_selected": {
+        "en": "Nothing selected.",
+        "en-tts": "Nothing selected.",
+        "fr": "Rien n’a été sélectionné.",
+        "ja": "何も選択されていません.",
+        "zh": "未选择任何内容."
+    },
+    "vault.error.qr": {
+        "en": "Error parsing QR code",
+        "en-tts": "Error parsing QR code",
+        "fr": "Erreur de code QR",
+        "ja": "QRコード解析エラー",
+        "zh": "二维码解析错误"
+    },
+    "vault.error.qr_unrecognized": {
+        "en": "Unrecognized QR action",
+        "en-tts": "Unrecognized QR action",
+        "fr": "Action QR inconnue",
+        "ja": "未対応のQRアクション",
+        "zh": "未知的二维码操作"
+    },
+    "vault.error.record_error": {
+        "en": "Corrupt database entry.",
+        "en-tts": "Corrupt database entry.",
+        "fr": "Entrée de base de données corrompue.",
+        "ja": "破損したデータベースエントリ",
+        "zh": "损坏的数据库条目."
+    },
+    "vault.error.time_init": {
+        "en": "Please set the time.",
+        "en-tts": "Please set the time.",
+        "fr": "Veuillez régler l’heure.",
+        "ja": "時間を設定してください.",
+        "zh": "请设定时间."
+    },
+    "vault.error.update_error": {
+        "en": "Couldn't update access times. Record lost forever!",
+        "en-tts": "Couldn't update access times. Record lost forever!",
+        "fr": "Impossible de mettre à jour les temps d’accès. Enregistrement perdu à jamais!",
+        "ja": "アクセス時間を更新できませんでした。 記録は永遠に失われました！",
+        "zh": "无法更新访问时间。 记录永远丢失！"
+    },
+    "vault.error.usb_error": {
+        "en": "USB error. Check connection to host.",
+        "en-tts": "USB error. Check connection to host.",
+        "fr": "Erreur USB. Vérifier la connexion à l’hôte.",
+        "ja": "USBエラー。 ホストへの接続を確認してください。",
+        "zh": "USB错误。 检查与主机的连接。"
+    },
+    "vault.fido.countdown": {
+        "en": "s until abort",
+        "en-tts": "s until abort",
+        "fr": "s jusqu’à l’abandon",
+        "ja": "秒 中止するまで",
+        "zh": "秒 直到中止"
+    },
+    "vault.fido.exclude_list": {
+        "en": "FIDO server is excluding existing credentials.\nPress any key to acknowledge.",
+        "en-tts": "FIDO server is excluding existing credentials.\nPress any key to acknowledge.",
+        "fr": "Le serveur FIDO exclut les identifiants existants.\nAppuyez sur n’importe quelle clé pour confirmer.",
+        "ja": "FIDOサーバーは既存のクレデンシャルを除外しています。\n任意のキーを押して確認します。",
+        "zh": "FIDO 服务器正在排除现有凭据。\n按任意键确认。"
+    },
+    "vault.fido.get_assertion": {
+        "en": "FIDO Assertion Request.\nPress any key to consent to this transaction.",
+        "en-tts": "FIDO Assertion Request.\nPress any key to consent to this transaction.",
+        "fr": "Demande d’assertion FIDO.\nAppuyez sur n’importe quelle clé pour consentir à cette transaction.",
+        "ja": "FIDOアサーションリクエスト。\nこのトランザクションに同意するには、任意のキーを押してください。",
+        "zh": "FIDO 断言请求。\n按任意键同意此事务。"
+    },
+    "vault.fido.make_credential": {
+        "en": "FIDO Make Credential Request.\nPress any key to approve.",
+        "en-tts": "FIDO Make Credential Request. Press any key to approve.",
+        "fr": "Faire une demande de justificatif d’identité FIDO\nAppuyez sur toute clé à approuver.",
+        "ja": "FIDOは資格情報を要求します\n承認するには任意のキーを押してください",
+        "zh": "FIDO 提出凭证请求\n按任意键批准"
+    },
+    "vault.fido.next_assertion": {
+        "en": "This site is requires multiple credentials.\nPress any key to allow the next credential.",
+        "en-tts": "This site is requires multiple credentials.\nPress any key to allow the next credential.",
+        "fr": "Ce site requiert plusieurs identifiants.\nAppuyez sur n’importe quelle clé pour autoriser le prochain identifiant.",
+        "ja": "このサイトには複数のクレデンシャルが必要です。\n次のクレデンシャルを許可するには、任意のキーを押してください。",
+        "zh": "此站点需要多个凭据。\n按任意键以允许下一个凭据。"
+    },
+    "vault.fido.pin_uv_auth": {
+        "en": "FIDO host is creating a PIN.\nPress any key to accept.",
+        "en-tts": "FIDO host is creating a PIN.\nPress any key to accept.",
+        "fr": "L’hôte FIDO crée un PIN\nAppuyez sur n’importe quelle touche à accepter.",
+        "ja": "FIDOホストがPINを作成しています。\n任意のキーを押して受け入れます。",
+        "zh": "FIDO 主机正在创建 PIN。\n按任意键接受。"
+    },
+    "vault.generated": {
+        "en": "Generated",
+        "en-tts": "Generated",
+        "fr": "Généré",
+        "ja": "生成済み",
+        "zh": "已生成"
+    },
+    "vault.hotp.count": {
+        "en": "Please enter the initial HOTP count:",
+        "en-tts": "Please enter the initial HOTP count:",
+        "fr": "Veuillez entrer le compte HOTP initial",
+        "ja": "最初の HOTP カウントを入力してください:",
+        "zh": "请输入初始 HOTP 计数："
+    },
+    "vault.illegal_char": {
+        "en": "Entries may not contain ':', or a newline character.",
+        "en-tts": "Entries may not contain ':', or a newline character.",
+        "fr": "Les entrées peuvent ne pas contenir ':', ou un caractère de nouvelle ligne",
+        "ja": "エントリに「：」または改行文字を含めることはできません。",
+        "zh": "条目不得包含 ':' 或换行符。"
+    },
+    "vault.illegal_count": {
+        "en": "Please enter an integer number",
+        "en-tts": "Please enter an integer number",
+        "fr": "Veuillez entrer un nombre entier",
+        "ja": "整数を入力してください。",
+        "zh": "请输入一个整数。"
+    },
+    "vault.illegal_number": {
+        "en": "Please enter a number from 1-128",
+        "en-tts": "Please enter a number from 1-128",
+        "fr": "Veuillez entrer un numéro de 1 à 128",
+        "ja": "1〜128の数字を入力してください",
+        "zh": "请输入 1-128 之间的数字"
+    },
+    "vault.illegal_totp": {
+        "en": "Shared secret is not valid Base32",
+        "en-tts": "Shared secret is not valid Base32",
+        "fr": "Le secret partagé n’est pas valide Base32",
+        "ja": "共有秘密は無効ですBase32",
+        "zh": "共享密钥无效 Base32"
+    },
+    "vault.length": {
+        "en": "Length",
+        "en-tts": "Length",
+        "fr": "Longueur",
+        "ja": "長さ",
+        "zh": "长度"
+    },
+    "vault.menu_addnew": {
+        "en": "Add new item",
+        "en-tts": "Add new item",
+        "fr": "Ajouter un nouvel élément",
+        "ja": "新しいアイテムを追加する",
+        "zh": "添加新项目"
+    },
+    "vault.menu_autotype": {
+        "en": "Autotype password",
+        "en-tts": "Autotype password",
+        "fr": "Autotype mot de passe",
+        "ja": "パスワードの自動入力",
+        "zh": "自动输入密码"
+    },
+    "vault.menu_autotype_username": {
+        "en": "Autotype username",
+        "en-tts": "Autotype username",
+        "fr": "Autotype nom d'utilisateur",
+        "ja": "ユーザー名を自動的に入力",
+        "zh": "自动输入用户名"
+    },
+    "vault.menu_change_font": {
+        "en": "Change list font",
+        "en-tts": "🔇",
+        "fr": "Modifier la police de la liste",
+        "ja": "フォントを変更する",
+        "zh": "更改字体"
+    },
+    "vault.menu_close": {
+        "en": "Close submenu",
+        "en-tts": "Close submenu",
+        "fr": "Fermer le sous-menu",
+        "ja": "メニューを閉じる",
+        "zh": "关闭功能表"
+    },
+    "vault.menu_delete": {
+        "en": "Delete item",
+        "en-tts": "Delete item",
+        "fr": "Supprimer l'élément",
+        "ja": "アイテムを削除",
+        "zh": "删除项目"
+    },
+    "vault.menu_edit": {
+        "en": "Edit item",
+        "en-tts": "Edit item",
+        "fr": "Modifier élément",
+        "ja": "アイテムを編集する",
+        "zh": "编辑项目"
+    },
+    "vault.menu_manage_basis": {
+        "en": "Manage Bases",
+        "en-tts": "Manage Bases",
+        "fr": "Gérer les bases",
+        "ja": "管理基盤",
+        "zh": "管理基础"
+    },
+    "vault.menu_pw_mode": {
+        "en": "Password mode",
+        "en-tts": "Password mode",
+        "fr": "Mode mot de passe",
+        "ja": "パスワードモード",
+        "zh": "密码模式"
+    },
+    "vault.menu_readout_mode": {
+        "en": "Enable host readout",
+        "en-tts": "Enable host readout",
+        "fr": "Activer l’affichage de l’hôte",
+        "ja": "ホスト読み出しを有効にする",
+        "zh": "启用主机读出"
+    },
+    "vault.menu_set_lefty_mode": {
+        "en": "Set left-handed UI",
+        "en-tts": "Set left-handed UI",
+        "fr": "Définir l'interface utilisateur gaucher *MT*",
+        "ja": "左手用 UI を設定する",
+        "zh": "设置左手用户界面"
+    },
+    "vault.menu_totp_mode": {
+        "en": "TOTP mode",
+        "en-tts": "TOTP mode",
+        "fr": "Mode TOTP",
+        "ja": "TOTPモード",
+        "zh": "TOTP模式"
+    },
+    "vault.menu_unlock_basis": {
+        "en": "Unlock secret Basis",
+        "en-tts": "Unlock secret basis",
+        "fr": "Déverrouiller la base secrète",
+        "ja": "シークレットベースのロックを解除",
+        "zh": "解锁秘密基础"
+    },
+    "vault.migration_error": {
+        "en": "Migration from previous FIDO database encountered errors:",
+        "en-tts": "Migration from previous FIDO database encountered errors:",
+        "fr": "La migration depuis la base de données FIDO précédente a rencontré des erreurs: *MT*",
+        "ja": "以前の FIDO データベースからの移行でエラーが発生しました:",
+        "zh": "从以前的 FIDO 数据库迁移遇到错误："
+    },
+    "vault.newitem.approve": {
+        "en": "Is this password okay?",
+        "en-tts": "Is this password okay?",
+        "fr": "Ce mot de passe est correct?",
+        "ja": "このパスワードは大丈夫ですか?",
+        "zh": "这个密码可以吗?"
+    },
+    "vault.newitem.configure_generator": {
+        "en": "Select options for the password generator:",
+        "en-tts": "Select options for the password generator:",
+        "fr": "Sélectionnez les options du générateur de mot de passe:",
+        "ja": "パスワードジェネレータを設定してください：",
+        "zh": "请配置密码生成器："
+    },
+    "vault.newitem.configure_length": {
+        "en": "Desired length of password:",
+        "en-tts": "Desired length of password:",
+        "fr": "Longueur souhaitée du mot de passe:",
+        "ja": "パスワードの文字数:",
+        "zh": "密码有多少个字符:"
+    },
+    "vault.newitem.hotp": {
+        "en": "HOTP",
+        "en-tts": "HOTP",
+        "fr": "HOTP",
+        "ja": "HOTP",
+        "zh": "HOTP"
+    },
+    "vault.newitem.is_t_or_h_otp": {
+        "en": "Which type of OTP record is this (if you don't know, it's probably TOTP)?",
+        "en-tts": "Which type of OTP record is this (if you don't know, it's probably TOTP)?",
+        "fr": "Quel type d’enregistrement OTP est-ce (si vous ne savez pas, c’est probablement TOTP)?",
+        "ja": "これはどのタイプの OTP レコードですか (わからない場合は、おそらく TOTP です)。",
+        "zh": "这是哪种类型的 OTP 记录（如果您不知道，可能是 TOTP）？"
+    },
+    "vault.newitem.lowercase": {
+        "en": "Lowercase",
+        "en-tts": "Lowercase",
+        "fr": "Minuscules",
+        "ja": "小文字",
+        "zh": "小写字母"
+    },
+    "vault.newitem.name": {
+        "en": "Please name the credential:",
+        "en-tts": "Please name the credential",
+        "fr": "Veuillez nommer le justificatif:",
+        "ja": "クレデンシャルに名前を付ける:",
+        "zh": "命名凭证:"
+    },
+    "vault.newitem.numbers": {
+        "en": "Numbers",
+        "en-tts": "Numbers",
+        "fr": "Numéros",
+        "ja": "数字",
+        "zh": "数字"
+    },
+    "vault.newitem.password": {
+        "en": "Hit enter to accept the suggestion, or start typing to create your own.\n\nLeave blank to customize the generator, or type 'bip39'.\n",
+        "en-tts": "Hit enter to accept the suggestion, or start typing to create your own.\n\nLeave blank to customize the generator, or type 'bip39'.\n",
+        "fr": "Appuyez sur Entrée pour accepter la suggestion, ou commencez à taper pour créer le votre.\n\nLaissez vide pour personnaliser le générateur, ou tapez 'bip39'.\n",
+        "ja": "Enterキーを押して提案を受け入れるか、入力を開始して独自の提案を作成します。\n\n空白のままにしてジェネレータをカスタマイズします, または「bip39」と入力します\n",
+        "zh": "按 Enter 接受建议，或开始输入以创建您自己的建议。\n\n留空以自定义生成器, 或输入“bip39”。\n"
+    },
+    "vault.newitem.symbols": {
+        "en": "Symbols",
+        "en-tts": "Symbols",
+        "fr": "Symboles",
+        "ja": "シンボル",
+        "zh": "符号"
+    },
+    "vault.newitem.symbols_customize": {
+        "en": "Edit symbols",
+        "en-tts": "Edit symbols",
+        "fr": "Modifier symboles",
+        "ja": "記号を編集",
+        "zh": "编辑符号"
+    },
+    "vault.newitem.totp": {
+        "en": "TOTP",
+        "en-tts": "TOTP",
+        "fr": "TOTP",
+        "ja": "TOTP",
+        "zh": "TOTP"
+    },
+    "vault.newitem.totp_ss": {
+        "en": "Enter the OTP shared secret in Base32:",
+        "en-tts": "Enter the OTP shared secret in Base32:",
+        "fr": "Entrez le secret partagé du mot de passe à usage unique dans Base32:",
+        "ja": "Base32にOTP共有シークレットを入力します。",
+        "zh": "在 Base32 中输入 OTP 共享密钥："
+    },
+    "vault.newitem.uppercase": {
+        "en": "Uppercase",
+        "en-tts": "Uppercase",
+        "fr": "Majuscules",
+        "ja": "大文字",
+        "zh": "大写字母"
+    },
+    "vault.newitem.username": {
+        "en": "Enter the associated username:",
+        "en-tts": "Enter the associated username",
+        "fr": "Saisissez le nom d’utilisateur associé:",
+        "ja": "関連するユーザー名を入力します:",
+        "zh": "输入关联的用户名:"
+    },
+    "vault.no": {
+        "en": "No",
+        "en-tts": "No",
+        "fr": "Non",
+        "ja": "いいえ",
+        "zh": "取消"
+    },
+    "vault.no_items": {
+        "en": "No items found",
+        "en-tts": "No items found",
+        "fr": "Aucun élément trouvé",
+        "ja": "項目は見つかりませんでした",
+        "zh": "未找到任何项目"
+    },
+    "vault.notes": {
+        "en": "Notes",
+        "en-tts": "Notes",
+        "fr": "Notes",
+        "ja": "ノート",
+        "zh": "笔录"
+    },
+    "vault.pw.approval": {
+        "en": "Save and type",
+        "en-tts": "Save and type",
+        "fr": "Enregistrer et saisir",
+        "ja": "保存して入力",
+        "zh": "保存并输入"
+    },
+    "vault.pw.approval_close": {
+        "en": "Save and close",
+        "en-tts": "Save and close",
+        "fr": "Enregistrer et fermer",
+        "ja": "保存して閉じる",
+        "zh": "保存并关闭"
+    },
+    "vault.readout_active": {
+        "en": "🔓Readout mode active.🔓\n\nHost is permitted to read and write unlocked records.\n\nPlease run your host scripts, then press any key to restore security.",
+        "en-tts": "Readout mode active.\n\nHost is permitted to read and write unlocked records.\n\nPlease run your host scripts, then press any key to restore security.",
+        "fr": "🔓Mode lecture actif.🔓\n\nL’hôte est autorisé à lire et écrire les enregistrements déverrouillés.\n\nVeuillez exécuter vos scripts d’hôte, puis appuyez sur n’importe quelle touche pour restaurer la sécurité.",
+        "ja": "🔓読み出しモードがアクティブです。🔓\n\nホストは、ロックされていないレコードの読み取りと書き込みを許可されています。\n\nホスト スクリプトを実行してから、任意のキーを押してセキュリティを復元してください。",
+        "zh": "🔓读出模式激活。🔓\n\n允许主机读取和写入未锁定的记录。\n\n请运行主机脚本，然后按任意键恢复安全。"
+    },
+    "vault.readout_switchover": {
+        "en": "Switching USB functions...",
+        "en-tts": "Switching USB functions...",
+        "fr": "Commutation des fonctions USB...",
+        "ja": "USB機能を切り替え中...",
+        "zh": "切换 USB 功能..."
+    },
+    "vault.reloading_database": {
+        "en": "Reloading database...",
+        "en-tts": "Reloading database...",
+        "fr": "Rechargement de la base de données...*MT*",
+        "ja": "データベースをリロードしています...",
+        "zh": "正在重新加载数据库..."
+    },
+    "vault.select_font": {
+        "en": "Select a font style",
+        "en-tts": "Select a font style",
+        "fr": "Sélectionner un style de police",
+        "ja": "フォントを選択する",
+        "zh": "选择字体"
+    },
+    "vault.use": {
+        "en": "Use",
+        "en-tts": "Use",
+        "fr": "Utiliser",
+        "ja": "使用",
+        "zh": "使用"
+    },
+    "vault.username": {
+        "en": "Username",
+        "en-tts": "Username",
+        "fr": "Nom d’utilisateur",
+        "ja": "ユーザー名",
+        "zh": "用户名"
+    },
+    "vault.u2f.appinfo.authcount": {
+        "en": "Uses: ",
+        "en-tts": "Uses: ",
+        "fr": "Usages : ",
+        "ja": "使用数: ",
+        "zh": "使用次数: "
+    },
+    "vault.u2f.appinfo.days_ago": {
+        "en": " days ago",
+        "en-tts": " days ago",
+        "fr": " jours passés",
+        "ja": "日前",
+        "zh": "天前"
+    },
+    "vault.u2f.appinfo.hours_ago": {
+        "en": " hours ago",
+        "en-tts": " hours ago",
+        "fr": " heures passées",
+        "ja": "時間前",
+        "zh": "小时前"
+    },
+    "vault.u2f.appinfo.last_authtime": {
+        "en": "Last accessed: ",
+        "en-tts": "Last accessed: ",
+        "fr": "Dernier accès: ",
+        "ja": "最後にアクセスした:",
+        "zh": "最后访问:"
+    },
+    "vault.u2f.appinfo.minutes_ago": {
+        "en": " mins ago",
+        "en-tts": " minutes ago",
+        "fr": " minutes passées",
+        "ja": "分前",
+        "zh": "分钟前"
+    },
+    "vault.u2f.appinfo.name": {
+        "en": "App name: ",
+        "en-tts": "App name: ",
+        "fr": "Nom de l'app",
+        "ja": "アプリ名:",
+        "zh": "应用名称:"
+    },
+    "vault.u2f.appinfo.never": {
+        "en": "never",
+        "en-tts": "never",
+        "fr": "jamais",
+        "ja": "使われたことがない",
+        "zh": "没用过"
+    },
+    "vault.u2f.appinfo.newapp": {
+        "en": "New app: ",
+        "en-tts": "New app: ",
+        "fr": "Nouvelle application: ",
+        "ja": "新しいアプリ: ",
+        "zh": "新应用: "
+    },
+    "vault.u2f.appinfo.seconds_ago": {
+        "en": " secs ago",
+        "en-tts": " seconds ago",
+        "fr": " secondes passées",
+        "ja": "秒前",
+        "zh": "秒前"
+    },
+    "vault.u2f.authenticate": {
+        "en": "U2F Authentication Request\n",
+        "en-tts": "U2F Authentication Request\n",
+        "fr": "U2F Requête d'authentification\n",
+        "ja": "U2F 認証リクエスト\n",
+        "zh": "U2F 认证请求\n"
+    },
+    "vault.u2f.authenticator_selection": {
+        "en": "Press any key to make this the primary authenticator.",
+        "en-tts": "Press any key to make this the primary authenticator.",
+        "fr": "Appuyez sur n’importe quelle touche pour en faire l’authentifiant principal.",
+        "ja": "いずれかのキーを押して、これをプライマリオーセンティケーターにします。",
+        "zh": "按任意键使其成为主要身份验证器。"
+    },
+    "vault.u2f.factoryreset": {
+        "en": "Host has requested a factory reset of FIDO/U2F credentials.\n\nThis will permanently erase all registrations!!\n\nPress 'y' to allow, any other key to abort.",
+        "en-tts": "Host has requested a factory reset of FIDO/U2F credentials. This will permanently erase all registrations.\nPress 'y' to allow, any other key to abort.",
+        "fr": "L’hôte a demandé une réinitialisation d’usine des identifiants FIDO/U2F.\n\nCeci effacera définitivement toutes les inscriptions!!\n\nAppuyer sur 'y' pour autoriser, toute autre touche à abandonner.",
+        "ja": "ホストがFIDO/U2Fクレデンシャルの工場出荷時のリセットを要求しました。 これにより、すべての登録が完全に消去されます。\n「y」を押して許可します。他のキーを中止しますか？",
+        "zh": "主机已请求将 FIDO/U2F 凭据恢复出厂设置。 这将永久删除所有注册。\n按「y」允许，任何其他键中止？"
+    },
+    "vault.u2f.give_app_name": {
+        "en": "Please enter a name for the app:",
+        "en-tts": "Please enter a name for the app:",
+        "fr": "Veuillez entrer un nom pour l’app:",
+        "ja": "アプリの名前を入力してください:",
+        "zh": "请输入应用名称:"
+    },
+    "vault.u2f.newapphash": {
+        "en": "New registration request. Press any key to approve.\nHash: ",
+        "en-tts": "New registrations request. Press any key to approve.\nHash: ",
+        "fr": "Nouvelle demande d’inscription. Appuyez sur n’importe quelle touche pour approuver.\n: ",
+        "ja": "新規登録リクエスト。 承認するには、任意のキーを押してください。\nハッシュ：",
+        "zh": "新的注册请求。 按任意键批准。\n 哈希："
+    },
+    "vault.u2f.register": {
+        "en": "U2F Registration Request",
+        "en-tts": "U2F Registration Request",
+        "fr": "U2F Demande d'inscription",
+        "ja": "U2F登録リクエスト",
+        "zh": "U2F 注册请求"
+    },
+    "vault.u2f.reset_check": {
+        "en": "Please re-confirm the reset by pressing any key.",
+        "en-tts": "Please re-confirm the reset by pressing any key.",
+        "fr": "Veuillez reconfirmer la réinitialisation en appuyant sur n’importe quelle touche.",
+        "ja": "いずれかのキーを押して、リセットを再確認してください。",
+        "zh": "请按任意键重新确认复位。"
+    },
+    "vault.u2f.vendor_configure": {
+        "en": "Press any key to allow vendor configuration.",
+        "en-tts": "Press any key to allow vendor configuration.",
+        "fr": "Appuyer sur n’importe quelle touche pour autoriser la configuration du fournisseur.",
+        "ja": "ベンダー設定を許可するには、任意のキーを押します。",
+        "zh": "按任意键允许供应商配置。"
+    },
+    "vault.u2f.wait_abort": {
+        "en": "U2F request denied. Waiting for host to abort...\n",
+        "en-tts": "U2F request denied.  Waiting for host to abort...\n",
+        "fr": "U2F request denied. Waiting for host to abort...\n *EN*",
+        "ja": "U2F リクエストが拒否されました。 ホストが中止するのを待っています...\n",
+        "zh": "U2F 请求被拒绝。 等待主机中止...\n"
+    },
+    "vault.u2freq": {
+        "en": "FIDO Request.\n\nDENY the request by pressing F1.\nAPPROVE by pressing any other key.\n",
+        "en-tts": "FIDO Request.\n\nPress F1 to DENY the request.\nPress any other key to approve it.\n",
+        "fr": "Demande FIDO.\n\nRefuser la demande en appuyant sur F1.\nApprouver en appuyant sur une autre touche.",
+        "ja": "FIDOリクエスト\n\nF1 を押して要求を拒否するか、その他のキーを押して承認します。\n",
+        "zh": "FIDO 请求\n\n按 F1 拒绝请求，或按任何其他键批准它。\n"
+    },
+    "vault.u2freq_lefty": {
+        "en": "FIDO Request.\n\nDENY the request by pressing F4.\nAPPROVE by pressing any other key.\n",
+        "en-tts": "FIDO Request.\n\nPress F4 to DENY the request.\nPress any other key to approve it.\n",
+        "fr": "Demande FIDO.\n\nRefuser la demande en appuyant sur F4.\nApprouver en appuyant sur une autre touche.",
+        "ja": "FIDOリクエスト\n\nF4 を押して要求を拒否するか、その他のキーを押して承認します。\n",
+        "zh": "FIDO 请求\n\n按 F4 拒绝请求，或按任何其他键批准它。\n"
+    },
+    "vault.yes": {
+        "en": "Yes",
+        "en-tts": "Yes",
+        "fr": "Oui",
+        "ja": "はい",
+        "zh": "确定"
+    }
+}
