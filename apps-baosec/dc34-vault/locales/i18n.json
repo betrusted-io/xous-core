@@ -573,7 +573,7 @@
         "ja": "ノート",
         "zh": "笔录"
     },
-    "vault.pw.approval": {
+    "vault.pw.approval_type": {
         "en": "Save and type",
         "en-tts": "Save and type",
         "fr": "Enregistrer et saisir",

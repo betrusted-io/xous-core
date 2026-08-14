@@ -1436,7 +1436,7 @@ impl ActionManager {
                                                         );
                                                     if self.yes_no_approval(&format!(
                                                         "{} {}?",
-                                                        t!("vault.pw.approval", locales::LANG),
+                                                        t!("vault.pw.approval_type", locales::LANG),
                                                         url
                                                     )) {
                                                         self.modals
