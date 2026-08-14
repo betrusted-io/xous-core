@@ -14,27 +14,27 @@ num-derive = { version = "0.4.2", default-features = false }
 num-traits = { version = "0.2.14", default-features = false }
 bao1x-hal = { features = [
     "std",
-], optional = true, git = "https://github.com/betrusted-io/xous-core", rev = "616bf65f6e379165464f50b1e79ec42aff77a683" }
-bao1x-api = { git = "https://github.com/betrusted-io/xous-core", rev = "616bf65f6e379165464f50b1e79ec42aff77a683" }
-bao1x-hal-service = { optional = true, git = "https://github.com/betrusted-io/xous-core", rev = "616bf65f6e379165464f50b1e79ec42aff77a683" }
-bao1x-emu = { optional = true, git = "https://github.com/betrusted-io/xous-core", rev = "616bf65f6e379165464f50b1e79ec42aff77a683" }
-usb-bao1x = { git = "https://github.com/betrusted-io/xous-core", rev = "616bf65f6e379165464f50b1e79ec42aff77a683", features = ["bao1x", "board-baosec", "oem-baosec-lite"] }
-modals = { default-features = false, optional = true, git = "https://github.com/betrusted-io/xous-core", rev = "616bf65f6e379165464f50b1e79ec42aff77a683" }
-ux-api = { optional = true, git = "https://github.com/betrusted-io/xous-core", rev = "616bf65f6e379165464f50b1e79ec42aff77a683" }
-pddb = { optional = true, git = "https://github.com/betrusted-io/xous-core", rev = "616bf65f6e379165464f50b1e79ec42aff77a683" }
-xous-swapper = { optional = true, git = "https://github.com/betrusted-io/xous-core", rev = "616bf65f6e379165464f50b1e79ec42aff77a683" }
+], optional = true, path = "../../libs/bao1x-hal" }
+bao1x-api = { path = "../../libs/bao1x-api" }
+bao1x-hal-service = { optional = true, path = "../bao1x-hal-service" }
+bao1x-emu = { optional = true, path = "../bao1x-emu" }
+usb-bao1x = { path = "../usb-bao1x", features = ["bao1x", "board-baosec", "oem-baosec-lite"] }
+modals = { default-features = false, optional = true, path = "../modals" }
+ux-api = { optional = true, path = "../../libs/ux-api" }
+pddb = { optional = true, path = "../pddb" }
+xous-swapper = { optional = true, path = "../xous-swapper" }
 bytemuck = { version = "1.24.0", features = ["derive"] }
-susres = { package = "xous-api-susres", git = "https://github.com/betrusted-io/xous-core", rev = "616bf65f6e379165464f50b1e79ec42aff77a683" }
-keystore = { git = "https://github.com/betrusted-io/xous-core", rev = "616bf65f6e379165464f50b1e79ec42aff77a683" }
+susres = { package = "xous-api-susres", path = "../../api/xous-api-susres" }
+keystore = { path = "../keystore" }
 rkyv = { version = "0.8.8", default-features = false, features = [
     "std",
     "alloc",
 ] }
-dc34-api = { path = "../dc34-api/" }
+dc34-api = { path = "../../libs/dc34-api" }
 base64 = { version = "0.22.1", default-features = false, features = ["alloc"] }
 crc32fast = "1.5.0"
 
-bio-lib = { optional = true, git = "https://github.com/betrusted-io/xous-core", rev = "616bf65f6e379165464f50b1e79ec42aff77a683" }
+bio-lib = { optional = true, path = "../../libs/bio-lib" }
 arbitrary-int = "1.2"
 
 # pddb testing
@@ -44,7 +44,7 @@ rand_core = "0.6.4"
 
 aes = { default-features = false, features = [
     "chaffing",
-], git = "https://github.com/betrusted-io/xous-core", rev = "616bf65f6e379165464f50b1e79ec42aff77a683" }
+], path = "../aes" }
 
 # time testing
 chrono = "0.4.33"
@@ -56,33 +56,6 @@ base45 = "3.1.0"
 xous-usb-hid = { git = "https://github.com/betrusted-io/xous-usb-hid.git", branch = "main", optional = true }
 
 getrandom = "=0.2.12"
-
-[patch.crates-io.getrandom]
-git = "https://github.com/betrusted-io/xous-core"
-rev = "616bf65f6e379165464f50b1e79ec42aff77a683"
-
-[patch."https://github.com/betrusted-io/xous-core"]
-bao1x-hal = { path = "../xous-core/libs/bao1x-hal" }
-bao1x-hal-service = { path = "../xous-core/services/bao1x-hal-service" }
-bao1x-api = { path = "../xous-core/libs/bao1x-api" }
-modals = { path = "../xous-core/services/modals" }
-ux-api = { path = "../xous-core/libs/ux-api" }
-bio-lib = { path = "../xous-core/libs/bio-lib" }
-xous-api-susres = { path = "../xous-core/api/xous-api-susres" }
-keystore = {path = "../xous-core/services/keystore" }
-usb-bao1x = { path = "../xous-core/services/usb-bao1x" }
-
-[patch.crates-io.aes]
-path = "../xous-core/services/aes"
-
-[profile.release]
-codegen-units = 1  # 1 better optimizations
-debug = false
-strip = false
-lto = "fat"
-incremental = true
-#panic = "abort" # Remove panic output, which can reduce file size
-opt-level = "s" # z,s: Optimize for size instead of performance; 1 for easier debugging; comment out for "best performance" (but in Rust 1.72 this causes regressions)
 
 # aes testing
 [features]
