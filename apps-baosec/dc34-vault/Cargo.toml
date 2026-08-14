@@ -18,7 +18,7 @@ xous-names = { package = "xous-api-names", version = "0.9.67" }
 byteorder = { version = "1.4.3", default-features = false }
 arrayref = "0.3.6"
 subtle = { version = "2.5.0", features = ["core_hint_black_box"] }
-rand_core = "=0.6.4"
+rand_core = "0.6.4"
 ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.65" }
 backup = { path = "../vault2/libraries/backup", package = "backup-vault2" }
 dc34-api = { path = "../../libs/dc34-api" }
@@ -62,8 +62,8 @@ hex = { version = "0.4.3", default-features = false, features = ["alloc"] }
 chrono = { version = "0.4.33", default-features = false, features = ["std", "clock"] }
 
 # password generation
-passwords = "=3.1.9"
-random-pick = { version = "=1.2.15" }
+passwords = "3.1.9"
+random-pick = { version = "1.2.15" }
 
 # totp
 sha1 = "0.10.6"
