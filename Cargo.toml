@@ -1,0 +1,132 @@
+[package]
+name = "dc34-console"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+utralib = { version = "0.1.27", optional = true, default-features = false }
+xous-names = { package = "xous-api-names", version = "0.9.71" }
+ticktimer = { package = "xous-api-ticktimer", version = "0.9.70" }
+xous = "0.9.70"
+log-server = { package = "xous-api-log", version = "0.1.69" }
+log = "0.4.14"
+num-derive = { version = "0.4.2", default-features = false }
+num-traits = { version = "0.2.14", default-features = false }
+bao1x-hal = { features = [
+    "std",
+], optional = true, git = "https://github.com/betrusted-io/xous-core", rev = "616bf65f6e379165464f50b1e79ec42aff77a683" }
+bao1x-api = { git = "https://github.com/betrusted-io/xous-core", rev = "616bf65f6e379165464f50b1e79ec42aff77a683" }
+bao1x-hal-service = { optional = true, git = "https://github.com/betrusted-io/xous-core", rev = "616bf65f6e379165464f50b1e79ec42aff77a683" }
+bao1x-emu = { optional = true, git = "https://github.com/betrusted-io/xous-core", rev = "616bf65f6e379165464f50b1e79ec42aff77a683" }
+usb-bao1x = { git = "https://github.com/betrusted-io/xous-core", rev = "616bf65f6e379165464f50b1e79ec42aff77a683", features = ["bao1x", "board-baosec", "oem-baosec-lite"] }
+modals = { default-features = false, optional = true, git = "https://github.com/betrusted-io/xous-core", rev = "616bf65f6e379165464f50b1e79ec42aff77a683" }
+ux-api = { optional = true, git = "https://github.com/betrusted-io/xous-core", rev = "616bf65f6e379165464f50b1e79ec42aff77a683" }
+pddb = { optional = true, git = "https://github.com/betrusted-io/xous-core", rev = "616bf65f6e379165464f50b1e79ec42aff77a683" }
+xous-swapper = { optional = true, git = "https://github.com/betrusted-io/xous-core", rev = "616bf65f6e379165464f50b1e79ec42aff77a683" }
+bytemuck = { version = "1.24.0", features = ["derive"] }
+susres = { package = "xous-api-susres", git = "https://github.com/betrusted-io/xous-core", rev = "616bf65f6e379165464f50b1e79ec42aff77a683" }
+keystore = { git = "https://github.com/betrusted-io/xous-core", rev = "616bf65f6e379165464f50b1e79ec42aff77a683" }
+rkyv = { version = "0.8.8", default-features = false, features = [
+    "std",
+    "alloc",
+] }
+dc34-api = { path = "../dc34-api/" }
+base64 = { version = "0.22.1", default-features = false, features = ["alloc"] }
+crc32fast = "1.5.0"
+
+bio-lib = { optional = true, git = "https://github.com/betrusted-io/xous-core", rev = "616bf65f6e379165464f50b1e79ec42aff77a683" }
+arbitrary-int = "1.2"
+
+# pddb testing
+rand = { version = "0.8.5", features = ["getrandom"] }
+rand_chacha = { version = "0.3.1" }
+rand_core = "0.6.4"
+
+aes = { default-features = false, features = [
+    "chaffing",
+], git = "https://github.com/betrusted-io/xous-core", rev = "616bf65f6e379165464f50b1e79ec42aff77a683" }
+
+# time testing
+chrono = "0.4.33"
+
+# QR code encoding
+base45 = "3.1.0"
+
+# hid bringup
+xous-usb-hid = { git = "https://github.com/betrusted-io/xous-usb-hid.git", branch = "main", optional = true }
+
+getrandom = "=0.2.12"
+
+[patch.crates-io.getrandom]
+git = "https://github.com/betrusted-io/xous-core"
+rev = "616bf65f6e379165464f50b1e79ec42aff77a683"
+
+[patch."https://github.com/betrusted-io/xous-core"]
+bao1x-hal = { path = "../xous-core/libs/bao1x-hal" }
+bao1x-hal-service = { path = "../xous-core/services/bao1x-hal-service" }
+bao1x-api = { path = "../xous-core/libs/bao1x-api" }
+modals = { path = "../xous-core/services/modals" }
+ux-api = { path = "../xous-core/libs/ux-api" }
+bio-lib = { path = "../xous-core/libs/bio-lib" }
+xous-api-susres = { path = "../xous-core/api/xous-api-susres" }
+keystore = {path = "../xous-core/services/keystore" }
+usb-bao1x = { path = "../xous-core/services/usb-bao1x" }
+
+[patch.crates-io.aes]
+path = "../xous-core/services/aes"
+
+[profile.release]
+codegen-units = 1  # 1 better optimizations
+debug = false
+strip = false
+lto = "fat"
+incremental = true
+#panic = "abort" # Remove panic output, which can reduce file size
+opt-level = "s" # z,s: Optimize for size instead of performance; 1 for easier debugging; comment out for "best performance" (but in Rust 1.72 this causes regressions)
+
+# aes testing
+[features]
+bao1x = ["utralib/bao1x", "usb-bao1x/bao1x", "aes/bao1x"]
+board-baosec = [
+    "modals/board-baosec",
+    "bao1x-hal-service",
+    "bao1x-hal",
+    "usb-bao1x/board-baosec",
+    "pddb/board-baosec",
+    "xous-swapper",
+    "ux-api/board-baosec",
+    "bio-lib",
+    "bao1x-hal/board-baosec",
+    "bio-lib/ws2812",
+]
+oem-baosec-lite = ["bao1x-hal/sensor-lis2dh12"]
+hosted-baosec = [
+    "modals/hosted-baosec",
+    "usb-bao1x/hosted-baosec",
+    "bao1x-emu",
+    "pddb/hosted-baosec",
+    "bao1x-hal/hosted-baosec",
+]
+owc-test = ["keystore/owc-inc"]
+# stress test for WFI resume
+wfi-stress-test = []
+# gate for misc test routines
+misc-test = []
+# for qa testing
+qa-test = []
+# this flag leaks secrets
+hazardous-test = []
+
+# these flags are for factory only builds
+# owc-inc is necessary because we use a OWC to disable the factory cheat routine after run-once.
+factory-mismatch = ["keystore/owc-inc"]
+factory-wipe = ["keystore/owc-inc"]
+
+uber = []
+
+# Activating this makes this crate *try* to grab the DUART. To improve its odds
+# of winning the race, shift its position to first in the list in the PIDs to be
+# loaded and run.
+duart-debug-hal = ["bao1x-hal/debug-print-duart"]
+
+default = ["oem-baosec-lite"]
