@@ -6,6 +6,7 @@ use bao1x_api::PQ_REVOCATION_DUPE_DISTANCE;
 use bao1x_api::REQUIRE_PQ;
 use bao1x_api::REQUIRE_PQ_DUPE;
 use bao1x_api::REVOCATION_DUPE_DISTANCE;
+use bao1x_api::StaticsInRom;
 use bao1x_api::bollard;
 use bao1x_api::classic_to_pq_revocation;
 use bao1x_api::pubkeys::DEVELOPER_KEY_SLOT;
@@ -428,11 +429,27 @@ pub fn validate_image(
             // continue on to return classical signature
             bollard!(die_no_std, 4);
             assert!(valid_key != valid_key2);
+            // boot0 has to skip past both the signature block and the statics structure. The
+            // statics structure is needed because there is no loader in the boot0 context, and
+            // thus a region is reserved to initialize static data (which is required to make things
+            // like static-atomics work in the boot0 stage). The actual offset is in practice defined
+            // by code structure sizes but de facto fixed to 0x400. This computation ensures these
+            // two are consistent, so if in the future I tweak one value I should hit the assert and
+            // remind myself to fix the others.
+            let header_len = SIGBLOCK_LEN + size_of::<StaticsInRom>();
+            assert!(header_len == 0x400, "header size is inconsistent");
             Ok((
                 valid_key,
                 valid_key2,
                 pk_src.sealed_data.pubkeys[valid_key].tag,
-                (img_offset as u32) ^ u32::from_le_bytes(pk_src.sealed_data.pubkeys[valid_key].tag),
+                // add header_len to the jump offset - so that the jump target is inside the signed
+                // region. This addition does not affect boot0 because the jump target is fixed to always
+                // be at the unsigned trampoline instruction. Boot0's first instruction is OK to be
+                // unsigned because it is assumed that boot0 is trusted code. Mutability of boot0 is
+                // fatal to the security assumptions of the chip. `img_offset` is a compile-time constant
+                // and therefore not attacker controlled.
+                ((img_offset as usize + header_len) as u32)
+                    ^ u32::from_le_bytes(pk_src.sealed_data.pubkeys[valid_key].tag),
                 if verdict == PQ_MATCH { Some(pq_tag) } else { None },
             ))
         } else {
