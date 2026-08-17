@@ -179,6 +179,14 @@ impl<'a> Bao1xUsb<'a> {
             .composite_with_iads()
             .build();
 
+        #[cfg(feature = "ccid-openpgp")]
+        let mut ccid = ccid;
+        #[cfg(feature = "ccid-openpgp")]
+        {
+            // Snapshot of the allocator bus (populated ep_meta) for IRQ force-prime.
+            ccid.attach_force_bus(device.bus().clone());
+        }
+
         Bao1xUsb {
             conn: cid,
             // safety: we created iframrange to have the exact same P&V mappings
@@ -346,12 +354,43 @@ pub enum UsbIrqReq {
 pub const CORIGINE_IRQ_MASK: u32 = 0x1;
 pub const SW_IRQ_MASK: u32 = 0x2;
 
+/// Drop guard: increments `composite_handler` exit counter on every return path
+/// (including the early `return` after `try_lock` failure). Panic unwind would
+/// also fire if unwinding is enabled; with abort-on-panic, a hang still shows as
+/// entries≫exits because `drop` never runs. Also snapshots raw `EV_PENDING` /
+/// `EV_ENABLE` into the flight ring before the exit marker.
+#[cfg(feature = "irq-pending-trace")]
+struct CompositeHandlerExitGuard {
+    irq_csr: AtomicCsr<u32>,
+}
+#[cfg(feature = "irq-pending-trace")]
+impl Drop for CompositeHandlerExitGuard {
+    fn drop(&mut self) {
+        let pending = self.irq_csr.r(utra::irqarray1::EV_PENDING);
+        let enable = self.irq_csr.r(utra::irqarray1::EV_ENABLE);
+        bao1x_hal::usb::driver::usb_flight_record_ev_regs(pending, enable);
+        bao1x_hal::usb::driver::composite_handler_trace_note_exit();
+    }
+}
+
 pub(crate) fn composite_handler(_irq_no: usize, arg: *mut usize) {
+    #[cfg(feature = "irq-pending-trace")]
+    bao1x_hal::usb::driver::composite_handler_trace_note_entry();
+
     let usb = unsafe { &mut *(arg as *mut Bao1xUsb) };
+
+    #[cfg(feature = "irq-pending-trace")]
+    let _exit_guard = CompositeHandlerExitGuard { irq_csr: usb.irq_csr.clone() };
 
     // immediately clear the interrupt and re-enable it so we can catch an interrupt
     // that is generated while we are handling the interrupt.
     let pending = usb.irq_csr.r(utra::irqarray1::EV_PENDING);
+    #[cfg(feature = "irq-pending-trace")]
+    {
+        // Raw bitmask at entry (before clear) — not just nonzero booleans.
+        let enable = usb.irq_csr.r(utra::irqarray1::EV_ENABLE);
+        bao1x_hal::usb::driver::usb_flight_record_ev_regs(pending, enable);
+    }
     #[cfg(feature = "verbose-debug")]
     crate::println!("pending: {:x}, status: {:x}", pending, usb.irq_csr.r(utra::irqarray1::EV_STATUS),);
     // clear pending
@@ -378,8 +417,15 @@ pub(crate) fn composite_handler(_irq_no: usize, arg: *mut usize) {
                     // crate::println!("getting event");
                     // scoping on the hardware lock to manipulate pointer states
                     let mut corigine_usb = match usb.wrapper.hw.try_lock() {
-                        Ok(lock) => lock,
+                        Ok(lock) => {
+                            #[cfg(feature = "irq-pending-trace")]
+                            bao1x_hal::usb::driver::composite_handler_trace_note_lock_acquired();
+                            lock
+                        }
                         _ => {
+                            #[cfg(feature = "irq-pending-trace")]
+                            bao1x_hal::usb::driver::composite_handler_trace_note_lock_contended();
+                            // No spin/retry — single try_lock fail returns immediately.
                             crate::println!("double lock - this case is actually broken, stack will crash");
                             usb.double_lock.store(true, Ordering::SeqCst);
                             return;
@@ -471,6 +517,9 @@ pub(crate) fn composite_handler(_irq_no: usize, arg: *mut usize) {
                 }
                 {
                     // scoping on the hardware lock to manipulate pointer states
+                    // NOTE: this is a *blocking* `core()` lock (not try_lock). If main
+                    // holds the mutex, the IRQ path can hang here — entry/exit divergence
+                    // is the signal; locking behavior is intentionally unchanged this pass.
                     let mut hw_lock = usb.wrapper.core();
                     if hw_lock.udc_event.evt_dq_pt.load(Ordering::SeqCst)
                         == hw_lock.udc_event.evt_seg0_last_trb.load(Ordering::SeqCst)

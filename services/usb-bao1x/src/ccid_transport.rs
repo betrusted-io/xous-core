@@ -10,12 +10,14 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use num_traits::ToPrimitive;
 use usb_bao1x::ccid_framing::{
     CCID_BULK_MAX_PACKET as CCID_BULK_MAX_PACKET_BYTES, CCID_HEADER_LEN, append_bulk_out, consume_tx_chunk,
-    frame_total_len, is_get_slot_status, next_tx_chunk, rdr_to_pc_slot_status_ok,
+    frame_total_len, is_get_slot_status, is_icc_power_on, next_tx_chunk, rdr_to_pc_data_block_atr,
+    rdr_to_pc_slot_status_ok,
 };
 use usb_device::Result as UsbResult;
 use usb_device::UsbError;
 use usb_device::class::UsbClass;
 use usb_device::class_prelude::*;
+use usb_device::control::{Recipient, RequestType};
 use usb_device::descriptor::DescriptorWriter;
 
 use crate::api::Opcode;
@@ -157,6 +159,9 @@ pub struct CcidTransportClass<'a, B: UsbBus> {
     notify_cid: xous::CID,
     /// Set by [`UsbClass::reset`]; main clears deferred `CcidRxDeferred` waiter.
     session_hangup: AtomicBool,
+    /// Clone of the live `UsbBusAllocator` bus (filled `ep_meta`) for force-prime.
+    /// Attached after `UsbDevice` is built; `Endpoint::bus()` is crate-private.
+    force_bus: Option<bao1x_hal::usb::driver::CorigineWrapper>,
 }
 
 impl<'a, B: UsbBus> CcidTransportClass<'a, B> {
@@ -177,7 +182,14 @@ impl<'a, B: UsbBus> CcidTransportClass<'a, B> {
             complete_rx,
             notify_cid,
             session_hangup: AtomicBool::new(false),
+            force_bus: None,
         }
+    }
+
+    /// Attach the live USB bus used for [`Self::force_prime_bulk_out`] from IRQ/`endpoint_out`.
+    /// Must be the `UsbBusAllocator` instance (`device.bus().clone()`) so `ep_meta` is populated.
+    pub fn attach_force_bus(&mut self, bus: bao1x_hal::usb::driver::CorigineWrapper) {
+        self.force_bus = Some(bus);
     }
 
     /// Returns true once after a USB reset/unplug cleared transport state.
@@ -192,6 +204,14 @@ impl<'a, B: UsbBus> CcidTransportClass<'a, B> {
 
     /// USB endpoint index for CCID bulk OUT (for Corigine `ep_out_ready` force-rearm).
     pub(crate) fn bulk_out_index(&self) -> usize { self.bulk_out.address().index() }
+
+    /// Force-queue a fresh bulk OUT TRB via [`CorigineWrapper::force_prime_bulk_out`].
+    ///
+    /// Used by the periodic `CcidPrimeBulkOut` path so a stuck `ep_out_ready` flag cannot
+    /// leave the host WriteUSB without a TRB.
+    pub(crate) fn force_prime_bulk_out(&self, bus: &bao1x_hal::usb::driver::CorigineWrapper) {
+        bus.force_prime_bulk_out(self.bulk_out.address().index());
+    }
 
     /// Arm Corigine bulk OUT by attempting a read (side effect queues a receive TRB).
     ///
@@ -213,55 +233,104 @@ impl<'a, B: UsbBus> CcidTransportClass<'a, B> {
             }
             Ok(n) => {
                 // Rare: data arrived during prime — fold into the normal RX path.
-                let mut g = self.inner.borrow_mut();
-                if append_bulk_out(&mut g.rx_assembly, &tmp[..n]).is_ok() {
-                    Self::drain_complete_messages(&mut g, &*self.complete_rx, self.notify_cid);
+                {
+                    let mut g = self.inner.borrow_mut();
+                    if append_bulk_out(&mut g.rx_assembly, &tmp[..n]).is_err() {
+                        return;
+                    }
+                }
+                let answered_inline = self.drain_complete_messages();
+                if answered_inline {
+                    if let Some(ref bus) = self.force_bus {
+                        self.force_prime_bulk_out(bus);
+                    }
+                    self.poll_bulk_in();
+                    // Non-recursive re-arm: bulk IN can drop the OUT TRB.
+                    let mut arm = [0u8; CCID_BULK_MAX_PACKET as usize];
+                    match self.bulk_out.read(&mut arm) {
+                        Ok(0) | Err(UsbError::WouldBlock) => {}
+                        Ok(n2) => {
+                            let mut g = self.inner.borrow_mut();
+                            let _ = append_bulk_out(&mut g.rx_assembly, &arm[..n2]);
+                        }
+                        Err(_) => {}
+                    }
                 }
             }
             Err(_) => {}
         }
     }
 
-    fn drain_complete_messages(
-        g: &mut CcidTransportInner,
-        complete_rx: &RefCell<VecDeque<Vec<u8>>>,
-        notify_cid: xous::CID,
-    ) -> bool {
-        // Returns true if any GetSlotStatus was answered inline (caller must poll_bulk_in).
+    fn drain_complete_messages(&self) -> bool {
+        // Returns true if GetSlotStatus / IccPowerOn was answered inline (caller must poll_bulk_in).
         let mut answered_inline = false;
         let mut new_frames = 0usize;
+        enum Step {
+            Break,
+            Queued,
+            Inline,
+        }
         loop {
-            let Some(total) = frame_total_len(&g.rx_assembly) else {
-                if g.rx_assembly.len() >= CCID_HEADER_LEN {
-                    g.rx_assembly.clear();
+            let step = {
+                let mut g = self.inner.borrow_mut();
+                match frame_total_len(&g.rx_assembly) {
+                    None => {
+                        if g.rx_assembly.len() >= CCID_HEADER_LEN {
+                            g.rx_assembly.clear();
+                        }
+                        Step::Break
+                    }
+                    Some(total) if g.rx_assembly.len() < total => Step::Break,
+                    Some(total) => {
+                        let frame = g.rx_assembly[..total].to_vec();
+                        g.rx_assembly.drain(..total);
+
+                        // libccid CreateChannel uses two GetSlotStatus probes with a 100 ms
+                        // ReadUSB timeout. Answer those in IRQ context — do not wake galdralag.
+                        if is_get_slot_status(&frame) {
+                            let slot = frame[5];
+                            let seq = frame[6];
+                            let resp = rdr_to_pc_slot_status_ok(slot, seq);
+                            g.tx_buf.clear();
+                            g.tx_buf.extend_from_slice(&resp);
+                            g.tx_pending = true;
+                            Step::Inline
+                        } else if is_icc_power_on(&frame) {
+                            // IccPowerOn: return OpenPGP ATR inline so pcscd does not see an
+                            // unresponsive card while galdralag finishes vault init.
+                            let slot = frame[5];
+                            let seq = frame[6];
+                            let resp = rdr_to_pc_data_block_atr(slot, seq);
+                            g.tx_buf.clear();
+                            g.tx_buf.extend_from_slice(&resp);
+                            g.tx_pending = true;
+                            Step::Inline
+                        } else {
+                            self.complete_rx.borrow_mut().push_back(frame);
+                            Step::Queued
+                        }
+                    }
                 }
-                break;
             };
-            if g.rx_assembly.len() < total {
-                break;
+            // Borrow of `inner` is dropped here before any prime.
+            match step {
+                Step::Break => break,
+                Step::Queued => new_frames += 1,
+                Step::Inline => {
+                    answered_inline = true;
+                    // Force-rearm OUT before the caller queues the IN response so the
+                    // next host WriteUSB is not left without a TRB.
+                    if let Some(ref bus) = self.force_bus {
+                        self.force_prime_bulk_out(bus);
+                    } else {
+                        self.prime_bulk_out();
+                    }
+                }
             }
-            let frame = g.rx_assembly[..total].to_vec();
-            g.rx_assembly.drain(..total);
-
-            // libccid CreateChannel uses two GetSlotStatus probes with a 100 ms
-            // ReadUSB timeout. Answer those in IRQ context — do not wake the stub.
-            if is_get_slot_status(&frame) {
-                let slot = frame[5];
-                let seq = frame[6];
-                let resp = rdr_to_pc_slot_status_ok(slot, seq);
-                g.tx_buf.clear();
-                g.tx_buf.extend_from_slice(&resp);
-                g.tx_pending = true;
-                answered_inline = true;
-                continue;
-            }
-
-            complete_rx.borrow_mut().push_back(frame);
-            new_frames += 1;
         }
         if new_frames > 0 {
             xous::try_send_message(
-                notify_cid,
+                self.notify_cid,
                 xous::Message::new_scalar(Opcode::IrqCcidRx.to_usize().unwrap(), 0, 0, 0, 0),
             )
             .ok();
@@ -314,10 +383,14 @@ impl<'a, B: UsbBus> UsbClass<B> for CcidTransportClass<'a, B> {
     }
 
     fn reset(&mut self) {
-        let mut g = self.inner.borrow_mut();
-        g.rx_assembly.clear();
-        g.tx_buf.clear();
-        g.tx_pending = false;
+        // Drop software TX/RX so a later poll_bulk_in cannot re-send a stale
+        // ATR or SlotStatus from a previous pcscd/session after bus reset or unplug.
+        {
+            let mut g = self.inner.borrow_mut();
+            g.rx_assembly.clear();
+            g.tx_buf.clear();
+            g.tx_pending = false;
+        }
         self.complete_rx.borrow_mut().clear();
         // Wake main so deferred CcidRxDeferred waiters get Hangup (arg1=1).
         self.session_hangup.store(true, Ordering::SeqCst);
@@ -326,11 +399,137 @@ impl<'a, B: UsbBus> UsbClass<B> for CcidTransportClass<'a, B> {
             xous::Message::new_scalar(Opcode::IrqCcidRx.to_usize().unwrap(), 1, 0, 0, 0),
         )
         .ok();
+        // Do not call poll_bulk_in here: with tx_pending false it is a no-op and
+        // must not queue a fresh EP1 IN TRB. Re-arm bulk OUT for the next host
+        // WriteUSB. When called from the bus-reset IRQ path, address_is_set is
+        // already false so prime_bulk_out is a register no-op (safe for SET_ADDRESS);
+        // after Configured, main primes again.
+        self.prime_bulk_out();
     }
 
     fn poll(&mut self) { self.poll_bulk_in(); }
 
+    /// Device-level vendor IN telemetry (`irq-pending-trace`):
+    /// - `bRequest=0x42` — IRQ pending clear/mask counters
+    /// - `bRequest=0x43` — bulk TRB arm/consume lifecycle
+    /// - `bRequest=0x44` — composite_handler entry/exit + IRQ try_lock
+    ///
+    /// Reads only atomics — does not take the Corigine `hw` mutex used by bulk
+    /// `write()` / `disable_interrupts()` / `restore_interrupts()`.
+    #[cfg(feature = "irq-pending-trace")]
+    fn control_in(&mut self, xfer: ControlIn<B>) {
+        let req = *xfer.request();
+        if req.request_type != RequestType::Vendor || req.recipient != Recipient::Device {
+            return;
+        }
+        match req.request {
+            bao1x_hal::usb::driver::IRQ_PENDING_TRACE_BREQUEST => {
+                let (clears, disable_pending, last, seq) =
+                    bao1x_hal::usb::driver::irq_pending_trace_stats_snapshot();
+                let mut buf = [0u8; bao1x_hal::usb::driver::IRQ_PENDING_TRACE_RESP_LEN];
+                // LE layout: [u32 clears][u32 disable_pending][u32 last][u32 seq]
+                buf[0..4].copy_from_slice(&clears.to_le_bytes());
+                buf[4..8].copy_from_slice(&disable_pending.to_le_bytes());
+                buf[8..12].copy_from_slice(&last.to_le_bytes());
+                buf[12..16].copy_from_slice(&seq.to_le_bytes());
+                let _ = xfer.accept_with(&buf);
+            }
+            bao1x_hal::usb::driver::BULK_TRB_TRACE_BREQUEST => {
+                let (out_a, out_c, in_a, in_c, force, seq, out_enq, out_deq, in_enq, in_deq) =
+                    bao1x_hal::usb::driver::bulk_trb_trace_stats_snapshot();
+                let mut buf = [0u8; bao1x_hal::usb::driver::BULK_TRB_TRACE_RESP_LEN];
+                // LE layout — offsets documented on BULK_TRB_TRACE_BREQUEST:
+                // 0..4 out_armed, 4..8 out_consumed, 8..12 in_armed, 12..16 in_consumed,
+                // 16..20 force_prime, 20..24 seq,
+                // 24..26 out_enq, 26..28 out_deq, 28..30 in_enq, 30..32 in_deq
+                buf[0..4].copy_from_slice(&out_a.to_le_bytes());
+                buf[4..8].copy_from_slice(&out_c.to_le_bytes());
+                buf[8..12].copy_from_slice(&in_a.to_le_bytes());
+                buf[12..16].copy_from_slice(&in_c.to_le_bytes());
+                buf[16..20].copy_from_slice(&force.to_le_bytes());
+                buf[20..24].copy_from_slice(&seq.to_le_bytes());
+                buf[24..26].copy_from_slice(&out_enq.to_le_bytes());
+                buf[26..28].copy_from_slice(&out_deq.to_le_bytes());
+                buf[28..30].copy_from_slice(&in_enq.to_le_bytes());
+                buf[30..32].copy_from_slice(&in_deq.to_le_bytes());
+                let _ = xfer.accept_with(&buf);
+            }
+            bao1x_hal::usb::driver::COMPOSITE_HANDLER_TRACE_BREQUEST => {
+                let (entries, exits, lock_ok, lock_busy, seq) =
+                    bao1x_hal::usb::driver::composite_handler_trace_stats_snapshot();
+                let mut buf = [0u8; bao1x_hal::usb::driver::COMPOSITE_HANDLER_TRACE_RESP_LEN];
+                // LE layout — offsets documented on COMPOSITE_HANDLER_TRACE_BREQUEST:
+                // 0..4 entries, 4..8 exits, 8..12 lock_acquired, 12..16 lock_contended, 16..20 seq
+                buf[0..4].copy_from_slice(&entries.to_le_bytes());
+                buf[4..8].copy_from_slice(&exits.to_le_bytes());
+                buf[8..12].copy_from_slice(&lock_ok.to_le_bytes());
+                buf[12..16].copy_from_slice(&lock_busy.to_le_bytes());
+                buf[16..20].copy_from_slice(&seq.to_le_bytes());
+                let _ = xfer.accept_with(&buf);
+            }
+            bao1x_hal::usb::driver::USB_FLIGHT_TRACE_BREQUEST => {
+                // wValue = chunk index (0..USB_FLIGHT_CHUNK_COUNT-1). Lock-free ring dump.
+                let mut buf = [0u8; bao1x_hal::usb::driver::USB_FLIGHT_TRACE_RESP_LEN];
+                let n = bao1x_hal::usb::driver::usb_flight_trace_fill_chunk(req.value, &mut buf);
+                if n > 0 {
+                    let _ = xfer.accept_with(&buf[..n]);
+                }
+            }
+            _ => {}
+        }
+    }
+
     fn endpoint_out(&mut self, addr: EndpointAddress) {
+        // UsbClass cannot take an extra bus arg; use the attached live-bus clone.
+        // CorigineWrapper has an inherent clone(), not std::Clone — map via as_ref.
+        let bus = self.force_bus.as_ref().map(|b| b.clone());
+        match bus.as_ref() {
+            Some(bus) => self.endpoint_out_with_bus(addr, bus),
+            None => {
+                // Before attach_force_bus: fall back to read()-based prime.
+                if addr != self.bulk_out.address() {
+                    return;
+                }
+                let mut tmp = [0u8; CCID_BULK_MAX_PACKET as usize];
+                if let Ok(n) = self.bulk_out.read(&mut tmp) {
+                    if n == 0 {
+                        self.prime_bulk_out();
+                        return;
+                    }
+                    let answered_inline = {
+                        let mut g = self.inner.borrow_mut();
+                        if append_bulk_out(&mut g.rx_assembly, &tmp[..n]).is_err() {
+                            drop(g);
+                            self.prime_bulk_out();
+                            return;
+                        }
+                        drop(g);
+                        self.drain_complete_messages()
+                    };
+                    if answered_inline {
+                        if let Some(ref bus) = self.force_bus {
+                            self.force_prime_bulk_out(bus);
+                        } else {
+                            self.prime_bulk_out();
+                        }
+                        self.poll_bulk_in();
+                        self.prime_bulk_out();
+                    }
+                    self.prime_bulk_out();
+                }
+            }
+        }
+    }
+}
+
+impl<'a, B: UsbBus> CcidTransportClass<'a, B> {
+    /// Bulk OUT handler with an explicit bus for force-prime (same pattern as
+    /// [`Self::force_prime_bulk_out`]).
+    fn endpoint_out_with_bus(
+        &mut self,
+        addr: EndpointAddress,
+        bus: &bao1x_hal::usb::driver::CorigineWrapper,
+    ) {
         if addr != self.bulk_out.address() {
             return;
         }
@@ -339,25 +538,30 @@ impl<'a, B: UsbBus> UsbClass<B> for CcidTransportClass<'a, B> {
         if let Ok(n) = self.bulk_out.read(&mut tmp) {
             if n == 0 {
                 // Still re-arm so the next host write has a TRB.
-                self.prime_bulk_out();
+                self.force_prime_bulk_out(bus);
                 return;
             }
             let answered_inline = {
                 let mut g = self.inner.borrow_mut();
                 if append_bulk_out(&mut g.rx_assembly, &tmp[..n]).is_err() {
                     drop(g);
-                    self.prime_bulk_out();
+                    self.force_prime_bulk_out(bus);
                     return;
                 }
-                Self::drain_complete_messages(&mut g, &*self.complete_rx, self.notify_cid)
+                drop(g);
+                self.drain_complete_messages()
             };
-            // Flush SlotStatus (and any other pending IN) before leaving IRQ.
+            // Force-rearm OUT, then queue the inline IN response (GetSlotStatus / IccPowerOn).
+            // Corigine can drop the bulk-OUT TRB after a bulk-IN; without a fresh
+            // TRB the host's next WriteUSB (e.g. second GetSlotStatus) times out.
             if answered_inline {
+                self.force_prime_bulk_out(bus);
                 self.poll_bulk_in();
+                self.force_prime_bulk_out(bus);
             }
-            // Corigine `read` re-arms after consuming a packet; call again so a failed
-            // internal re-arm still leaves OUT ready for the next WriteUSB.
-            self.prime_bulk_out();
+            // Always force-rearm after consuming OUT so a stuck ep_out_ready cannot
+            // leave the next WriteUSB without a TRB.
+            self.force_prime_bulk_out(bus);
         }
     }
 }

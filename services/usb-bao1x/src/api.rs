@@ -80,6 +80,12 @@ pub enum Opcode {
     #[cfg(all(feature = "ccid-openpgp", target_os = "xous"))]
     /// CCID: enqueue raw RDR_to_PC bytes built by external handler
     CcidTx = 642,
+    #[cfg(all(feature = "ccid-openpgp", target_os = "xous"))]
+    /// Periodic bulk-OUT re-arm while Configured (main context, not IRQ)
+    CcidPrimeBulkOut = 643,
+    #[cfg(all(feature = "irq-pending-trace", target_os = "xous"))]
+    /// Return irq-pending-trace counters: (enable_cleared_nonempty, disable_with_pending, last_pending)
+    IrqPendingTraceStats = 644,
 
     #[cfg(feature = "mass-storage")]
     SetBlockDevice = 1024,

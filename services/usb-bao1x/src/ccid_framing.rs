@@ -101,12 +101,33 @@ pub fn make_get_slot_status(seq: u8) -> [u8; CCID_HEADER_LEN] {
 
 /// PC_to_RDR_GetSlotStatus (0x65).
 pub const PC_TO_RDR_GET_SLOT_STATUS: u8 = 0x65;
+/// PC_to_RDR_IccPowerOn (0x62).
+pub const PC_TO_RDR_ICC_POWER_ON: u8 = 0x62;
 /// RDR_to_PC_SlotStatus (0x81).
 pub const RDR_TO_PC_SLOT_STATUS: u8 = 0x81;
+/// RDR_to_PC_DataBlock (0x80).
+pub const RDR_TO_PC_DATA_BLOCK: u8 = 0x80;
+
+/// OpenPGP smart-card ATR (T=1) returned inline for IccPowerOn.
+/// Final byte `0x0C` is the TCK (exclusive-or of bytes from T0 through historical bytes).
+pub const OPENPGP_ATR_LEN: usize = 21;
+pub const OPENPGP_ATR: [u8; OPENPGP_ATR_LEN] = [
+    0x3B, 0xDA, 0x18, 0xFF, 0x81, 0xB1, 0xFE, 0x75, 0x1F, 0x03, 0x00, 0x31, 0xC5, 0x73, 0xC0, 0x01, 0x40,
+    0x00, 0x90, 0x00, 0x0C,
+];
 
 /// True if `frame` is a well-formed GetSlotStatus (header only, dwLength 0).
 pub fn is_get_slot_status(frame: &[u8]) -> bool {
     if frame.len() != CCID_HEADER_LEN || frame[0] != PC_TO_RDR_GET_SLOT_STATUS {
+        return false;
+    }
+    let dw = u32::from_le_bytes([frame[1], frame[2], frame[3], frame[4]]);
+    dw == 0
+}
+
+/// True if `frame` is a well-formed IccPowerOn (header only, dwLength 0).
+pub fn is_icc_power_on(frame: &[u8]) -> bool {
+    if frame.len() != CCID_HEADER_LEN || frame[0] != PC_TO_RDR_ICC_POWER_ON {
         return false;
     }
     let dw = u32::from_le_bytes([frame[1], frame[2], frame[3], frame[4]]);
@@ -124,6 +145,33 @@ pub fn rdr_to_pc_slot_status_ok(slot: u8, seq: u8) -> [u8; CCID_HEADER_LEN] {
     frame[5] = slot;
     frame[6] = seq;
     // bStatus = 0, bError = 0, bClockStatus = 0
+    frame
+}
+
+/// RDR_to_PC_DataBlock carrying [`OPENPGP_ATR`] (IccPowerOn response).
+///
+/// Answered in IRQ context so pcscd/libccid get an ATR before the OpenPGP
+/// process finishes vault init.
+pub fn rdr_to_pc_data_block_atr(slot: u8, seq: u8) -> [u8; CCID_HEADER_LEN + OPENPGP_ATR_LEN] {
+    let mut frame = [0u8; CCID_HEADER_LEN + OPENPGP_ATR_LEN];
+    frame[0] = RDR_TO_PC_DATA_BLOCK;
+    let dw = (OPENPGP_ATR_LEN as u32).to_le_bytes();
+    frame[1] = dw[0];
+    frame[2] = dw[1];
+    frame[3] = dw[2];
+    frame[4] = dw[3];
+    frame[5] = slot;
+    frame[6] = seq;
+    // bStatus = 0, bError = 0, bChainParameter = 0
+    frame[CCID_HEADER_LEN..].copy_from_slice(&OPENPGP_ATR);
+    frame
+}
+
+pub fn make_icc_power_on(seq: u8) -> [u8; CCID_HEADER_LEN] {
+    let mut frame = [0u8; CCID_HEADER_LEN];
+    frame[0] = PC_TO_RDR_ICC_POWER_ON;
+    frame[5] = 0;
+    frame[6] = seq;
     frame
 }
 
@@ -207,5 +255,19 @@ mod tests {
         assert_eq!(resp[6], 7);
         assert_eq!(&resp[1..5], &[0, 0, 0, 0]);
         assert!(!is_get_slot_status(&resp));
+    }
+
+    #[test]
+    fn icc_power_on_detect_and_reply() {
+        let req = make_icc_power_on(9);
+        assert!(is_icc_power_on(&req));
+        assert!(!is_get_slot_status(&req));
+        let resp = rdr_to_pc_data_block_atr(0, 9);
+        assert_eq!(resp[0], RDR_TO_PC_DATA_BLOCK);
+        assert_eq!(resp[5], 0);
+        assert_eq!(resp[6], 9);
+        assert_eq!(u32::from_le_bytes([resp[1], resp[2], resp[3], resp[4]]) as usize, OPENPGP_ATR_LEN);
+        assert_eq!(&resp[CCID_HEADER_LEN..], &OPENPGP_ATR);
+        assert!(!is_icc_power_on(&resp));
     }
 }

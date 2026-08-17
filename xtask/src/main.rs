@@ -805,6 +805,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             builder.add_detached_app_feature(board);
             builder.set_sigblock_size(sigblock_size);
             builder.add_feature("ccid-openpgp");
+            // Lost-wakeup evidence (EV_PENDING clear-on-enable). Remove after keepalive diagnosis.
+            builder.add_feature("irq-pending-trace");
 
             let bao_rram_pkgs =
                 ["xous-ticktimer", "keystore", "xous-log", "xous-names", "usb-bao1x", "bao1x-hal-service"]

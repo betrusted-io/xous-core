@@ -229,10 +229,6 @@ pub(crate) fn main_hw() -> ! {
     let mut ccid_listener_pid: Option<NonZeroU8> = None;
     #[cfg(all(feature = "ccid-openpgp", not(feature = "ccid-echo")))]
     let mut ccid_listener: Option<xous::MessageEnvelope> = None;
-    // One-shot CCID bulk-OUT arm after first Configured (main context, not IRQ).
-    #[cfg(feature = "ccid-openpgp")]
-    let mut ccid_primed = false;
-
     let mut autotype_delay_ms = 30;
 
     // event observer connection
@@ -329,6 +325,26 @@ pub(crate) fn main_hw() -> ! {
         }
     });
 
+    // Periodic CCID bulk-OUT re-arm: Corigine can drop the OUT TRB after inline IN
+    // responses or between host sessions while staying Configured. Sleep + scalar to
+    // main (same pattern as the U2F timeout pump) so priming stays off the USB IRQ path.
+    #[cfg(all(feature = "ccid-openpgp", target_os = "xous"))]
+    std::thread::spawn({
+        let cid = cid;
+        move || {
+            let tt = ticktimer::Ticktimer::new().unwrap();
+            const CCID_PRIME_INTERVAL_MS: usize = 100;
+            loop {
+                tt.sleep_ms(CCID_PRIME_INTERVAL_MS).ok();
+                xous::try_send_message(
+                    cid,
+                    xous::Message::new_scalar(Opcode::CcidPrimeBulkOut.to_usize().unwrap(), 0, 0, 0, 0),
+                )
+                .ok();
+            }
+        }
+    });
+
     #[cfg(all(feature = "board-baosec", not(feature = "oem-baosec-lite")))]
     let mut i2c = bao1x_hal::i2c::I2c::new();
     #[cfg(all(feature = "board-baosec", not(feature = "oem-baosec-lite")))]
@@ -369,10 +385,6 @@ pub(crate) fn main_hw() -> ! {
                 VbusIrq::Remove => {
                     log::info!("VBUS removed. Resetting stack.");
                     cu.unplug();
-                    #[cfg(feature = "ccid-openpgp")]
-                    {
-                        ccid_primed = false;
-                    }
                     #[cfg(all(feature = "ccid-openpgp", not(feature = "ccid-echo")))]
                     {
                         // unplug() calls ccid.reset(); hang up deferred waiter explicitly too.
@@ -402,10 +414,6 @@ pub(crate) fn main_hw() -> ! {
                     let vbus_irq = VbusIrq::from(scalar.arg1);
                     if vbus_irq == VbusIrq::Remove {
                         cu.unplug();
-                        #[cfg(feature = "ccid-openpgp")]
-                        {
-                            ccid_primed = false;
-                        }
                         #[cfg(all(feature = "ccid-openpgp", not(feature = "ccid-echo")))]
                         {
                             if let Some(mut listener) = ccid_listener.take() {
@@ -595,6 +603,10 @@ pub(crate) fn main_hw() -> ! {
                         response.replace(buf).unwrap();
                     } else {
                         ccid_listener = msg_opt.take();
+                        // Re-arm bulk OUT whenever a new deferred listener connects so the
+                        // host's next WriteUSB is not left without a TRB (e.g. after an
+                        // earlier inline response or between pcscd sessions).
+                        cu.ccid.prime_bulk_out();
                     }
                 } else {
                     let mut buffer =
@@ -606,6 +618,47 @@ pub(crate) fn main_hw() -> ! {
             }
             #[cfg(all(feature = "ccid-openpgp", not(feature = "ccid-echo")))]
             Opcode::CcidRxTimeout => {}
+            #[cfg(all(feature = "ccid-openpgp", target_os = "xous"))]
+            Opcode::CcidPrimeBulkOut => {
+                #[cfg(feature = "irq-pending-trace")]
+                {
+                    // Main-loop context (same timer as force_prime): read-only irqarray + USBSTS.
+                    // EV_PENDING / EV_ENABLE: volatile CSR loads, no ack. USBSTS sticky bits are
+                    // W1C on write only — a plain read does not clear or block.
+                    let pending = cu.irq_csr.r(utralib::utra::irqarray1::EV_PENDING);
+                    let enable = cu.irq_csr.r(utralib::utra::irqarray1::EV_ENABLE);
+                    let usbsts = cu.csr.r(bao1x_hal::usb::utra::USBSTS);
+                    bao1x_hal::usb::driver::usb_flight_record_main_loop_status(pending, enable, usbsts);
+                }
+                // Use device.bus() — the UsbBusAllocator clone has ep_meta; outer wrapper does not.
+                cu.ccid.force_prime_bulk_out(cu.device.bus());
+                #[cfg(feature = "irq-pending-trace")]
+                {
+                    // Periodic counter dump (~1 Hz at 100 ms prime interval) for UART correlation
+                    // with keepalive timeouts — no behavior change beyond logging.
+                    static PRIME_LOG: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
+                    let n = PRIME_LOG.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
+                    if n % 10 == 0 {
+                        let (clears, disable_pending, last) = cu.device.bus().irq_pending_trace_stats();
+                        log::info!(
+                            "irq-pending-trace stats: enable_cleared_nonempty={} disable_with_pending={} last_pending=0x{:x}",
+                            clears,
+                            disable_pending,
+                            last
+                        );
+                    }
+                }
+            }
+            #[cfg(feature = "irq-pending-trace")]
+            Opcode::IrqPendingTraceStats => {
+                if let Some(scalar) = msg.body.scalar_message_mut() {
+                    let (clears, disable_pending, last) = cu.device.bus().irq_pending_trace_stats();
+                    scalar.arg1 = clears as usize;
+                    scalar.arg2 = disable_pending as usize;
+                    scalar.arg3 = last as usize;
+                    scalar.arg4 = 0;
+                }
+            }
             #[cfg(feature = "ccid-openpgp")]
             Opcode::IrqCcidRx => {
                 // arg1 != 0: USB reset/unplug via CcidTransportClass::reset() — hang up deferred waiter.
@@ -613,7 +666,6 @@ pub(crate) fn main_hw() -> ! {
                 #[cfg(not(feature = "ccid-echo"))]
                 {
                     if reset_hangup || cu.ccid.take_session_hangup() {
-                        ccid_primed = false;
                         if let Some(mut listener) = ccid_listener.take() {
                             let mut response = unsafe {
                                 Buffer::from_memory_message_mut(listener.body.memory_message_mut().unwrap())
@@ -629,7 +681,6 @@ pub(crate) fn main_hw() -> ! {
                 #[cfg(feature = "ccid-echo")]
                 {
                     if reset_hangup || cu.ccid.take_session_hangup() {
-                        ccid_primed = false;
                         continue;
                     }
                 }
@@ -680,6 +731,9 @@ pub(crate) fn main_hw() -> ! {
                     xous::yield_slice();
                 }
                 cu.irq_serviced.store(false, Ordering::SeqCst);
+                // Bulk IN can drop the Corigine bulk-OUT TRB; re-arm so the host's
+                // next WriteUSB (e.g. after IccPowerOff SlotStatus) has a buffer.
+                cu.ccid.force_prime_bulk_out(cu.device.bus());
                 ipc.code = CcidCode::TxAck;
                 buffer.replace(ipc).unwrap();
             }
@@ -1087,17 +1141,16 @@ pub(crate) fn main_hw() -> ! {
                     // cu.device.bus().core().get_device_state()
                     let state = cu.device.state();
                     scalar.arg1 = state as usize;
-                    // One-shot bulk-OUT arm in main context after Configured (not IRQ).
+                    // Re-arm bulk OUT whenever LinkStatus reports Configured (main
+                    // context, not IRQ). One-shot was insufficient: after an inline
+                    // response or between pcscd sessions the OUT TRB can be lost while
+                    // the device stays Configured; subsequent WriteUSB then times out.
+                    // prime_bulk_out is idempotent when already armed (WouldBlock).
                     #[cfg(feature = "ccid-openpgp")]
                     {
                         use usb_device::device::UsbDeviceState;
                         if state == UsbDeviceState::Configured {
-                            if !ccid_primed {
-                                cu.ccid.prime_bulk_out();
-                                ccid_primed = true;
-                            }
-                        } else {
-                            ccid_primed = false;
+                            cu.ccid.prime_bulk_out();
                         }
                     }
                 }

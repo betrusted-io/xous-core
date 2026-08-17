@@ -417,6 +417,21 @@ impl UsbHid {
         .unwrap();
     }
 
+    /// `irq-pending-trace` counters: (enable_cleared_nonempty, disable_with_pending, last_pending_mask).
+    /// Returns `(0,0,0)` when the feature is not compiled in.
+    #[cfg(feature = "irq-pending-trace")]
+    pub fn irq_pending_trace_stats(&self) -> Result<(u32, u32, u32), xous::Error> {
+        let response = send_message(
+            self.conn,
+            Message::new_blocking_scalar(Opcode::IrqPendingTraceStats.to_usize().unwrap(), 0, 0, 0, 0),
+        )?;
+        if let xous::Result::Scalar5(_, a, b, c, _) = response {
+            Ok((a as u32, b as u32, c as u32))
+        } else {
+            Err(xous::Error::InternalError)
+        }
+    }
+
     pub fn cid(&self) -> xous::CID { self.conn }
 }
 
