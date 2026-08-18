@@ -35,12 +35,11 @@ impl StatusWord {
             Self::ExecutionError => 0x64,
             Self::MemoryFailure => 0x65,
             Self::WrongLength => 0x67,
-            Self::SecurityStatusNotSatisfied
-            | Self::AuthMethodBlocked
-            | Self::ConditionsNotSatisfied => 0x69,
-            Self::IncorrectParameters | Self::FileNotFound | Self::ReferenceDataNotFound | Self::RecordNotFound => {
-                0x6A
-            }
+            Self::SecurityStatusNotSatisfied | Self::AuthMethodBlocked | Self::ConditionsNotSatisfied => 0x69,
+            Self::IncorrectParameters
+            | Self::FileNotFound
+            | Self::ReferenceDataNotFound
+            | Self::RecordNotFound => 0x6A,
             Self::WrongParametersP1P2 => 0x6B,
             Self::InstructionNotSupported => 0x6D,
             Self::ClassNotSupported => 0x6E,
@@ -72,7 +71,5 @@ impl StatusWord {
         }
     }
 
-    pub fn to_u16(self) -> u16 {
-        u16::from(self.sw1()) << 8 | u16::from(self.sw2())
-    }
+    pub fn to_u16(self) -> u16 { u16::from(self.sw1()) << 8 | u16::from(self.sw2()) }
 }

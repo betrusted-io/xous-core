@@ -5,15 +5,7 @@ use super::status::StatusWord;
 use crate::openpgp::card::CardState;
 
 pub fn le_limit(cmd: &CommandApdu) -> usize {
-    cmd.le
-        .map(|l| {
-            if l == 0 {
-                256usize
-            } else {
-                usize::from(l.min(512))
-            }
-        })
-        .unwrap_or(256)
+    cmd.le.map(|l| if l == 0 { 256usize } else { usize::from(l.min(512)) }).unwrap_or(256)
 }
 
 pub fn chunk_response(cmd: &CommandApdu, card: &mut CardState, data: Vec<u8>) -> ResponseApdu {

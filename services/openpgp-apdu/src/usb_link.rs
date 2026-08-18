@@ -71,16 +71,10 @@ impl CcidLink {
     }
 
     pub fn receive_rx(&self) -> Result<Vec<u8>, xous::Error> {
-        let req = CcidMsgIpc {
-            data: Vec::new(),
-            code: CcidCode::RxWait,
-        };
+        let req = CcidMsgIpc { data: Vec::new(), code: CcidCode::RxWait };
         let mut buf = Buffer::into_buf(req).map_err(|_| xous::Error::InternalError)?;
-        buf.lend_mut(self.conn, OP_CCID_RX_DEFERRED)
-            .map_err(|_| xous::Error::InternalError)?;
-        let ack = buf
-            .to_original::<CcidMsgIpc, _>()
-            .map_err(|_| xous::Error::InternalError)?;
+        buf.lend_mut(self.conn, OP_CCID_RX_DEFERRED).map_err(|_| xous::Error::InternalError)?;
+        let ack = buf.to_original::<CcidMsgIpc, _>().map_err(|_| xous::Error::InternalError)?;
         match ack.code {
             CcidCode::RxAck => Ok(ack.data),
             CcidCode::Hangup => Err(xous::Error::ProcessTerminated),
@@ -90,16 +84,10 @@ impl CcidLink {
     }
 
     pub fn send_tx(&self, data: Vec<u8>) -> Result<(), xous::Error> {
-        let req = CcidMsgIpc {
-            data,
-            code: CcidCode::Tx,
-        };
+        let req = CcidMsgIpc { data, code: CcidCode::Tx };
         let mut buf = Buffer::into_buf(req).map_err(|_| xous::Error::InternalError)?;
-        buf.lend_mut(self.conn, OP_CCID_TX)
-            .map_err(|_| xous::Error::InternalError)?;
-        let ack = buf
-            .to_original::<CcidMsgIpc, _>()
-            .map_err(|_| xous::Error::InternalError)?;
+        buf.lend_mut(self.conn, OP_CCID_TX).map_err(|_| xous::Error::InternalError)?;
+        let ack = buf.to_original::<CcidMsgIpc, _>().map_err(|_| xous::Error::InternalError)?;
         match ack.code {
             CcidCode::TxAck => Ok(()),
             CcidCode::Hangup => Err(xous::Error::ProcessTerminated),

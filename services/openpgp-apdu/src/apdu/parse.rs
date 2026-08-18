@@ -33,25 +33,11 @@ impl CommandApdu {
         let p2 = raw[3];
 
         if raw.len() == 4 {
-            return Ok(Self {
-                cla,
-                ins,
-                p1,
-                p2,
-                data: Vec::new(),
-                le: None,
-            });
+            return Ok(Self { cla, ins, p1, p2, data: Vec::new(), le: None });
         }
 
         if raw.len() == 5 {
-            return Ok(Self {
-                cla,
-                ins,
-                p1,
-                p2,
-                data: Vec::new(),
-                le: Some(le_short(raw[4])),
-            });
+            return Ok(Self { cla, ins, p1, p2, data: Vec::new(), le: Some(le_short(raw[4])) });
         }
 
         let l0 = raw[4];
@@ -63,14 +49,7 @@ impl CommandApdu {
             }
             let data = raw[7..data_end].to_vec();
             let le = parse_le(raw, data_end)?;
-            return Ok(Self {
-                cla,
-                ins,
-                p1,
-                p2,
-                data,
-                le,
-            });
+            return Ok(Self { cla, ins, p1, p2, data, le });
         }
 
         let lc = l0 as usize;
@@ -81,14 +60,7 @@ impl CommandApdu {
         }
         let data = raw[data_start..data_end].to_vec();
         let le = parse_le(raw, data_end)?;
-        Ok(Self {
-            cla,
-            ins,
-            p1,
-            p2,
-            data,
-            le,
-        })
+        Ok(Self { cla, ins, p1, p2, data, le })
     }
 }
 
@@ -112,13 +84,7 @@ fn parse_le(raw: &[u8], data_end: usize) -> Result<Option<u16>, ApduError> {
     }
 }
 
-fn le_short(b: u8) -> u16 {
-    if b == 0 {
-        256
-    } else {
-        u16::from(b)
-    }
-}
+fn le_short(b: u8) -> u16 { if b == 0 { 256 } else { u16::from(b) } }
 
 #[derive(Debug, Eq, PartialEq)]
 pub struct ResponseApdu {
@@ -129,32 +95,14 @@ pub struct ResponseApdu {
 
 impl ResponseApdu {
     pub fn ok(data: Vec<u8>) -> Self {
-        Self {
-            data,
-            sw1: StatusWord::Success.sw1(),
-            sw2: StatusWord::Success.sw2(),
-        }
+        Self { data, sw1: StatusWord::Success.sw1(), sw2: StatusWord::Success.sw2() }
     }
 
-    pub fn ok_empty() -> Self {
-        Self::ok(Vec::new())
-    }
+    pub fn ok_empty() -> Self { Self::ok(Vec::new()) }
 
-    pub fn error(sw: StatusWord) -> Self {
-        Self {
-            data: Vec::new(),
-            sw1: sw.sw1(),
-            sw2: sw.sw2(),
-        }
-    }
+    pub fn error(sw: StatusWord) -> Self { Self { data: Vec::new(), sw1: sw.sw1(), sw2: sw.sw2() } }
 
-    pub fn with_status(data: Vec<u8>, sw: StatusWord) -> Self {
-        Self {
-            data,
-            sw1: sw.sw1(),
-            sw2: sw.sw2(),
-        }
-    }
+    pub fn with_status(data: Vec<u8>, sw: StatusWord) -> Self { Self { data, sw1: sw.sw1(), sw2: sw.sw2() } }
 
     pub fn to_bytes(&self) -> Vec<u8> {
         let mut out = self.data.clone();
