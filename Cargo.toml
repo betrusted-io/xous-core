@@ -113,6 +113,7 @@ members = [
   "services/test-swapper",
   "services/bao-video",
   "services/usb-bao1x",
+  "services/openpgp-apdu",
   "services/bao-console",
   "libs/ux-api",
   "services/bao1x-emu",

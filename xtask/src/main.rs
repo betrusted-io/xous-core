@@ -822,6 +822,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
             builder.add_apps(&bao_app_pkgs);
 
+            // Optional in-tree OpenPGP APDU test harness (replaces out-of-tree galdralag-stub).
+            if std::env::args().any(|a| a == "--with-openpgp-test-apdu") {
+                builder.add_service("openpgp-apdu", LoaderRegion::Flash);
+            }
+
             // Positional cratespecs (e.g. an out-of-tree APDU stub path) are boot services so the
             // CCID handler is running when usb-bao1x enumerates — not detached apps.
             for svc in get_cratespecs() {
@@ -1068,7 +1073,9 @@ Hardware images:
  baosec-ccid             Baosec with ccid-openpgp USB transport (no ccid-echo; no USB CDC).
  dabao                   Dabao application target image.
  dabao-ccid              Dabao with ccid-openpgp USB transport (no pddb / no SPI flash).
-                         Positional cratespecs are added as Flash services (e.g. an out-of-tree APDU stub).
+                         Positional cratespec (before flags): openpgp-apdu
+                         Optional: --with-openpgp-test-apdu adds the in-tree openpgp-apdu handler.
+                         Example: cargo xtask dabao-ccid openpgp-apdu --no-verify
  bao1x-baremetal-baosec  Baremetal image for baosec boards.
  bao1x-baremetal-dabao   Baremetal image for dabao boards.
  bao1x-boot0             Boot0 partition for baochip1x targets.

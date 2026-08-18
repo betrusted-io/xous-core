@@ -258,6 +258,19 @@ mod tests {
     }
 
     #[test]
+    fn empty_queue_pop_drops_refmut_before_reborrow() {
+        // Mirrors CcidRxDeferred: edition 2021 keeps `if let Some(x) = cell.borrow_mut()...`
+        // temporaries alive through the else branch, so a second borrow_mut panics.
+        // Pop into a local first so the RefMut is dropped before the empty-queue path.
+        use std::cell::RefCell;
+        let q = RefCell::new(VecDeque::<Vec<u8>>::new());
+        let queued = q.borrow_mut().pop_front();
+        assert!(queued.is_none());
+        q.borrow_mut().push_back(vec![0x6F]);
+        assert_eq!(q.borrow_mut().pop_front().unwrap(), vec![0x6F]);
+    }
+
+    #[test]
     fn icc_power_on_detect_and_reply() {
         let req = make_icc_power_on(9);
         assert!(is_icc_power_on(&req));

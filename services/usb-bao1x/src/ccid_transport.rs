@@ -5,7 +5,7 @@
 
 use std::cell::RefCell;
 use std::collections::VecDeque;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicPtr, Ordering};
 
 use num_traits::ToPrimitive;
 use usb_bao1x::ccid_framing::{
@@ -162,6 +162,8 @@ pub struct CcidTransportClass<'a, B: UsbBus> {
     /// Clone of the live `UsbBusAllocator` bus (filled `ep_meta`) for force-prime.
     /// Attached after `UsbDevice` is built; `Endpoint::bus()` is crate-private.
     force_bus: Option<bao1x_hal::usb::driver::CorigineWrapper>,
+    /// Main-thread `irq_serviced` flag; set from `poll_bulk_in` after `bulk_in.write()`.
+    irq_serviced: AtomicPtr<AtomicBool>,
 }
 
 impl<'a, B: UsbBus> CcidTransportClass<'a, B> {
@@ -183,6 +185,20 @@ impl<'a, B: UsbBus> CcidTransportClass<'a, B> {
             notify_cid,
             session_hangup: AtomicBool::new(false),
             force_bus: None,
+            irq_serviced: AtomicPtr::new(core::ptr::null_mut()),
+        }
+    }
+
+    /// Wire the main-thread flag CcidTx waits on. Must outlive this transport.
+    pub fn attach_irq_serviced(&self, flag: &AtomicBool) {
+        self.irq_serviced.store(flag as *const AtomicBool as *mut AtomicBool, Ordering::Release);
+    }
+
+    fn signal_bulk_in_attempted(&self) {
+        let ptr = self.irq_serviced.load(Ordering::Acquire);
+        if !ptr.is_null() {
+            // Means a bulk IN write was attempted (TRB queued), not that the transfer finished.
+            unsafe { (*ptr).store(true, Ordering::SeqCst) };
         }
     }
 
@@ -349,7 +365,10 @@ impl<'a, B: UsbBus> CcidTransportClass<'a, B> {
                 None => return,
             }
         };
-        match self.bulk_in.write(&chunk) {
+        let write_result = self.bulk_in.write(&chunk);
+        // CcidTx main waits on this: bulk IN submission was attempted, not transfer complete.
+        self.signal_bulk_in_attempted();
+        match write_result {
             Ok(n) => {
                 let mut g = self.inner.borrow_mut();
                 remove_tx_prefix(&mut g.tx_buf, n);

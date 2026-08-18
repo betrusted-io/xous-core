@@ -187,6 +187,10 @@ impl<'a> Bao1xUsb<'a> {
             ccid.attach_force_bus(device.bus().clone());
         }
 
+        let irq_serviced = AtomicBool::new(false);
+        #[cfg(feature = "ccid-openpgp")]
+        ccid.attach_irq_serviced(&irq_serviced);
+
         Bao1xUsb {
             conn: cid,
             // safety: we created iframrange to have the exact same P&V mappings
@@ -205,7 +209,7 @@ impl<'a> Bao1xUsb<'a> {
             serial_rx: [0u8; SERIAL_MAX_PACKET_SIZE],
             double_lock: AtomicBool::new(false),
             led_state: KeyboardLedsReport::default(),
-            irq_serviced: AtomicBool::new(false),
+            irq_serviced,
             #[cfg(feature = "ccid-openpgp")]
             ccid,
             #[cfg(feature = "ccid-openpgp")]
@@ -548,7 +552,8 @@ pub(crate) fn composite_handler(_irq_no: usize, arg: *mut usize) {
         if usb.csr.rf(IMAN_IE) != 0 {
             usb.csr.wo(IMAN, usb.csr.ms(IMAN_IE, 1) | usb.csr.ms(IMAN_IP, 1));
         }
-    } else if (pending & SW_IRQ_MASK) != 0 {
+    }
+    if (pending & SW_IRQ_MASK) != 0 {
         let composite = usb.class.borrow_mut();
         match usb.irq_req.take() {
             Some(UsbIrqReq::FidoTx) => {
@@ -575,8 +580,8 @@ pub(crate) fn composite_handler(_irq_no: usize, arg: *mut usize) {
             Some(UsbIrqReq::CcidTx) => {
                 // Main-context CcidTx only queues bytes; bulk IN is written from IRQ
                 // via UsbClass::poll → poll_bulk_in (same role as FidoTx write_report).
+                // irq_serviced is set inside poll_bulk_in after bulk_in.write() is attempted.
                 usb.ccid.poll();
-                usb.irq_serviced.store(true, Ordering::SeqCst);
             }
             None => (),
         }

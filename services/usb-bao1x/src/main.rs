@@ -592,7 +592,13 @@ pub(crate) fn main_hw() -> ! {
                     ccid_listener_pid = msg.sender.pid();
                 }
                 if ccid_listener_pid == msg.sender.pid() {
-                    if let Some(frame) = cu.ccid_rx.borrow_mut().pop_front() {
+                    // Pop in its own statement so the RefMut is dropped before the else
+                    // branch. Edition 2021 keeps `if let` scrutinee temporaries alive for
+                    // the whole if-else; a second borrow_mut() there panics ("RefCell
+                    // already borrowed") the first time the queue is empty — which is the
+                    // normal CcidRxDeferred wait at startup.
+                    let queued = cu.ccid_rx.borrow_mut().pop_front();
+                    if let Some(frame) = queued {
                         let mut response = unsafe {
                             Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())
                         };
@@ -604,9 +610,26 @@ pub(crate) fn main_hw() -> ! {
                     } else {
                         ccid_listener = msg_opt.take();
                         // Re-arm bulk OUT whenever a new deferred listener connects so the
-                        // host's next WriteUSB is not left without a TRB (e.g. after an
-                        // earlier inline response or between pcscd sessions).
+                        // host's next WriteUSB is not left without a TRB. Use prime_bulk_out
+                        // (no-op until SET_ADDRESS); force_prime here races SET_ADDRESS
+                        // and leaves the host at descriptor timeout -110.
                         cu.ccid.prime_bulk_out();
+                        // Re-check after park: a frame may have landed between the empty
+                        // check and msg_opt.take() (lost IrqCcidRx would otherwise hang).
+                        if let Some(frame) = cu.ccid_rx.borrow_mut().pop_front() {
+                            if let Some(mut listener) = ccid_listener.take() {
+                                let mut response = unsafe {
+                                    Buffer::from_memory_message_mut(
+                                        listener.body.memory_message_mut().unwrap(),
+                                    )
+                                };
+                                let mut buf = response.to_original::<CcidMsgIpc, _>().unwrap();
+                                assert_eq!(buf.code, CcidCode::RxWait);
+                                buf.data = frame;
+                                buf.code = CcidCode::RxAck;
+                                response.replace(buf).unwrap();
+                            }
+                        }
                     }
                 } else {
                     let mut buffer =
@@ -631,7 +654,10 @@ pub(crate) fn main_hw() -> ! {
                     bao1x_hal::usb::driver::usb_flight_record_main_loop_status(pending, enable, usbsts);
                 }
                 // Use device.bus() — the UsbBusAllocator clone has ep_meta; outer wrapper does not.
-                cu.ccid.force_prime_bulk_out(cu.device.bus());
+                // Skip until Configured: force_prime during SET_ADDRESS breaks enumeration (-110).
+                if cu.device.state() == usb_device::device::UsbDeviceState::Configured {
+                    cu.ccid.force_prime_bulk_out(cu.device.bus());
+                }
                 #[cfg(feature = "irq-pending-trace")]
                 {
                     // Periodic counter dump (~1 Hz at 100 ms prime interval) for UART correlation
@@ -684,7 +710,10 @@ pub(crate) fn main_hw() -> ! {
                         continue;
                     }
                 }
-                if let Some(frame) = cu.ccid_rx.borrow_mut().pop_front() {
+                // Same edition-2021 if-let temporary rule as CcidRxDeferred: drop the
+                // RefMut before any later borrow_mut (push_front when no listener).
+                let queued = cu.ccid_rx.borrow_mut().pop_front();
+                if let Some(frame) = queued {
                     #[cfg(feature = "ccid-echo")]
                     {
                         cu.ccid.enqueue_response(frame);
@@ -703,6 +732,16 @@ pub(crate) fn main_hw() -> ! {
                         } else {
                             cu.ccid_rx.borrow_mut().push_front(frame);
                         }
+                    }
+                } else if ccid_listener.is_some() {
+                    // IrqCcidRx arrived but queue empty (lost frame or spurious notify).
+                    if let Some(mut listener) = ccid_listener.take() {
+                        let mut response = unsafe {
+                            Buffer::from_memory_message_mut(listener.body.memory_message_mut().unwrap())
+                        };
+                        let mut deferred_buf = response.to_original::<CcidMsgIpc, _>().unwrap();
+                        deferred_buf.code = CcidCode::Denied;
+                        response.replace(deferred_buf).unwrap();
                     }
                 }
             }
