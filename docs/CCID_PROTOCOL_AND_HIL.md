@@ -5,9 +5,10 @@ SPDX-License-Identifier: Apache-2.0
 # CCID smart-card transport and Raspberry Pi HIL setup
 
 This document is the main reference for USB CCID support in `usb-bao1x`
-([PR #890](https://github.com/betrusted-io/xous-core/pull/890)). It explains
-what a smart card is in this context, what xous-core implements, how an external
-OpenPGP handler plugs in, and how to run automated transport tests on a
+([PR #937](https://github.com/betrusted-io/xous-core/pull/937);
+earlier transport [PR #890](https://github.com/betrusted-io/xous-core/pull/890)).
+It explains what a smart card is in this context, what xous-core implements,
+how an OpenPGP handler plugs in, and how to run automated transport tests on a
 Raspberry Pi or desktop Linux host.
 
 **Audience:** reviewers who are not CCID experts, firmware developers wiring an
@@ -16,6 +17,9 @@ APDU handler, and anyone setting up hardware-in-the-loop (HIL) regression tests.
 **Code navigation:** [`docs/code_map.md`](code_map.md) — debug decision tree,
 USB enumeration flow, symptom-to-source map, and host `lsusb` checks (start here
 for "device not visible" or CCID issues).
+
+**`openpgp-apdu` boot failure:** [`docs/OPENPGP_APDU_BOOT_DEBUG.md`](OPENPGP_APDU_BOOT_DEBUG.md)
+— 8-process `dabao-ccid openpgp-apdu` does not enumerate; UART on PB13/PB14.
 
 **Enumeration deep-dive (community):** [`docs/CCID_USB_ENUMERATION_DEBUG.md`](CCID_USB_ENUMERATION_DEBUG.md)
 — worked example of Corigine endpoint-budget overflow, static diagnostic method,
@@ -102,14 +106,14 @@ OpenPGP application logic runs in a **separate Xous service** on the device.
 | Parse most `PC_to_RDR_*` message types | Protocol | **No** (exceptions: GetSlotStatus and IccPowerOn answered inline) |
 | `PC_to_RDR_GetSlotStatus` → `RDR_to_PC_SlotStatus` | Transport | **Yes** (IRQ path; see framing / CreateChannel note) |
 | `PC_to_RDR_IccPowerOn` → `RDR_to_PC_DataBlock` + OpenPGP ATR | Transport | **Yes** (IRQ path; ATR bytes in `ccid_framing::OPENPGP_ATR`) |
-| T=1 block protocol, APDU parsing | Card protocol | **No** |
-| OpenPGP card emulation, key storage, crypto | Application | **No** (external service, e.g. `baochip-openpgp` / stub) |
+| T=1 block protocol, APDU parsing | Card protocol | **Partial** — in-tree test harness `services/openpgp-apdu` (SELECT / GET DATA / VERIFY fixtures). Production T=1/crypto is still external. |
+| OpenPGP card emulation, key storage, crypto | Application | **No** production card. In-tree `openpgp-apdu` is a fixture harness; `dabao-ccid openpgp-apdu` currently **fails to enumerate** ([`OPENPGP_APDU_BOOT_DEBUG.md`](OPENPGP_APDU_BOOT_DEBUG.md)). |
 | `pcscd` driver, GnuPG integration | Host stack | **No** |
 | CCID interrupt notifications (insert/remove) | Transport | **No** (interrupt IN endpoint omitted) |
 
-The Cargo feature is named `ccid-openpgp` for product alignment, but **no
-OpenPGP crates** are linked into xous-core. All cryptography stays
-out of tree behind IPC.
+The Cargo feature is named `ccid-openpgp` for product alignment. Production
+OpenPGP cryptography stays out of tree behind IPC. The in-tree `openpgp-apdu`
+crate is a test harness only (not linked into default `dabao-ccid`).
 
 Everything is gated behind `ccid-openpgp` on Xous builds so default `baosec`
 images are unaffected when the feature is disabled.
@@ -118,7 +122,8 @@ images are unaffected when the feature is disabled.
 
 ## Security considerations
 
-This section is for merge review of [PR #890](https://github.com/betrusted-io/xous-core/pull/890).
+This section is for merge review of [PR #937](https://github.com/betrusted-io/xous-core/pull/937)
+(CCID transport originally [PR #890](https://github.com/betrusted-io/xous-core/pull/890)).
 The PR adds a **potentially security-sensitive USB surface** (CCID bulk transport)
 plus PDDB helpers for opaque PIN blobs. It does **not** deliver OpenPGP security
 by itself; it exposes transport and storage primitives that a handler and factory
@@ -211,7 +216,8 @@ the handler is running.
 | Build target | Features | CCID behavior | Intended use |
 |--------------|----------|---------------|--------------|
 | `cargo xtask baosec` | none (default) | No CCID interface; unchanged vs upstream `dev` | Default baosec image |
-| `cargo xtask dabao-ccid` | `ccid-openpgp` | Frames go to IPC handler only | **Hardware-confirmed** CCID on Dabao (no USB CDC) |
+| `cargo xtask dabao-ccid` | `ccid-openpgp` | Frames go to IPC handler only | **Hardware-confirmed** CCID on Dabao (no USB CDC); 7 processes |
+| `cargo xtask dabao-ccid openpgp-apdu` | `ccid-openpgp` + in-tree harness | Intended deferred APDU handler | **Does not enumerate** (`1d50:6197` never appears) |
 | `cargo xtask baosec-ccid` | `ccid-openpgp` | Frames go to IPC handler only | Baosec CCID transport (no USB CDC) |
 | `cargo xtask ccid-hil` | `ccid-openpgp` + **`ccid-echo`** | IRQ path **echoes host frames on bulk IN** without handler | Lab / bench HIL only |
 
@@ -701,9 +707,11 @@ offline (see [PIN provisioning](#pin-provisioning-offline--non-usb-on-ccid-image
 
 ### Handler skeleton (Rust)
 
-Minimal out-of-tree Xous service showing the deferred receive / send pattern.
-This mirrors `UsbHid::u2f_wait_incoming` / `u2f_send` in
-`services/usb-bao1x/src/lib.rs`, adapted for variable-length CCID frames.
+Minimal Xous service showing the deferred receive / send pattern.
+In-tree example: `services/openpgp-apdu/` (fixture APDUs; 8-process image does
+not currently boot to USB — see [`OPENPGP_APDU_BOOT_DEBUG.md`](OPENPGP_APDU_BOOT_DEBUG.md)).
+The skeleton below is for an out-of-tree handler and mirrors
+`UsbHid::u2f_wait_incoming` / `u2f_send` in `services/usb-bao1x/src/lib.rs`.
 
 **Cargo.toml** (handler crate):
 
@@ -905,7 +913,9 @@ TX chunking. It does **not** validate APDU semantics or crypto.
 
 ## Host software path (pcscd / GnuPG)
 
-Expected Linux path (confirmed on Dabao with `dabao-ccid` + out-of-tree stub):
+Expected Linux path (confirmed on Dabao with `dabao-ccid` + out-of-tree stub).
+The in-tree `openpgp-apdu` harness is **not** this path yet: that 8-process image
+does not enumerate (see [`OPENPGP_APDU_BOOT_DEBUG.md`](OPENPGP_APDU_BOOT_DEBUG.md)).
 
 1. Plug in Dabao (`1d50:6197`); kernel binds the CCID interface.
 2. `pcscd` runs `RFAddReader` successfully (CreateChannel GetSlotStatus probes

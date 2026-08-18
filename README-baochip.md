@@ -76,7 +76,7 @@ discrimination test:
 - [`images/dabao-ccid/known-good/`](./images/dabao-ccid/known-good/) —
   `cargo xtask dabao-ccid --no-verify` (enumerates as `1d50:6197`)
 - [`images/dabao-ccid/openpgp-apdu/`](./images/dabao-ccid/openpgp-apdu/) —
-  `cargo xtask dabao-ccid openpgp-apdu --no-verify`
+  `cargo xtask dabao-ccid openpgp-apdu --no-verify` (does not enumerate)
 
 Each archive contains `loader.uf2`, `xous.uf2`, `apps.uf2`, and the matching
 `.bin` / `.img` files. See [`docs/OPENPGP_APDU_BOOT_DEBUG.md`](./docs/OPENPGP_APDU_BOOT_DEBUG.md).

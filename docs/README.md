@@ -18,3 +18,5 @@ Current references for USB CCID transport (`ccid-openpgp`):
 
 Host tests live under `tools/ccid_hil/` and `tools/ccid_smoke.py`.
 Build images with `cargo xtask dabao-ccid`, `baosec-ccid`, or `ccid-hil`.
+`cargo xtask dabao-ccid openpgp-apdu` currently does not enumerate; see
+[OPENPGP_APDU_BOOT_DEBUG.md](OPENPGP_APDU_BOOT_DEBUG.md).

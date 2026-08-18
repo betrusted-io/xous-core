@@ -35,6 +35,7 @@ Related maps (also verify against HEAD):
 
 - [`docs/CCID_PROTOCOL_AND_HIL.md`](CCID_PROTOCOL_AND_HIL.md) — protocol, images, HIL
 - [`docs/code_map.md`](code_map.md) — symptom-to-source navigation
+- [`docs/OPENPGP_APDU_BOOT_DEBUG.md`](OPENPGP_APDU_BOOT_DEBUG.md) — 8-process `openpgp-apdu` image never enumerates
 - Local EP arithmetic: `tools/check_ep_budget.py`, `tools/test_ep_budget_cumulative.py`
 - Cumulative guard: `services/usb-bao1x/src/ep_budget.rs`
 

@@ -22,6 +22,7 @@ UART yet.
 | [`docs/CCID_PROTOCOL_AND_HIL.md`](../../docs/CCID_PROTOCOL_AND_HIL.md) | **Main reference** — smart-card/CCID background, architecture, IPC handler guide, security considerations, Pi setup, testing guide |
 | [`docs/code_map.md`](../../docs/code_map.md) | **Code map** — symptom-to-source navigation for debugging and fixes |
 | [`docs/CCID_TEST_REPORT.md`](../../docs/CCID_TEST_REPORT.md) | Recorded verification results and CI status |
+| [`docs/OPENPGP_APDU_BOOT_DEBUG.md`](../../docs/OPENPGP_APDU_BOOT_DEBUG.md) | `dabao-ccid openpgp-apdu` does not enumerate (UART, not HIL framing) |
 | [`CCID_EP_BUDGET_AND_HIL_LOCAL.md`](../../CCID_EP_BUDGET_AND_HIL_LOCAL.md) | Local working EP-budget / HIL notes (uncommitted convention) |
 
 ## Quick start
