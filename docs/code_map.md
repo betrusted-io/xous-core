@@ -75,7 +75,8 @@ Flashed image?
               |
               +-- Echo OK, OpenPGP / pcscd fails
                     --> Out-of-tree handler not connected to CcidRxDeferred / CcidTx
-                        (GetSlotStatus alone is inline — ATR still needs stub/handler)
+                        (GetSlotStatus and IccPowerOn/ATR are inline; XfrBlock still
+                        needs stub/handler)
                         See protocol doc handler skeleton; CCID_TEST_REPORT.md for
                         confirmed Dabao pcsc_scan / OpenPGP Card V2 results
 ```
@@ -99,7 +100,7 @@ main_hw() boot (main.rs)
   |     stock: FIDO+NKRO+debug CDC
   |     ccid-openpgp (Persona A): CCID+FIDO+NKRO only (no USB CDC)
   +-- cu.init() — claim IRQ, core init/start, enable EV_ENABLE
-  +-- setup_usb_pins + SE0 released (Input) — host can see device
+  +-- setup_usb_pins + SE0 Low (500 ms) → cu.init() → delay 150 ms → SE0 High
   |
   v
 main loop: reply_and_receive_next only (IPC). USB runs in IRQ.
@@ -124,7 +125,7 @@ composite_handler (hw.rs)
 |-------|------|----------------|
 | Gadget assembly | `hw.rs` | `Bao1xUsb::new`, `EpBudgetLedger`, class list |
 | Controller start | `hw.rs` | `Bao1xUsb::init` |
-| SE0 / attach | `main.rs` | `setup_usb_pins`, `set_gpio_pin_dir(..., Input)` |
+| SE0 / attach | `main.rs` | `setup_usb_pins`, Low → 500 ms → `cu.init()` → 150 ms → High |
 | IRQ entry | `hw.rs` | `composite_handler` |
 | Low-level events | `libs/bao1x-hal/src/usb/driver.rs` | `handle_event_inner` |
 | Bus poll adapter | `libs/bao1x-hal/src/usb/driver.rs` | `CorigineWrapper::poll`, `set_device_address`, `reset` |
@@ -145,10 +146,10 @@ remains. Regression: `ep_budget` tests + `tools/test_ep_budget_cumulative.py`
 (fake class on a full stack must trip cumulative; independent checks would not).
 
 **Service boot order (CCID images):** `ccid-openpgp` does **not** call
-`Pddb::new()` before `cu.init()` (that blocked USB bring-up). Optional
-`ccid-pddb` helpers remain for baosec offline seed only. SE0 sequencing matches
-boot1 (`Low` → delay → `cu.init()` → delay → `High`); `Keyboard::new()` is
-deferred until after SE0 High (KPC / SFR_IOX conflict on PF5).
+`Pddb::new()` (that blocked USB bring-up). Optional `ccid_store` lives behind
+`ccid-pddb` and is not enabled by any xtask image. SE0 sequencing matches
+boot1 (`setup_usb_pins` → Low → 500 ms → `cu.init()` → 150 ms → High);
+`Keyboard::new()` is deferred until after SE0 High (KPC / SFR_IOX conflict on PF5).
 
 ---
 
@@ -162,6 +163,8 @@ USB IRQ (hw.rs: composite_handler)
   |                 |
   |                 +-- GetSlotStatus (0x65) --> inline RDR_to_PC_SlotStatus
   |                 |                         + poll_bulk_in (100 ms libccid window)
+  |                 |
+  |                 +-- IccPowerOn (0x62) --> inline RDR_to_PC_DataBlock + OPENPGP_ATR
   |                 |
   |                 +-- other frames --> ccid_rx queue (VecDeque<Vec<u8>>)
   |                                     --> IrqCcidRx scalar to usb-bao1x main loop
@@ -194,12 +197,12 @@ Shared queues on `Bao1xUsb` (`hw.rs`):
 | [`libs/bao1x-hal/src/usb/driver.rs`](../libs/bao1x-hal/src/usb/driver.rs) | Corigine UDC: `handle_event_inner`, EP0, `set_device_address`, `PollResult`, port reset |
 | [`services/usb-bao1x/Cargo.toml`](../services/usb-bao1x/Cargo.toml) | Feature flags: `ccid-openpgp`, `ccid-echo`; optional `pddb` dep |
 | [`services/usb-bao1x/src/api.rs`](../services/usb-bao1x/src/api.rs) | IPC contract: `Opcode::{CcidRxDeferred,CcidTx,IrqCcidRx}`, `CcidMsgIpc`, `CcidCode` |
-| [`services/usb-bao1x/src/ep_budget.rs`](../services/usb-bao1x/src/ep_budget.rs) | Cumulative EP ledger; regression: fake class on 7/8 |
-| [`services/usb-bao1x/src/ccid_framing.rs`](../services/usb-bao1x/src/ccid_framing.rs) | Wire math: `CCID_WIRE_MAX` (271), `CCID_BULK_MAX_PACKET` (**512** HS), `append_bulk_out`, `drain_complete_frames`, `next_tx_chunk`, `is_get_slot_status`, `rdr_to_pc_slot_status_ok`; **unit tests (8/8)** |
-| [`services/usb-bao1x/src/ccid_transport.rs`](../services/usb-bao1x/src/ccid_transport.rs) | USB class 0x0B descriptors, bulk OUT assembly, bulk IN chunking (512-byte packets), inline GetSlotStatus, `enqueue_response` / `prime_bulk_out` |
-| [`services/usb-bao1x/src/ccid_store.rs`](../services/usb-bao1x/src/ccid_store.rs) | PDDB dict `usb.ccid`; `is_ccid_provisioned`; offline `save_provisioned_pins` |
+| [`services/usb-bao1x/src/ep_budget.rs`](../services/usb-bao1x/src/ep_budget.rs) | Cumulative EP ledger; regression: fake class on **6/8** |
+| [`services/usb-bao1x/src/ccid_framing.rs`](../services/usb-bao1x/src/ccid_framing.rs) | Wire math: `CCID_WIRE_MAX` (271), `CCID_BULK_MAX_PACKET` (**512** HS), `append_bulk_out`, `drain_complete_frames`, `next_tx_chunk`, `is_get_slot_status`, `is_icc_power_on`, `rdr_to_pc_slot_status_ok`, `rdr_to_pc_data_block_atr`; **unit tests (9/9)** |
+| [`services/usb-bao1x/src/ccid_transport.rs`](../services/usb-bao1x/src/ccid_transport.rs) | USB class 0x0B descriptors, bulk OUT assembly, bulk IN chunking (512-byte packets), inline GetSlotStatus + IccPowerOn ATR, `enqueue_response` / `prime_bulk_out` / `force_prime_bulk_out` |
+| [`services/usb-bao1x/src/ccid_store.rs`](../services/usb-bao1x/src/ccid_store.rs) | PDDB dict `usb.ccid`; compiled only with `ccid-pddb`; not used at boot |
 | [`services/usb-bao1x/src/hw.rs`](../services/usb-bao1x/src/hw.rs) | Composite gadget, EP budget assert, `device.poll` (HID+CCID or HID+serial) |
-| [`services/usb-bao1x/src/main.rs`](../services/usb-bao1x/src/main.rs) | Boot, SE0, OKV1 log/warn, IPC loop, serial opcodes gated off on CCID |
+| [`services/usb-bao1x/src/main.rs`](../services/usb-bao1x/src/main.rs) | Boot, SE0 Low/High timing, IPC loop, serial opcodes gated off on CCID |
 | [`services/usb-bao1x/src/lib.rs`](../services/usb-bao1x/src/lib.rs) | Public `ccid_framing` module; U2F client API (template for handler IPC) |
 | [`xtask/src/main.rs`](../xtask/src/main.rs) | `dabao` / `baosec` = no CCID; `dabao-ccid` / `baosec-ccid` add `ccid-openpgp`; `ccid-hil` adds echo + `oem-baosec-lite` |
 
@@ -210,7 +213,7 @@ Shared queues on `Bao1xUsb` (`hw.rs`):
 | Concern | Location |
 |---------|----------|
 | Enumeration (control plane) | `driver.rs` `handle_event_inner`; `hw.rs` `composite_handler` + `device.poll` |
-| SE0 release for host attach | `main.rs` ~327 `set_gpio_pin_dir(..., Input)` |
+| SE0 release for host attach | `main.rs` boot1-matching Low (500 ms) → `cu.init()` → 150 ms → High |
 | SET_ADDRESS / EP enable / bulk OUT prime | `driver.rs` `set_device_address` — after `ep_enable` loop, queue first bulk OUT receive TRB; clear `ep_out_ready` if app buffer missing |
 | Bus reset handling | `driver.rs` `EventPortStatusChange`; `hw.rs` reset branch in `composite_handler` |
 | Endpoint allocation limit | `driver.rs` `CRG_EP_NUM` + `allocated_non_ep0`; `ep_budget::EpBudgetLedger` (cumulative) |
@@ -218,13 +221,14 @@ Shared queues on `Bao1xUsb` (`hw.rs`):
 | CCID descriptor bytes | `ccid_transport.rs` — `ccid_class_descriptor_bytes`, `get_configuration_descriptors` |
 | Reject oversize host frames | `ccid_framing.rs` — `append_bulk_out` returns `Overflow`, clears buffer |
 | GetSlotStatus inline (100 ms) | `ccid_transport.rs` `drain_complete_messages` + `ccid_framing::{is_get_slot_status,rdr_to_pc_slot_status_ok}` |
-| Frame ready notification | `ccid_transport.rs` — `drain_complete_messages` sends `IrqCcidRx` for non-GetSlotStatus frames |
+| IccPowerOn inline ATR | `ccid_transport.rs` + `ccid_framing::{is_icc_power_on,rdr_to_pc_data_block_atr,OPENPGP_ATR}` |
+| Frame ready notification | `ccid_transport.rs` — `drain_complete_messages` sends `IrqCcidRx` for non-inline frames |
 | Handler receives frame | `main.rs` — `Opcode::CcidRxDeferred`, `Opcode::IrqCcidRx` |
 | Handler sends reply | `main.rs` — `Opcode::CcidTx` calls `enqueue_response` + soft IRQ |
 | HIL echo (non-production) | `main.rs` — `#[cfg(feature = "ccid-echo")]` inside `IrqCcidRx` |
 | Second listener rejected | `main.rs` — `CcidRxDeferred` sets `CcidCode::Denied` for other PIDs |
-| Already provisioned? | `ccid_store.rs` — `is_ccid_provisioned`; boot log/warn in `main.rs` |
-| Offline PIN seed helper | `ccid_store.rs` — `save_provisioned_pins` (not USB-wired on CCID) |
+| Already provisioned? | `ccid_store.rs` — only with `ccid-pddb`; **not** called from `main.rs` at boot |
+| Offline PIN seed helper | `ccid_store.rs` — `save_provisioned_pins` (not USB-wired; feature `ccid-pddb`) |
 | PMIC unplug reset | `main.rs` — `Opcode::PmicIrq`, `cu.unplug()` |
 
 ---
@@ -238,10 +242,11 @@ Shared queues on `Bao1xUsb` (`hw.rs`):
 | Device visible but **stuck at "new full-speed USB"** / never configured | `driver.rs` EP0 / `set_device_address`; `composite_handler` double-lock (`double_lock_detected` in main loop). Host `dmesg` for STALL. |
 | **pcscd WriteUSB timeout / RFAddReader fails** | Bulk OUT not primed: `driver.rs` `set_device_address` after `ep_enable`; also `ccid.prime_bulk_out` on first Configured / LinkStatus. |
 | **pcscd CreateChannel / ReadUSB ~100 ms timeout** | GetSlotStatus must be inline: `ccid_transport` `drain_complete_messages` + framing helpers (do not rely on stub for 0x65). |
+| **pcscd ATR timeout / card not present** | IccPowerOn must be inline: `is_icc_power_on` + `rdr_to_pc_data_block_atr` (`OPENPGP_ATR`). |
 | **Double lock** log in main loop | `hw.rs` `composite_handler` `try_lock` failure path |
 | No CCID interface in `lsusb -v` | Built stock `dabao` / `baosec` (no CCID) instead of `dabao-ccid` / `baosec-ccid` / `ccid-hil`; missing `ccid-openpgp` feature |
 | `echo mismatch` / smoke test fail | Image has `ccid-echo`? `main.rs` `IrqCcidRx` echo branch; host timing (`ccid_smoke.py`) |
-| Handler never receives frames | Handler on `_Xous USB device driver_`? `CcidRxDeferred` + `RxWait`; production must **not** use `ccid-echo`; GetSlotStatus alone is answered inline |
+| Handler never receives frames | Handler on `_Xous USB device driver_`? `CcidRxDeferred` + `RxWait`; production must **not** use `ccid-echo`; GetSlotStatus (0x65) and IccPowerOn (0x62) are answered inline |
 | `CcidCode::Denied` on receive | Only one listener PID; `main.rs` `CcidRxDeferred` |
 | `CcidCode::Hangup` on send | USB not configured; `main.rs` `CcidTx` checks `UsbDeviceState::Configured` |
 | Partial / truncated CCID frames | `ccid_framing.rs` `drain_complete_frames`; host sending before configured |
@@ -254,7 +259,7 @@ Shared queues on `Bao1xUsb` (`hw.rs`):
 | `test_provision.py` PASS | Confirms no CDC — does **not** prove PDDB OKV1 |
 | Board compile error in CI | `ccid-ci.yml`; `RefCell`/`borrow` in `hw.rs` / `main.rs` |
 | Fork CI `Can't sign swap image` | `.github/workflows/build.yml` upstream tag fetch |
-| Unit test regression | `ccid_framing.rs` `mod tests`; `cargo test -p usb-bao1x --lib ccid_framing` (**8/8**) |
+| Unit test regression | `ccid_framing.rs` `mod tests`; `cargo test -p usb-bao1x --lib ccid_framing` (**9/9**) |
 
 ---
 
@@ -319,7 +324,7 @@ Local equivalents:
 ```bash
 cargo test -p usb-bao1x --lib ccid_framing
 cargo check -p usb-bao1x --features hosted-baosec,ccid-openpgp
-cargo check -p usb-bao1x --features board-baosec,ccid-openpgp,bao1x --target riscv32imac-unknown-xous-elf
+cargo check -p usb-bao1x -p modals --features board-baosec,ccid-openpgp,bao1x --target riscv32imac-unknown-xous-elf
 cargo xtask dabao-ccid --no-verify      # hardware-confirmed CCID on Dabao
 cargo xtask baosec --no-verify          # baseline USB (no CCID)
 cargo xtask baosec-ccid --no-verify     # baosec CCID transport
@@ -335,7 +340,8 @@ When reading `main.rs`, note `cfg` gates:
 
 | `cfg` | Effect |
 |-------|--------|
-| `feature = "ccid-openpgp"` | CCID+FIDO+NKRO; no USB CDC; `pddb` OKV1 check at boot |
+| `feature = "ccid-openpgp"` | CCID+FIDO+NKRO; no USB CDC; no boot PDDB check |
+| `feature = "ccid-pddb"` | Compiles `ccid_store` only; not enabled by any xtask image |
 | `feature = "ccid-echo"` | `IrqCcidRx` echoes frames; **disables** `CcidRxDeferred` handler path |
 | `not(feature = "ccid-echo")` | Production path: deferred listener + `CcidRxDeferred` opcodes |
 | `target_os = "xous"` | `ccid_transport` / `ccid_store` are device-only modules |

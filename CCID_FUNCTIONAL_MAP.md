@@ -1,7 +1,7 @@
 <!--
 SPDX-License-Identifier: Apache-2.0
 LOCAL WORKING DOCUMENT — do not commit or push unless explicitly requested.
-Updated: 2026-07-15 for Persona A (no USB CDC on CCID images).
+Updated: 2026-08-18 for Persona A (CCID bulk-only = 6/8; no USB CDC; no boot PDDB).
 Authoritative docs: docs/CCID_PROTOCOL_AND_HIL.md, docs/code_map.md, docs/CCID_TEST_REPORT.md
 -->
 
@@ -15,9 +15,10 @@ applet, APDU parser, or card crypto in-tree. OpenPGP lives in an **out-of-tree**
 handler that uses `CcidRxDeferred` / `CcidTx`.
 
 **Persona A (current):** Corigine PEI has `CRG_EP_NUM = 8` unidirectional non-EP0
-slots. CCID images allocate **CCID(3)+FIDO(2)+NKRO(2) = 7/8**. Debug CDC and
-provisioning CDC are **not** allocated. Debug is UART / `xous-log`. PIN lines are
-offline / pre-seeded PDDB only; unprovisioned boots **warn on UART and continue**.
+slots. CCID images allocate **CCID(2)+FIDO(2)+NKRO(2) = 6/8** (interrupt IN
+omitted). Debug CDC and provisioning CDC are **not** allocated. Debug is UART /
+`xous-log`. PIN lines are offline / pre-seeded PDDB only; `main.rs` does not
+open PDDB at boot.
 
 `cargo xtask baosec` does **not** enable CCID. Use `baosec-ccid` or `ccid-hil`.
 
@@ -28,8 +29,8 @@ offline / pre-seeded PDDB only; unprovisioned boots **warn on UART and continue*
 | Path | Role |
 |------|------|
 | `services/usb-bao1x/src/ccid_framing.rs` | Wire assemble / chunk / OKV1; unit tests |
-| `services/usb-bao1x/src/ccid_transport.rs` | USB class: bulk OUT/IN + interrupt IN |
-| `services/usb-bao1x/src/ccid_store.rs` | PDDB read OKV1; `save_provisioned_pins` offline-only |
+| `services/usb-bao1x/src/ccid_transport.rs` | USB class: bulk OUT/IN only (interrupt IN omitted) |
+| `services/usb-bao1x/src/ccid_store.rs` | PDDB helpers behind `ccid-pddb`; not called at boot |
 | `services/usb-bao1x/src/ep_budget.rs` | Cumulative `EpBudgetLedger` + unit tests |
 | `services/usb-bao1x/src/hw.rs` | Persona A composite; no `SerialPort` when `ccid-openpgp` |
 | `services/usb-bao1x/src/main.rs` | Boot OKV1 check; CCID IPC; serial opcodes gated on CCID |
@@ -47,10 +48,10 @@ offline / pre-seeded PDDB only; unprovisioned boots **warn on UART and continue*
 ```
 main_hw (ccid-openpgp):
   EpBudgetLedger::new
-  if is_ccid_provisioned -> log info
-  else -> log warn (no USB provision path); continue
-  make_ccid_transport (ledger.reserve CCID=3) -> CcidTransportClass
+  make_ccid_transport (ledger.reserve CCID=2) -> CcidTransportClass
   Bao1xUsb::new(..., ccid, ledger) -> FIDO+NKRO only (no SerialPort)
+  setup_usb_pins → SE0 Low → 500 ms → cu.init() → 150 ms → SE0 High
+  Keyboard::new after SE0 High
   ledger / allocated_non_ep0 must stay <= 8
 ```
 
@@ -65,12 +66,12 @@ Stock (`not ccid-openpgp`): FIDO+NKRO+debug CDC = 7/8.
 | `CcidTransportClass` | `ccid_transport.rs` | USB CCID class driver |
 | `append_bulk_out` / `drain_complete_frames` / `next_tx_chunk` | `ccid_framing.rs` | Multi-packet wire math |
 | `is_provisioned_marker` / `CCID_PROVISIONED_MARKER` | `ccid_framing.rs` | `OKV1` detect |
-| `is_ccid_provisioned` | `ccid_store.rs` | Boot gate for UART message only |
-| `save_provisioned_pins` | `ccid_store.rs` | Offline / factory seed (dead_code on USB path) |
+| `is_ccid_provisioned` | `ccid_store.rs` | Offline helper; **not** called at boot |
+| `save_provisioned_pins` | `ccid_store.rs` | Offline / factory seed (`ccid-pddb` only) |
 | `EpBudgetLedger` | `ep_budget.rs` | Cumulative reserve before each class |
-| `make_ccid_transport` | `hw.rs` | Build CCID class under ledger |
+| `make_ccid_transport` | `hw.rs` | Build CCID class under ledger (2 EPs) |
 | `Opcode::CcidRxDeferred` / `CcidTx` | `api.rs` | Handler IPC |
-| `assert_persona_a_composite` | `ccid_usb.py` | Host: 0 CDC, >=1 CCID, >=2 HID, 7 non-EP0 |
+| `assert_persona_a_composite` | `ccid_usb.py` | Host: 0 CDC, >=1 CCID, >=2 HID, **6** non-EP0 |
 
 **Removed (do not document as live):** `make_provisioning_serial`,
 `IrqProvSerialRx`, `find_provisioning_port`, USB two-line PIN capture, second CDC.
@@ -88,7 +89,7 @@ Stock (`not ccid-openpgp`): FIDO+NKRO+debug CDC = 7/8.
 | `check_ep_budget.py` | exit 0 | Static totals per xtask image | Catch overflow before HIL |
 | `test_ep_budget_cumulative.py` | exit 0 | Independent vs cumulative gap | Documents old guard bug |
 | `sim_persona_a_composite.py` | exit 0 | Mock layouts | No hardware needed |
-| `cargo test … ccid_framing` | 7 pass | Frame math | No USB |
+| `cargo test … ccid_framing` | 9 pass | Frame math + GetSlotStatus/IccPowerOn helpers | No USB |
 | `cargo test … ep_budget` | pass | Ledger overflow catch | No USB |
 
 `CCID_HIL_PROVISION` is obsolete (ignored). HIL does **not** prove PDDB OKV1

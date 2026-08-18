@@ -286,7 +286,7 @@ impl<'a, B: UsbBus> CcidTransportClass<'a, B> {
                         g.rx_assembly.drain(..total);
 
                         // libccid CreateChannel uses two GetSlotStatus probes with a 100 ms
-                        // ReadUSB timeout. Answer those in IRQ context — do not wake galdralag.
+                        // ReadUSB timeout. Answer those in IRQ context — do not wait for IPC.
                         if is_get_slot_status(&frame) {
                             let slot = frame[5];
                             let seq = frame[6];
@@ -297,7 +297,7 @@ impl<'a, B: UsbBus> CcidTransportClass<'a, B> {
                             Step::Inline
                         } else if is_icc_power_on(&frame) {
                             // IccPowerOn: return OpenPGP ATR inline so pcscd does not see an
-                            // unresponsive card while galdralag finishes vault init.
+                            // unresponsive card while the out-of-tree handler starts.
                             let slot = frame[5];
                             let seq = frame[6];
                             let resp = rdr_to_pc_data_block_atr(slot, seq);

@@ -98,16 +98,17 @@ OpenPGP application logic runs in a **separate Xous service** on the device.
 |-------|----------------|---------------|
 | USB CCID descriptors, bulk IN/OUT, frame assembly | Transport | **Yes** (`ccid_transport.rs`, `ccid_framing.rs`) |
 | Deferred IPC for complete host frames | Transport API | **Yes** (`CcidRxDeferred` / `CcidTx`) |
-| Persist / read opaque PIN lines in PDDB (`OKV1`) | Provisioning storage | **Yes** (`ccid_store.rs`); **no USB CDC capture** on CCID images (Persona A) |
-| Parse most `PC_to_RDR_*` message types | Protocol | **No** (exception: GetSlotStatus answered inline) |
+| Persist / read opaque PIN lines in PDDB (`OKV1`) | Provisioning storage | **Optional** (`ccid-pddb` / `ccid_store.rs`); **no USB CDC capture**; not called at boot |
+| Parse most `PC_to_RDR_*` message types | Protocol | **No** (exceptions: GetSlotStatus and IccPowerOn answered inline) |
 | `PC_to_RDR_GetSlotStatus` → `RDR_to_PC_SlotStatus` | Transport | **Yes** (IRQ path; see framing / CreateChannel note) |
+| `PC_to_RDR_IccPowerOn` → `RDR_to_PC_DataBlock` + OpenPGP ATR | Transport | **Yes** (IRQ path; ATR bytes in `ccid_framing::OPENPGP_ATR`) |
 | T=1 block protocol, APDU parsing | Card protocol | **No** |
 | OpenPGP card emulation, key storage, crypto | Application | **No** (external service, e.g. `baochip-openpgp` / stub) |
 | `pcscd` driver, GnuPG integration | Host stack | **No** |
 | CCID interrupt notifications (insert/remove) | Transport | **No** (interrupt IN endpoint omitted) |
 
 The Cargo feature is named `ccid-openpgp` for product alignment, but **no
-OpenPGP or Galdralag crates** are linked into xous-core. All cryptography stays
+OpenPGP crates** are linked into xous-core. All cryptography stays
 out of tree behind IPC.
 
 Everything is gated behind `ccid-openpgp` on Xous builds so default `baosec`
@@ -130,7 +131,7 @@ process must use correctly.
 - Present a USB CCID bulk interface to a connected host.
 - Reassemble and forward complete `PC_to_RDR` frames to one deferred IPC listener.
 - Accept complete `RDR_to_PC` reply blobs from that listener and stream them on bulk IN.
-- Read PDDB `usb.ccid/provisioned` at boot (log if not `OKV1`); helpers to store PIN lines remain for offline seeding.
+- Optional PDDB helpers (`ccid-pddb` / `ccid_store.rs`) to store PIN lines remain for offline seeding. **No xtask image enables `ccid-pddb`**, and `main.rs` does **not** call PDDB at boot (that blocked USB init).
 - **Persona A:** CCID images do **not** expose USB CDC for debug or PIN provisioning (Corigine 8-endpoint budget).
 
 **Explicit non-goals (must be provided elsewhere):**
@@ -242,10 +243,10 @@ USB host therefore **cannot** write PIN lines through `usb-bao1x` on these image
 
 | Path | Status |
 |------|--------|
-| (a) Offline / pre-flash PDDB already containing `usb.ccid` keys + `OKV1` | Supported operationally; boot logs "already provisioned" |
+| (a) Offline / pre-flash PDDB already containing `usb.ccid` keys + `OKV1` | Supported operationally; `usb-bao1x` does not read it at boot |
 | (b) Separate non-CCID image that exposes USB PIN provisioning | **Not implemented** in this tree (stock `baosec` has debug CDC but no PIN provision CDC) |
-| (c) Skip USB provision if PDDB is already `OKV1` | **Implemented** (no-op for USB; continue as CCID+FIDO+NKRO) |
-| Unprovisioned CCID image (`OKV1` missing) | **Fail closed:** log warn on UART/`xous-log`, continue **without** USB provisioning capability |
+| (c) Skip USB provision if PDDB is already `OKV1` | **Implemented** as a no-op: there is no USB provision path |
+| Unprovisioned CCID image (`OKV1` missing) | USB still enumerates as CCID+FIDO+NKRO; no USB PIN capture |
 
 `ccid_store::save_provisioned_pins` remains in-tree for factory tools that seed
 PDDB offline; it is **not** wired to any USB RX path on CCID builds.
@@ -318,12 +319,15 @@ Data flow for a normal (non-echo) production image:
    libccid CreateChannel issues two GetSlotStatus probes with a **100 ms**
    ReadUSB timeout (`readTimeout * 100 / DEFAULT_COM_READ_TIMEOUT`); IPC
    round-trips are too slow for that window.
-4. Other complete frames are queued; `IrqCcidRx` notifies `usb-bao1x`.
-5. A deferred listener (external handler / stub) receives the raw frame bytes
+4. **`PC_to_RDR_IccPowerOn` (0x62)** is also answered **inline** with
+   `RDR_to_PC_DataBlock` carrying `OPENPGP_ATR` so `pcscd` sees a card present
+   before the handler is ready.
+5. Other complete frames are queued; `IrqCcidRx` notifies `usb-bao1x`.
+6. A deferred listener (external handler / stub) receives the raw frame bytes
    via `CcidRxDeferred`.
-6. Handler parses the CCID message, runs APDU logic, builds an `RDR_to_PC`
+7. Handler parses the CCID message, runs APDU logic, builds an `RDR_to_PC`
    response frame.
-7. Handler sends raw response bytes with `CcidTx`; transport chunks them on
+8. Handler sends raw response bytes with `CcidTx`; transport chunks them on
    bulk IN (main loop triggers a soft IRQ so `poll_bulk_in` runs promptly).
 
 ---
@@ -408,8 +412,11 @@ Compile-only checks without flashing:
 
 ```bash
 cargo check -p usb-bao1x --features hosted-baosec,ccid-openpgp
-cargo check -p usb-bao1x --features board-baosec,ccid-openpgp,bao1x \
+# Include modals so ux-api default-widgets match the baosec image (CI does this).
+cargo check -p usb-bao1x -p modals --features board-baosec,ccid-openpgp,bao1x \
   --target riscv32imac-unknown-xous-elf
+cargo xtask baosec-ccid --no-verify
+cargo xtask dabao-ccid --no-verify
 ```
 
 ---
@@ -466,15 +473,19 @@ traffic:
 
 | Value | Name | Direction | Role |
 |-------|------|-----------|------|
-| 0x65 | PC_to_RDR_GetSlotStatus | Host to reader | Poll slot state |
+| 0x62 | PC_to_RDR_IccPowerOn | Host to reader | Power-on; ATR returned **inline** |
+| 0x65 | PC_to_RDR_GetSlotStatus | Host to reader | Poll slot state; answered **inline** |
 | 0x6F | PC_to_RDR_XfrBlock | Host to reader | Carries T=1 / APDU payload |
 | 0x80 | RDR_to_PC_DataBlock | Reader to host | Response data (often APDU response) |
 | 0x81 | RDR_to_PC_SlotStatus | Reader to host | Slot status reply |
 
-**Exception:** `PC_to_RDR_GetSlotStatus` (0x65) is detected in
-`ccid_transport` / `ccid_framing` and answered **inline in the USB IRQ** with
-`rdr_to_pc_slot_status_ok` (fixed 10-byte `RDR_to_PC_SlotStatus`). That path
-does **not** route to the deferred stub/handler.
+**Exceptions answered inline in the USB IRQ** (do **not** route to the
+deferred stub/handler):
+
+| Host message | Inline reply |
+|--------------|--------------|
+| `PC_to_RDR_GetSlotStatus` (0x65) | `rdr_to_pc_slot_status_ok` (10-byte `RDR_to_PC_SlotStatus`) |
+| `PC_to_RDR_IccPowerOn` (0x62) | `rdr_to_pc_data_block_atr` (`RDR_to_PC_DataBlock` + `OPENPGP_ATR`) |
 
 All other message types are forwarded as complete frames over IPC. Only the
 external handler (or the `ccid-echo` test personality) interprets them.
@@ -512,9 +523,9 @@ Full frame (10 bytes):
   65 00 00 00 00 00 01 00 00 00
 ```
 
-On production / stub images, GetSlotStatus is answered inline (see above).
-On a `ccid-echo` HIL image without that branch dominating, bulk IN may return
-the **same 10 bytes** unchanged for echo testing.
+On production / stub images, GetSlotStatus and IccPowerOn are answered inline
+(see above). On a `ccid-echo` HIL image, other `PC_to_RDR` frames (for example
+`XfrBlock`) are echoed unchanged on bulk IN.
 
 #### PC_to_RDR_XfrBlock (host to device)
 
@@ -769,10 +780,8 @@ fn handle_ccid_request(host_frame: &[u8]) -> Option<Vec<u8>> {
     let slot = host_frame[5];
     let seq = host_frame[6];
     match msg_type {
-        0x65 => {
-            // PC_to_RDR_GetSlotStatus -> RDR_to_PC_SlotStatus (see hex dumps above)
-            Some(vec![0x81, 0, 0, 0, 0, slot, seq, 0, 0, 0])
-        }
+        // 0x65 GetSlotStatus and 0x62 IccPowerOn are answered inline in usb-bao1x
+        // and never reach this handler. Keep the XfrBlock path only.
         0x6F => {
             // PC_to_RDR_XfrBlock -> RDR_to_PC_DataBlock
             let dw_len = u32::from_le_bytes([
@@ -847,12 +856,12 @@ validate format, derive keys, or interpret content.
 
 ### Boot behavior (`ccid-openpgp`)
 
-At boot, `usb-bao1x` checks PDDB dict `usb.ccid` / key `provisioned`:
+`usb-bao1x` does **not** open PDDB at boot. An earlier `Pddb::new()` call before
+`cu.init()` blocked USB bring-up on first-boot format. USB composite is always
+CCID+FIDO+NKRO on CCID images (no provision CDC).
 
-- If `OKV1`: log that PDDB is provisioned; USB composite is CCID+FIDO+NKRO.
-- If not: **log a warning** (UART / `xous-log`) and continue **without** any USB
-  provisioning interface (fail closed for USB capture; matches logger
-  "prefer discard" style rather than panicking the USB stack).
+`ccid_store` compiles only with feature `ccid-pddb`. No current `cargo xtask`
+image enables that feature; factory tools that seed PDDB do so offline.
 
 ### PDDB keys
 
@@ -872,8 +881,8 @@ calls it on Persona A images.
 it asserts the device presents **no CDC ACM** interfaces (and the shared
 Persona A composite checks). It does **not** send PIN lines over USB.
 `--legacy-usb-provision` exits 2. `run_all.sh` always runs HIL-02.
-`CCID_HIL_PROVISION` is ignored. Offline PDDB / UART OKV1 boot text remain
-out of host automated coverage until UART is wired into the harness.
+`CCID_HIL_PROVISION` is ignored. There is no USB PIN path and no boot-time
+OKV1 UART log; HIL-02 only proves CDC absence.
 
 ---
 
@@ -909,7 +918,7 @@ Expected Linux path (confirmed on Dabao with `dabao-ccid` + out-of-tree stub):
 
 This repository's automated CI still covers:
 
-- Framing logic (unit tests — **8/8** `ccid_framing`)
+- Framing logic (unit tests — **9/9** `ccid_framing`)
 - USB enumeration and bulk echo (`ccid-echo` image + Python HIL)
 
 Hardware pcscd / `pcsc_scan` results are recorded in
@@ -952,7 +961,7 @@ python3 tools/test_ep_budget_cumulative.py
 python3 tools/sim_persona_a_composite.py
 ```
 
-- `ccid_framing`: partial-frame handling, oversize rejection, reassembly, TX chunking, `OKV1` marker, GetSlotStatus helpers (**8/8**).
+- `ccid_framing`: partial-frame handling, oversize rejection, reassembly, TX chunking, `OKV1` marker, GetSlotStatus / IccPowerOn helpers (**9/9**).
 - `ep_budget`: cumulative ledger + proof that independent subtotals miss 7+2 overflow.
 - Python scripts: static EP totals per xtask image; mock Persona A composite asserts.
 ### Tier 2: Compile gates (no hardware)
@@ -961,9 +970,10 @@ python3 tools/sim_persona_a_composite.py
 cargo check -p usb-bao1x --features hosted-baosec,ccid-openpgp
 
 cargo xtask install-toolkit --force --no-verify
-cargo check -p usb-bao1x --features board-baosec,ccid-openpgp,bao1x \
+cargo check -p usb-bao1x -p modals --features board-baosec,ccid-openpgp,bao1x \
   --target riscv32imac-unknown-xous-elf
 
+cargo xtask baosec-ccid --no-verify
 cargo xtask ccid-hil --no-verify
 ```
 
@@ -1027,13 +1037,13 @@ Environment variables:
 | `CCID_HIL_STRESS` | `100` | Random echo iterations |
 | `CCID_HIL_OUT` | `/tmp/ccid-hil-out` | Log directory |
 
-OPEN: suite does not capture UART; OKV1 boot warn is manual-only.
+OPEN: suite does not capture UART (debug on CCID images is UART-only).
 ### Tier 5: CI (automated)
 
 | Workflow | Runner | Scope |
 |----------|--------|-------|
-| `ccid-ci.yml` | GitHub-hosted | `ccid_framing` + `ep_budget` + compile gates |
-| `build.yml` | GitHub-hosted | Full `baosec` image build (includes CCID) |
+| `ccid-ci.yml` | GitHub-hosted | `ccid_framing` + `ep_budget` + `baosec-ccid` / `ccid-hil` compile |
+| `build.yml` | GitHub-hosted | Full `baosec` image (stock, **no** CCID) |
 | `ccid-hil.yml` | Self-hosted (`baosec-hil`) | USB HIL on Raspberry Pi |
 
 Trigger Pi workflow manually: Actions -> CCID HIL -> Run workflow.
@@ -1048,7 +1058,7 @@ Trigger Pi workflow manually: Actions -> CCID HIL -> Run workflow.
 | `pyusb` permission error | udev rules / group membership |
 | `Can't sign swap image` (CI on fork) | Missing upstream git tags; see fork note above |
 | HIL-02 FAIL: CDC present | Persona A violated — debug/provision CDC must not be on CCID images |
-| HIL-02 PASS but no UART OKV1 check | Expected — harness has no UART capture yet |
+| HIL-02 PASS but no UART OKV1 check | Expected — no boot PDDB log; harness has no UART capture |
 
 ---
 
@@ -1133,7 +1143,7 @@ Logs: `/tmp/ccid-hil-out/`
 |------|-------|------|
 | Unit tests | GitHub-hosted | `ccid_framing` + `ep_budget` (`ccid-ci.yml`) |
 | EP arithmetic (optional local) | Developer machine | `check_ep_budget.py`, `test_ep_budget_cumulative.py`, `sim_persona_a_composite.py` |
-| Compile + image | GitHub-hosted | `ccid-ci.yml`, `build.yml` / `baosec` |
+| Compile + image | GitHub-hosted | `ccid-ci.yml` (`baosec-ccid` / `ccid-hil`); `build.yml` stock `baosec` (no CCID) |
 | HIL transport | Pi self-hosted | Enum, no-CDC (HIL-02), echo, stress |
 | OpenPGP E2E | Out of tree + Dabao HIL | Stub: `pcsc_scan` ATR / OpenPGP Card V2; full GnuPG = handler repo |
 

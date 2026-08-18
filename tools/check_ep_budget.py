@@ -26,8 +26,8 @@ CRG_EP_NUM = 8  # libs/bao1x-hal/src/usb/driver.rs
 # Class costs (unidirectional non-EP0 direction slots).
 #
 # CCID — services/usb-bao1x/src/ccid_transport.rs CcidTransportClass::new:
-#   alloc.bulk (OUT), alloc.bulk (IN), alloc.interrupt (IN)  => 3
-EP_CCID = 3
+#   alloc.bulk (OUT), alloc.bulk (IN). Interrupt IN omitted (NKRO PEI collision).
+EP_CCID = 2
 # FIDO — xous-usb-hid device/fido.rs RawFidoConfig:
 #   interface.rs allocate: interrupt IN + interrupt OUT                => 2
 EP_FIDO = 2
@@ -67,12 +67,12 @@ TARGETS: List[Target] = [
         notes="xtask baosec/baosec-lite/dabao; headroom=1 (FRAGILE)",
     ),
     Target(
-        name="baosec-ccid / ccid-hil (Persona A)",
+        name="baosec-ccid / dabao-ccid / ccid-hil (Persona A)",
         classes=("CCID", "FIDO", "NKRO"),
         eps=sum_eps(EP_CCID, EP_FIDO, EP_NKRO),
-        source="ccid_transport.rs:102-104 + HID; SerialPort cfg-gated off",
+        source="ccid_transport.rs CcidTransportClass::new + HID; SerialPort cfg-gated off",
         via_xtask=True,
-        notes="xtask baosec-ccid, ccid-hil; headroom=1 (FRAGILE)",
+        notes="xtask baosec-ccid, dabao-ccid, ccid-hil; headroom=2",
     ),
     Target(
         name="baosec-emu (hosted)",
@@ -88,7 +88,7 @@ TARGETS: List[Target] = [
         eps=sum_eps(EP_CCID, EP_FIDO, EP_NKRO, EP_DEBUG_CDC),
         source="pre-Persona A overflow",
         via_xtask=False,
-        notes="10/8 — must stay impossible (cfg gate)",
+        notes="9/8 (was 10/8 with CCID interrupt IN) — must stay impossible (cfg gate)",
         expect_overflow=True,
     ),
     Target(
@@ -97,7 +97,7 @@ TARGETS: List[Target] = [
         eps=sum_eps(EP_CCID, EP_FIDO, EP_NKRO, EP_DEBUG_CDC, EP_PROV_CDC),
         source="historical unprovisioned CCID image",
         via_xtask=False,
-        notes="13/8 — path removed",
+        notes="12/8 (was 13/8 with CCID interrupt IN) — path removed",
         expect_overflow=True,
     ),
 ]
@@ -151,7 +151,7 @@ def main() -> int:
 
     print()
     print("Class cite summary:")
-    print(f"  CCID  = {EP_CCID}  services/usb-bao1x/src/ccid_transport.rs alloc.bulk x2 + alloc.interrupt")
+    print(f"  CCID  = {EP_CCID}  services/usb-bao1x/src/ccid_transport.rs alloc.bulk x2 (no interrupt IN)")
     print(f"  FIDO  = {EP_FIDO}  xous-usb-hid interface.rs interrupt IN+OUT (fido.rs)")
     print(f"  NKRO  = {EP_NKRO}  xous-usb-hid keyboard.rs in_endpoint + with_out_endpoint")
     print(f"  CDC   = {EP_DEBUG_CDC}  usbd-serial cdc_acm.rs interrupt + bulk x2")
@@ -167,8 +167,8 @@ def main() -> int:
     print("  bao1x-sim / bao1x / baremetal — no usb-bao1x composite like baosec.")
     print()
     print("Untested cargo combos (bypass xtask):")
-    print("  board-baosec,ccid-openpgp[,ccid-echo] — same Persona A 7/8 if built")
-    print("  board-dabao,ccid-openpgp — same EP math; not an official xtask image")
+    print("  board-baosec,ccid-openpgp[,ccid-echo] — same Persona A 6/8 if built")
+    print("  board-dabao,ccid-openpgp — same 6/8 math (official xtask: dabao-ccid)")
     print("  *,mass-storage on usb-bao1x — feature empty; no EP alloc in hw.rs")
     print("  ccid-openpgp + SerialPort — not reachable (cfg(not(ccid-openpgp)))")
     return exit_code

@@ -3,8 +3,8 @@
 """Regression: cumulative EP budget vs independent per-class subtotals.
 
 Demonstrates the guard gap closed by EpBudgetLedger:
-  OLD: assert each class subtotal independently → fake +2 on 7/8 PASSES
-  NEW: cumulative running total → fake +2 on 7/8 FAILS
+  OLD: assert each class subtotal independently → fake +3 on 6/8 PASSES
+  NEW: cumulative running total → fake +3 on 6/8 FAILS
 
 Mirrors services/usb-bao1x/src/ep_budget.rs unit tests (run those with cargo).
 
@@ -39,17 +39,17 @@ def cumulative_reserve(parts: list[tuple[str, int]]) -> tuple[bool, int, str]:
 def main() -> int:
     print("=== Construction-order alloc sites (Persona A / stock) ===")
     print("CCID image:")
-    print("  1. ccid_transport.rs CcidTransportClass::new: alloc.bulk OUT, bulk IN, interrupt IN (=3)")
+    print("  1. ccid_transport.rs CcidTransportClass::new: alloc.bulk OUT, bulk IN (=2; no interrupt IN)")
     print("  2. xous-usb-hid NKRO: interrupt IN+OUT (=2)")
     print("  3. xous-usb-hid FIDO: interrupt IN+OUT (=2)")
-    print("  (no CDC) total 7 — live count: CorigineWrapper.allocated_non_ep0")
+    print("  (no CDC) total 6 — live count: CorigineWrapper.allocated_non_ep0")
     print("Stock baosec:")
     print("  1-2. NKRO+FIDO (=4) then usbd-serial CDC interrupt+bulk×2 (=3) → 7")
     print()
 
-    persona = [("CCID", 3), ("NKRO", 2), ("FIDO", 2)]
+    persona = [("CCID", 2), ("NKRO", 2), ("FIDO", 2)]
     ok, tot, msg = cumulative_reserve(persona)
-    assert ok and tot == 7, msg
+    assert ok and tot == 6, msg
     print(f"PASS cumulative persona A: {tot}/8")
 
     stock = [("NKRO", 2), ("FIDO", 2), ("debug CDC", 3)]
@@ -57,14 +57,14 @@ def main() -> int:
     assert ok and tot == 7, msg
     print(f"PASS cumulative stock: {tot}/8")
 
-    # Regression gap proof
-    old_subs = [3, 4, 2]  # CCID, HID bundle, FAKE — OLD would check these independently
+    # Regression gap proof (matches ep_budget.rs: CCID(2)+HID(4)+FAKE(3))
+    old_subs = [2, 4, 3]
     assert old_independent_ok(old_subs), "OLD independent must pass (documents the gap)"
-    print("PASS old-independent([3,4,2]) — GAP: would allow overflow")
+    print("PASS old-independent([2,4,3]) — GAP: would allow overflow")
 
-    overflow = [("CCID", 3), ("NKRO", 2), ("FIDO", 2), ("FAKE_EXTRA", 2)]
+    overflow = [("CCID", 2), ("NKRO", 2), ("FIDO", 2), ("FAKE_EXTRA", 3)]
     ok, tot, msg = cumulative_reserve(overflow)
-    assert not ok and tot == 9, "NEW cumulative must reject 7+2"
+    assert not ok and tot == 9, "NEW cumulative must reject 6+3"
     print(f"PASS new-cumulative rejects FAKE_EXTRA: {msg}")
 
     print()

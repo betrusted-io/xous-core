@@ -56,7 +56,7 @@ class FakeDev:
 def good_persona_a():
     return FakeDev(
         [
-            FakeIface(0, USB_CLASS_CCID, [0x01, 0x81, 0x82]),
+            FakeIface(0, USB_CLASS_CCID, [0x01, 0x81]),
             FakeIface(1, USB_CLASS_HID, [0x83, 0x02]),
             FakeIface(2, USB_CLASS_HID, [0x84, 0x03]),
         ]
@@ -68,7 +68,7 @@ def with_cdc():
         [
             FakeIface(0, USB_CLASS_HID, [0x81, 0x01]),
             FakeIface(1, USB_CLASS_HID, [0x82, 0x02]),
-            FakeIface(2, USB_CLASS_CCID, [0x03, 0x83, 0x84]),
+            FakeIface(2, USB_CLASS_CCID, [0x03, 0x83]),
             FakeIface(3, USB_CLASS_CDC_COMM, [0x85]),
             FakeIface(4, USB_CLASS_CDC_DATA, [0x04, 0x86]),
         ]

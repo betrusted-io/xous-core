@@ -10,8 +10,8 @@ enumerates as a USB CCID reader and correctly moves `PC_to_RDR` / `RDR_to_PC`
 frames on bulk endpoints. They do **not** test OpenPGP cryptography or APDU
 semantics.
 
-**Persona A:** CCID images are **CCID + FIDO + NKRO only** (7 of 8 Corigine
-endpoint slots). There is **no** debug CDC and **no** provisioning CDC. Device
+**Persona A:** CCID images are **CCID + FIDO + NKRO only** (6 of 8 Corigine
+endpoint slots; CCID bulk IN/OUT only, interrupt IN omitted). There is **no** debug CDC and **no** provisioning CDC. Device
 logs go to **UART / xous-log**, not USB serial. This harness does not capture
 UART yet.
 

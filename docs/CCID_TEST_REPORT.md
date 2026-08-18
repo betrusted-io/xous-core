@@ -18,7 +18,7 @@ and [`code_map.md`](code_map.md). Enumeration deep-dive (community):
 |------|-------|
 | Board | **Dabao** (Baochip-1x), developer mode |
 | Boot1 | v0.10.0-61 |
-| Build | `cargo xtask dabao-ccid --no-verify` (with out-of-tree `galdralag-stub` for APDU replies) |
+| Build | `cargo xtask dabao-ccid --no-verify` (with an out-of-tree APDU stub for SELECT / remaining APDUs) |
 | Features in binary | `board-dabao`, `ccid-openpgp` |
 
 Also buildable as `cargo xtask dabao --feature ccid-openpgp --no-verify`.
@@ -43,8 +43,8 @@ CCID(2)+FIDO(2)+NKRO(2)=**6/8**).
 
 ## End-to-end CCID — confirmed on hardware
 
-With `dabao-ccid` plus an out-of-tree APDU stub (`galdralag-stub`) answering
-`IccPowerOn` / SELECT:
+With `dabao-ccid` plus an out-of-tree APDU stub answering SELECT
+(IccPowerOn / ATR is inline in `usb-bao1x`):
 
 | Check | Result |
 |-------|--------|
@@ -71,14 +71,16 @@ Transport fixes required for this result (see source / `code_map.md`):
 - **Bulk OUT primed** in `CorigineWrapper::set_device_address` after the
   `ep_enable` loop (first receive TRB once `enq_pt` is valid). If the app buffer
   cannot be obtained, `ep_out_ready` is cleared so a later `read()` can re-arm.
-- Remaining `PC_to_RDR_*` frames (e.g. `IccPowerOn`, `XfrBlock`) go to the
+- Remaining `PC_to_RDR_*` frames (e.g. `XfrBlock`) go to the
   deferred IPC listener via `CcidRxDeferred` / `CcidTx`.
+- **IccPowerOn** (`0x62`) is answered **inline** with `OPENPGP_ATR` in
+  `RDR_to_PC_DataBlock` so `pcscd` sees a card before the stub/handler is ready.
 
 ## Checks passing
 
 | Check | Result |
 |-------|--------|
-| `cargo test -p usb-bao1x --lib ccid_framing` | **8/8** |
+| `cargo test -p usb-bao1x --lib ccid_framing` | **9/9** |
 | `cargo check -p usb-bao1x --features hosted-baosec,ccid-openpgp` | Pass (hosted feature wiring activates `ux-api/hosted-baosec` → `blitstr2`) |
 | `cargo xtask dabao-ccid --no-verify` | Succeeds |
 | Host enumeration | No `invalid maxpacket 64` warning; no `error -71` |

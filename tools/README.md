@@ -165,7 +165,7 @@ images), and bulk echo — not OpenPGP/APDU. Status: `docs/CCID_TEST_REPORT.md`.
 
 ```sh
 # Unit tests (also in .github/workflows/ccid-ci.yml)
-cargo test -p usb-bao1x --lib ccid_framing   # wire math (7 tests)
+cargo test -p usb-bao1x --lib ccid_framing   # wire math (9 tests)
 cargo test -p usb-bao1x --lib ep_budget      # cumulative EP ledger (4 tests)
 
 # Local EP arithmetic / mock Persona A (no hardware)

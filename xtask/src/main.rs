@@ -805,8 +805,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             builder.add_detached_app_feature(board);
             builder.set_sigblock_size(sigblock_size);
             builder.add_feature("ccid-openpgp");
-            // Lost-wakeup evidence (EV_PENDING clear-on-enable). Remove after keepalive diagnosis.
-            builder.add_feature("irq-pending-trace");
 
             let bao_rram_pkgs =
                 ["xous-ticktimer", "keystore", "xous-log", "xous-names", "usb-bao1x", "bao1x-hal-service"]
@@ -824,8 +822,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
             builder.add_apps(&bao_app_pkgs);
 
-            // Positional cratespecs (e.g. galdralag-stub:/abs/path) are boot services so the
-            // CCID APDU handler is running when usb-bao1x enumerates — not detached apps.
+            // Positional cratespecs (e.g. an out-of-tree APDU stub path) are boot services so the
+            // CCID handler is running when usb-bao1x enumerates — not detached apps.
             for svc in get_cratespecs() {
                 let (name, region) = crate::builder::region_from_name(&svc, LoaderRegion::Flash);
                 builder.add_service(name, region);
@@ -1067,10 +1065,10 @@ Hardware images:
  av-test                 automation framework for TRNG testing (AV directly, no CPRNG). [cratespecs] ignored.
  tiny                    Precursor tiny image. For testing with services built out-of-tree.
  baosec                  Baosec application target image (no CCID; same as upstream dev).
- baosec-ccid             Baosec with ccid-openpgp transport + provisioning (no ccid-echo).
+ baosec-ccid             Baosec with ccid-openpgp USB transport (no ccid-echo; no USB CDC).
  dabao                   Dabao application target image.
  dabao-ccid              Dabao with ccid-openpgp USB transport (no pddb / no SPI flash).
-                         Positional cratespecs are added as Flash services (e.g. galdralag-stub).
+                         Positional cratespecs are added as Flash services (e.g. an out-of-tree APDU stub).
  bao1x-baremetal-baosec  Baremetal image for baosec boards.
  bao1x-baremetal-dabao   Baremetal image for dabao boards.
  bao1x-boot0             Boot0 partition for baochip1x targets.
