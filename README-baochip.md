@@ -68,6 +68,19 @@ USB CCID (smart-card class `0x0B`) is **not** in the default `dabao` / `baosec` 
 - `cargo xtask baosec-ccid` — Baosec CCID transport (no `ccid-echo`)
 - `cargo xtask ccid-hil` — lab/HIL image with `ccid-echo` (do not ship)
 
+`xtask` writes `loader.uf2`, `xous.uf2`, and `apps.uf2` to
+`target/riscv32imac-unknown-xous-elf/release/` (overwritten on every rebuild).
+Local archives of the two Dabao CCID sets used for the `openpgp-apdu` boot
+discrimination test (not in git; `target/` is ignored):
+
+- `target/riscv32imac-unknown-xous-elf/release/built/known-good/` —
+  `cargo xtask dabao-ccid --no-verify` (enumerates as `1d50:6197`)
+- `target/riscv32imac-unknown-xous-elf/release/built/openpgp-apdu/` —
+  `cargo xtask dabao-ccid openpgp-apdu --no-verify`
+
+Each archive contains `loader.uf2`, `xous.uf2`, `apps.uf2`, and the matching
+`.bin` / `.img` files. See [`docs/OPENPGP_APDU_BOOT_DEBUG.md`](./docs/OPENPGP_APDU_BOOT_DEBUG.md).
+
 See [`docs/CCID_PROTOCOL_AND_HIL.md`](./docs/CCID_PROTOCOL_AND_HIL.md).
 
 Code is delivered via `boot1`. `boot1` is entered by holding down a button while power the device on. The device will show up as a USB mass storage device, at which point a .uf2 file containing the application image is copied to the device, and the update is applied.

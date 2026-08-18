@@ -63,7 +63,7 @@ Install the latest [Rust](https://rust-lang.org/tools/install/) or run `rustup u
 
 - Precursor: `cargo xtask app-image`
 - Dabao: `cargo xtask dabao`
-- Dabao with USB CCID: `cargo xtask dabao-ccid`
+- Dabao with USB CCID: `cargo xtask dabao-ccid` (local image archives: `target/riscv32imac-unknown-xous-elf/release/built/known-good/` and `built/openpgp-apdu/`; see [README-baochip.md](./README-baochip.md))
 - Baosec: `cargo xtask baosec`
 - Baosec with USB CCID: `cargo xtask baosec-ccid`
 - CCID HIL (echo personality, lab only): `cargo xtask ccid-hil`

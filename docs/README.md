@@ -14,6 +14,7 @@ Current references for USB CCID transport (`ccid-openpgp`):
 | [code_map.md](code_map.md) | Symptom-to-source navigation |
 | [CCID_TEST_REPORT.md](CCID_TEST_REPORT.md) | Hardware verification status |
 | [CCID_USB_ENUMERATION_DEBUG.md](CCID_USB_ENUMERATION_DEBUG.md) | Community enumeration deep-dive (not official support) |
+| [OPENPGP_APDU_BOOT_DEBUG.md](OPENPGP_APDU_BOOT_DEBUG.md) | dabao-ccid vs openpgp-apdu boot discrimination; local UF2 archives |
 
 Host tests live under `tools/ccid_hil/` and `tools/ccid_smoke.py`.
 Build images with `cargo xtask dabao-ccid`, `baosec-ccid`, or `ccid-hil`.

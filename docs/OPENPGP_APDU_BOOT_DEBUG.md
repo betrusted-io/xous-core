@@ -166,15 +166,24 @@ comes up.
 ## 6. Flash / boot procedure used in this investigation
 
 1. Hold PROG, plug in: boot1 as `1d50:6196`, volume `BAOCHIP`, `/dev/ttyACM0`.
-2. Copy `loader.uf2`, `xous.uf2`, `apps.uf2` from
-   `target/riscv32imac-unknown-xous-elf/release/`.
+2. Copy `loader.uf2`, `xous.uf2`, `apps.uf2` from the chosen archive under
+   `target/riscv32imac-unknown-xous-elf/release/built/` (or from
+   `target/riscv32imac-unknown-xous-elf/release/` after a fresh `xtask` build).
 3. `sync`.
 4. Send `boot` at 1 000 000 8N1 on `/dev/ttyACM0` (PROG alone was not used
    after the first failed boot).
 5. Watch `lsusb -d 1d50:` for `6197` within ~10 s.
 
 Known-good (enumerates): `cargo xtask dabao-ccid --no-verify`
+
+Archive: `target/riscv32imac-unknown-xous-elf/release/built/known-good/`
+
 Failing (drops off USB): `cargo xtask dabao-ccid openpgp-apdu --no-verify`
+
+Archive: `target/riscv32imac-unknown-xous-elf/release/built/openpgp-apdu/`
+
+These archives are local build products (`target/` is gitignored). A later
+`xtask` run overwrites the files in `release/` but does not touch `built/`.
 
 ---
 
