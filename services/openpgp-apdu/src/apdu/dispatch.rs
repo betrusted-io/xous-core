@@ -1,6 +1,4 @@
-use crate::apdu::commands::{
-    handle_get_data, handle_get_response_cmd, handle_select, handle_verify,
-};
+use crate::apdu::commands::{handle_get_data, handle_get_response_cmd, handle_select, handle_verify};
 use crate::apdu::{CommandApdu, ResponseApdu, StatusWord};
 use crate::openpgp::card::CardState;
 
@@ -28,8 +26,8 @@ mod tests {
     #[test]
     fn select_then_get_aid() {
         let mut card = CardState::new(&FIXTURE_V1_TEST);
-        let sel = CommandApdu::parse(&[0x00, 0xA4, 0x04, 0x00, 0x06, 0xD2, 0x76, 0x00, 0x01, 0x24, 0x01])
-            .unwrap();
+        let sel =
+            CommandApdu::parse(&[0x00, 0xA4, 0x04, 0x00, 0x06, 0xD2, 0x76, 0x00, 0x01, 0x24, 0x01]).unwrap();
         let r = dispatch_apdu(sel, &mut card);
         assert_eq!(r.sw1, 0x90);
 

@@ -36,21 +36,9 @@ pub struct CcidStatus {
 }
 
 impl CcidStatus {
-    pub const fn ok_active() -> Self {
-        Self {
-            b_status: 0x00,
-            b_error: 0x00,
-            b_chain: 0x00,
-        }
-    }
+    pub const fn ok_active() -> Self { Self { b_status: 0x00, b_error: 0x00, b_chain: 0x00 } }
 
-    pub const fn cmd_not_supported() -> Self {
-        Self {
-            b_status: 0x40,
-            b_error: 0xFE,
-            b_chain: 0x00,
-        }
-    }
+    pub const fn cmd_not_supported() -> Self { Self { b_status: 0x40, b_error: 0xFE, b_chain: 0x00 } }
 }
 
 pub fn parse_pc_to_rdr(data: &[u8]) -> Result<PcToRdr, CcidError> {
@@ -73,11 +61,7 @@ pub fn parse_pc_to_rdr(data: &[u8]) -> Result<PcToRdr, CcidError> {
             if dw_length != 0 {
                 return Err(CcidError::LengthMismatch);
             }
-            Ok(PcToRdr::IccPowerOn {
-                slot,
-                seq,
-                power_select: b7,
-            })
+            Ok(PcToRdr::IccPowerOn { slot, seq, power_select: b7 })
         }
         0x63 => {
             if dw_length != 0 {
@@ -96,11 +80,7 @@ pub fn parse_pc_to_rdr(data: &[u8]) -> Result<PcToRdr, CcidError> {
             if payload.len() > 512 {
                 return Err(CcidError::PayloadTooLarge);
             }
-            Ok(PcToRdr::XfrBlock {
-                slot,
-                seq,
-                apdu: payload.to_vec(),
-            })
+            Ok(PcToRdr::XfrBlock { slot, seq, apdu: payload.to_vec() })
         }
         0x72 => {
             if dw_length != 0 {
@@ -124,14 +104,7 @@ fn push_hdr(out: &mut Vec<u8>, msg_type: u8, dw_length: u32, slot: u8, seq: u8, 
 
 pub fn rdr_to_pc_data_block(slot: u8, seq: u8, status: CcidStatus, apdu_response: &[u8]) -> Vec<u8> {
     let mut out = Vec::with_capacity(10 + apdu_response.len());
-    push_hdr(
-        &mut out,
-        RDR_TO_PC_DATA_BLOCK,
-        apdu_response.len() as u32,
-        slot,
-        seq,
-        &status,
-    );
+    push_hdr(&mut out, RDR_TO_PC_DATA_BLOCK, apdu_response.len() as u32, slot, seq, &status);
     out.extend_from_slice(apdu_response);
     out
 }

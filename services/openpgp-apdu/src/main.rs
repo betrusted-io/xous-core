@@ -6,10 +6,10 @@ fn main() {
 }
 
 #[cfg(target_os = "xous")]
-use openpgp_apdu::apdu::{dispatch_apdu, ApduError, CommandApdu, ResponseApdu, StatusWord};
+use openpgp_apdu::apdu::{ApduError, CommandApdu, ResponseApdu, StatusWord, dispatch_apdu};
 #[cfg(target_os = "xous")]
 use openpgp_apdu::ccid::{
-    parse_pc_to_rdr, rdr_to_pc_data_block, rdr_to_pc_slot_status, CcidError, CcidStatus, PcToRdr,
+    CcidError, CcidStatus, PcToRdr, parse_pc_to_rdr, rdr_to_pc_data_block, rdr_to_pc_slot_status,
 };
 #[cfg(target_os = "xous")]
 use openpgp_apdu::openpgp::{CardState, FIXTURE_V1_TEST};
@@ -17,9 +17,7 @@ use openpgp_apdu::openpgp::{CardState, FIXTURE_V1_TEST};
 use openpgp_apdu::usb_link::{CcidLink, UsbDeviceState};
 
 #[cfg(target_os = "xous")]
-fn main() -> ! {
-    ccid_main();
-}
+fn main() -> ! { ccid_main(); }
 
 #[cfg(target_os = "xous")]
 fn ccid_main() -> ! {
@@ -118,7 +116,12 @@ fn ccid_main() -> ! {
                 log::debug!("APDU response len={} sw={:02x}{:02x}", apdu_bytes.len(), resp.sw1, resp.sw2);
                 rdr_to_pc_data_block(slot, seq, CcidStatus::ok_active(), &apdu_bytes)
             }
-            Err(CcidError::LengthMismatch | CcidError::TooShort | CcidError::UnknownMessageType | CcidError::PayloadTooLarge) => {
+            Err(
+                CcidError::LengthMismatch
+                | CcidError::TooShort
+                | CcidError::UnknownMessageType
+                | CcidError::PayloadTooLarge,
+            ) => {
                 let slot = frame.get(5).copied().unwrap_or(0);
                 let seq = frame.get(6).copied().unwrap_or(0);
                 log::warn!("malformed CCID frame");

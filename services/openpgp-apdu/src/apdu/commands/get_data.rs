@@ -1,4 +1,4 @@
-use crate::apdu::{chunk_response, CommandApdu, ResponseApdu, StatusWord};
+use crate::apdu::{CommandApdu, ResponseApdu, StatusWord, chunk_response};
 use crate::openpgp::card::CardState;
 use crate::openpgp::dos::get_do_data;
 

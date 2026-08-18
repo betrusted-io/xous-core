@@ -733,8 +733,10 @@ pub(crate) fn main_hw() -> ! {
                             cu.ccid_rx.borrow_mut().push_front(frame);
                         }
                     }
-                } else if ccid_listener.is_some() {
-                    // IrqCcidRx arrived but queue empty (lost frame or spurious notify).
+                } else {
+                    // IrqCcidRx with empty queue: deny a parked deferred waiter (lost frame /
+                    // spurious notify). ccid-echo has no deferred listener.
+                    #[cfg(not(feature = "ccid-echo"))]
                     if let Some(mut listener) = ccid_listener.take() {
                         let mut response = unsafe {
                             Buffer::from_memory_message_mut(listener.body.memory_message_mut().unwrap())
