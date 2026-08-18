@@ -34,8 +34,8 @@ CCID_HEADER_LEN = 10
 
 # Persona A expected unidirectional non-EP0 slots on Corigine (CRG_EP_NUM=8).
 # Per class (see tools/check_ep_budget.py and source cites therein):
-#   CCID 3, FIDO 2, NKRO 2 => 7; no CDC.
-PERSONA_A_EXPECTED_NON_EP0 = 7
+#   CCID bulk OUT+IN (2), FIDO (2), NKRO (2) => 6; no CDC; interrupt IN omitted.
+PERSONA_A_EXPECTED_NON_EP0 = 6
 PERSONA_A_MAX_NON_EP0 = 8
 
 
@@ -216,7 +216,7 @@ def summarize_composite(dev: "usb.core.Device") -> dict:
 def assert_persona_a_composite(dev: "usb.core.Device") -> dict:
   """Fail if layout is incompatible with Persona A CCID images (no CDC; CCID+HID; EP budget).
 
-  Expected roughly: CCID (0x0B) + two HID (FIDO+NKRO), unidirectional non-EP0 == 7, none > 8.
+  Expected roughly: CCID (0x0B) + two HID (FIDO+NKRO), unidirectional non-EP0 == 6, none > 8.
   Interface indices are not hardcoded — CDC removal can shift numbers.
   """
   layout = summarize_composite(dev)
@@ -239,6 +239,6 @@ def assert_persona_a_composite(dev: "usb.core.Device") -> dict:
     # Soft mismatch: some hosts count differently; still fail so HIL catches drift.
     raise RuntimeError(
       f"Persona A: expected {PERSONA_A_EXPECTED_NON_EP0} non-EP0 endpoints "
-      f"(CCID3+FIDO2+NKRO2), got {n}; layout={layout}"
+      f"(CCID2+FIDO2+NKRO2), got {n}; layout={layout}"
     )
   return layout

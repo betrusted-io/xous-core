@@ -180,8 +180,11 @@ Several strategies were considered (see section 5 for the general decision
 framework). The one implemented:
 
 1. On CCID-enabled builds, drop debug CDC serial and provisioning CDC
-   serial entirely. The composite device becomes CCID + FIDO + NKRO only —
-   7 of 8 slots, matching the stock build's margin.
+   serial entirely. A later follow-up also **omitted the CCID interrupt IN**
+   endpoint (Corigine `alloc_ep` pairing collided with NKRO and caused host
+   `EPROTO` / `-71`). The shipping composite is CCID bulk IN/OUT + FIDO + NKRO
+   — **6 of 8** slots (2 spare). Stock `baosec` remains FIDO+NKRO+debug CDC
+   at **7 of 8**.
 
 2. Debug output on CCID images moved to UART instead of USB CDC (reusing the
    project's existing UART / `xous-log` path — no new driver was written for
@@ -216,7 +219,7 @@ The fix was a **cumulative ledger** (`services/usb-bao1x/src/ep_budget.rs`):
   drift from the allocator.
 
 A regression test proves the old logic's blind spot: adding one fake
-endpoint-consuming class to a 7/8 build — independent subtotals still
+endpoint-consuming class to a 6/8 CCID build — independent subtotals still
 "pass", cumulative reserve must panic. See
 `cargo test -p usb-bao1x --lib ep_budget` and
 `python3 tools/test_ep_budget_cumulative.py`.
@@ -350,9 +353,10 @@ have to rediscover them:
    host-side automated test can confirm device-side log behavior (e.g.
    "warned and continued" for unprovisioned PDDB) when CDC was intentionally
    removed from USB.
-2. **Shipping composites sit at 7/8 (FRAGILE).** `baosec` and
-   `baosec-ccid` / `ccid-hil` both have one slot of margin. Document any
-   future USB class as needing an explicit exclusion or budget change.
+2. **Shipping composites.** Stock `baosec` sits at **7/8 (FRAGILE)**. CCID
+   images (`dabao-ccid` / `baosec-ccid` / `ccid-hil`) sit at **6/8** after
+   the interrupt IN was omitted. Document any future USB class as needing an
+   explicit exclusion or budget change.
 3. **Board-target compile of the cumulative guard:** verified with
    `cargo check … --target riscv32imac-unknown-xous-elf` after
    `install-toolkit` (matched rustc / `betrusted-io/rust` toolkit). That is
