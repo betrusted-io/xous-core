@@ -70,12 +70,12 @@ USB CCID (smart-card class `0x0B`) is **not** in the default `dabao` / `baosec` 
 
 `xtask` writes `loader.uf2`, `xous.uf2`, and `apps.uf2` to
 `target/riscv32imac-unknown-xous-elf/release/` (overwritten on every rebuild).
-Local archives of the two Dabao CCID sets used for the `openpgp-apdu` boot
-discrimination test (not in git; `target/` is ignored):
+In-tree archives of the two Dabao CCID sets used for the `openpgp-apdu` boot
+discrimination test:
 
-- `target/riscv32imac-unknown-xous-elf/release/built/known-good/` —
+- [`images/dabao-ccid/known-good/`](./images/dabao-ccid/known-good/) —
   `cargo xtask dabao-ccid --no-verify` (enumerates as `1d50:6197`)
-- `target/riscv32imac-unknown-xous-elf/release/built/openpgp-apdu/` —
+- [`images/dabao-ccid/openpgp-apdu/`](./images/dabao-ccid/openpgp-apdu/) —
   `cargo xtask dabao-ccid openpgp-apdu --no-verify`
 
 Each archive contains `loader.uf2`, `xous.uf2`, `apps.uf2`, and the matching
