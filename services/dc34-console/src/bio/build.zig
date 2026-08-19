@@ -1,5 +1,6 @@
 // build.zig
 const std = @import("std");
+const builtin = @import("builtin");
 
 pub fn build(b: *std.Build) void {
     // -Dmodule=<n>: subdirectory to compile. Expects <n>/main.c to exist.
@@ -22,6 +23,15 @@ pub fn build(b: *std.Build) void {
         "emit-binary",
         "Also assemble the errata-patched output into a flat binary (<module>/<module>.bin)",
     ) orelse false;
+
+    // Use the conventional interpreter name for the build host while allowing
+    // reproducible overrides for virtual environments and custom installs.
+    const default_python = if (builtin.os.tag == .windows) "python" else "python3";
+    const python_exe = b.option(
+        []const u8,
+        "python",
+        "Python interpreter used to run clang2rustasm.py",
+    ) orelse default_python;
 
     const main_c_path = b.pathJoin(&.{ module_name, "main.c" });
 
@@ -69,10 +79,10 @@ pub fn build(b: *std.Build) void {
 
     // -- Step 2: convert assembly to Rust inline asm ------------------
     //
-    // Runs: python3 clang2rustasm.py <module_name>
+    // Runs: <python> clang2rustasm.py <module_name>
     // The script lives next to build.zig. Skipped when -Dasm-only=true.
     const py_cmd = b.addSystemCommand(&.{
-        "python3",
+        python_exe,
         b.pathFromRoot("clang2rustasm.py"),
         module_name,
     });
@@ -115,6 +125,11 @@ const c_flags = &[_][]const u8{
     "-ffunction-sections",
     "-fdata-sections",
     "-Os",
+
+    // BIO programs have no unwinder. Suppressing CFI also keeps the
+    // errata-patched assembly independently reassemblable as a flat binary.
+    "-fno-asynchronous-unwind-tables",
+    "-fno-unwind-tables",
 
     // Belt-and-suspenders: these may or may not be honored by zig cc,
     // but the real reservation is done via target features (see above).
