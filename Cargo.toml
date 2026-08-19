@@ -120,6 +120,10 @@ members = [
   "services/keystore",
   "libs/precursor-hal",
   "apps-baosec/vault2",
+  # Defcon 34 badge
+  "libs/dc34-api",
+  "services/dc34-console",
+  "apps-baosec/dc34-vault",
   "baremetal",
   "bao1x-boot/boot0",
   "bao1x-boot/boot1",
