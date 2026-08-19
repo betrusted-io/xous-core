@@ -62,6 +62,14 @@ byteorder = "1.4.3" # used by keywrap
 hex = { version = "0.4.3", default-features = false, features = ["alloc"] }
 hkdf = "0.12.4"
 
+xous-swapper = { path = "../xous-swapper", optional = true } # contains spinor
+
+ed25519-dalek = { package = "ed25519-dalek-compat", path = "../../bao1x-boot/ed25519-dalek-compat", default-features = false, features = [
+    "digest",
+    "zeroize",
+], optional = true }
+
+
 #[dependencies.curve25519-dalek]
 #version = "=4.1.2"                           # note this is patched to our fork in ./Cargo.toml
 #default-features = false
@@ -77,13 +85,38 @@ hkdf = "0.12.4"
 bao1x = ["utralib/bao1x", "aes/bao1x"]
 
 debug-hal = ["bao1x-hal/debug-print-duart"]
+debug-swap-sig = []
+
+# Enables incrementing one way counters. Off by default because this API can be, at the very least,
+# used to grief the security layer if not worse
+owc-inc = ["keystore-api/owc-inc"]
+
+# Enable to allow users to access the application keystore slots
+# Because application keys are stored adjacent to secret keys, it's recommended to leave this
+# feature off if it's not actively being used by the target application, as it reduces the
+# potential attack surface exposed by the keystore server.
+app-keys = ["keystore-api/app-keys"]
+
+# feature to enable backward compatibility with older units, before the swap slot switch happened
+# in like a year this flag could be deprecated, but also, it's coded with fairly safe assumptions
+# so it's...probably OK to just leave there?
+legacy-swap-key = []
+# used to track which targets have swap
+swap = [
+    "xous-swapper/bao1x",
+    "keystore-api/swap",
+    "legacy-swap-key",
+    "ed25519-dalek",
+]
 
 board-baosec = [
     "utralib/bao1x",
     "keystore-api/gen2",
     "bao1x-hal",
     "bao1x-hal-service/board-baosec",
-    "bao1x-hal/security",
+    "swap",
+    "xous-swapper/board-baosec",
+    # "bao1x-hal/security",
 ] # USB form factor token
 loader-baosec = []
 test-baosec = []
@@ -97,6 +130,8 @@ board-baosor = [
     "keystore-api/gen2",
     "modals/bao1x",
     "bao1x-hal-service/board-baosor",
+    "swap",
+    "xous-swapper/board-baosor",
 ] # Precursor form factor
 loader-baosor = []
 board-dabao = [
@@ -104,7 +139,8 @@ board-dabao = [
     "keystore-api/gen2",
     "bao1x-hal",
     "bao1x-hal-service/board-dabao",
-    "bao1x-hal/security",
+    # "bao1x-hal/security",
+    "app-keys",
 ] # Dev board form factor
 loader-dabao = []
 

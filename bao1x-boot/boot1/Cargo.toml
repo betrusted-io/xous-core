@@ -28,6 +28,8 @@ xous-bio-bdma = { path = "../../libs/xous-bio-bdma", default-features = false, f
 ] }
 rand_chacha = { version = "0.3.1", default-features = false }
 hex = { version = "0.4.3", default-features = false }
+slh-dsa = { path = "../slh-dsa-bao1x" }
+hex-literal = "1.0.0"
 
 [features]
 # Baochip feature tree below
@@ -49,9 +51,13 @@ print-ifr = []
 test-boot0-keys = []
 alt-boot1 = []
 test-clock-skipping = []
+uf2-spim = []
+pq-check = []
 
 oem = []
 oem-baosec-lite = ["oem", "bao1x-hal/oem-baosec-lite"]
+
+qe-debug = ["verbose-debug", "bao1x-hal/debug-print-duart"]
 
 verilator-only = []
 default = ["oem-baosec-lite"]

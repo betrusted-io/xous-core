@@ -4,7 +4,7 @@ pub mod glue;
 mod handlers;
 pub use driver::*;
 pub use handlers::*;
-mod page_defrag;
+pub mod page_defrag;
 
 use crate::irq::*;
 
@@ -151,7 +151,7 @@ struct DeviceDescriptor {
     pub b_num_configurations: u8,
 }
 const VENDOR_ID: u16 = 0x1d50;
-const PRODUCT_ID: u16 = 0x6196; // This is pending acceptance of a PR to the openmoko registry
+const PRODUCT_ID: u16 = 0x6196;
 const MANUFACTURER: &'static str = "Baochip";
 const PRODUCT: &'static str = "Baochip-1x";
 

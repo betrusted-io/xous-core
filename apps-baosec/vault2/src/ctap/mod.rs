@@ -711,10 +711,7 @@ impl CtapState {
             // This case was added in FIDO 2.1.
             if auth_param.is_empty() {
                 check_user_presence(env, channel, Some(
-                    format!("{}\n{:x?}",
-                        t!("vault.fido.pin_uv_auth", locales::LANG),
-                        channel
-                    )
+                    t!("vault2.fido.pin_uv_auth", locales::LANG).to_owned(),
                 ))?;
                 if storage::pin_hash(env)?.is_none() {
                     return Err(Ctap2StatusCode::CTAP2_ERR_PIN_NOT_SET);
@@ -845,12 +842,11 @@ impl CtapState {
                     // without user interaction.
                     #[cfg(feature="xous")]
                     {
-                        let mut desc = String::from(t!("vault.fido.exclude_list", locales::LANG));
-                        desc.push_str(
-                            &format!("\n\nRelying Party: {}\nUser name: {}",
-                                if let Some(name) = rp.rp_name {name.to_string()} else {rp_id.to_string()},
-                                if let Some(name) = user.user_display_name {name} else {user.user_name.unwrap_or("*Unspecified*".to_string())},
-                            )
+                        let rp = if let Some(name) = rp.rp_name {name.to_string()} else {rp_id.to_string()};
+                        let desc = format!(
+                            "{}\n{}",
+                            rp,
+                            t!("vault2.fido.exclude_list", locales::LANG)
                         );
                         let _ = check_user_presence(env, channel, Some(desc));
                     }
@@ -863,15 +859,8 @@ impl CtapState {
 
         #[cfg(feature="xous")]
         {
-            let mut make_cred_desc = String::from(t!("vault.fido.make_credential", locales::LANG));
-            let alt_name = user.user_name.as_deref().unwrap_or("*Unspecified*");
-            make_cred_desc.push_str(
-                &format!("\n\nRelying Party: {}\nUser name: {}",
-                    // prefer the "friendly name" over the technical name
-                    if let Some(name) = &rp.rp_name {name.to_string()} else {rp_id.to_string()},
-                    if let Some(name) = &user.user_display_name {name} else {alt_name}
-                )
-            );
+            let rp = if let Some(name) = rp.rp_name {name.to_string()} else {rp_id.to_string()};
+            let make_cred_desc = format!("{}\n{}", rp, t!("vault2.fido.make_credentials", locales::LANG));
             check_user_presence(env, channel, Some(make_cred_desc))?;
         }
         #[cfg(not(feature="xous"))]
@@ -1258,13 +1247,7 @@ impl CtapState {
         if options.up {
             #[cfg(feature="xous")]
             {
-                let mut desc = String::from(t!("vault.fido.get_assertion", locales::LANG));
-                desc.push_str(
-                    &format!("\n\nRelying Party: {}\nClient data hash: {}",
-                        rp_id,
-                        hex::encode(&client_data_hash),
-                    )
-                );
+                let desc: String = format!("{}\n{}", rp_id, t!("vault2.fido.get_assertion", locales::LANG));
                 check_user_presence(env, channel, Some(desc))?;
             }
             #[cfg(not(feature="xous"))]
@@ -1397,9 +1380,8 @@ impl CtapState {
         #[cfg(feature="xous")]
         {
             check_user_presence(env, channel, Some(
-                format!("{}\n{:x?}",
-                    t!("vault.u2f.factoryreset", locales::LANG),
-                    channel
+                format!("{}",
+                    t!("vault2.u2f.factoryreset", locales::LANG),
                 )
             ))?;
         }
@@ -1425,9 +1407,8 @@ impl CtapState {
         #[cfg(feature="xous")]
         {
             check_user_presence(env, channel, Some(
-                format!("{}\n{:x?}",
-                    t!("vault.u2f.authenticator_selection", locales::LANG),
-                    channel
+                format!("{}",
+                    t!("vault2.u2f.authenticator_selection", locales::LANG),
                 )
             ))?;
         }
@@ -1446,9 +1427,8 @@ impl CtapState {
             #[cfg(feature="xous")]
             {
                 check_user_presence(env, channel, Some(
-                    format!("{}\n{:x?}",
-                        t!("vault.u2f.vendor_configure", locales::LANG),
-                        channel
+                    format!("{}",
+                        t!("vault2.u2f.vendor_configure", locales::LANG),
                     )
                 ))?;
             }

@@ -1,4 +1,53 @@
 {
+    "vault2.fido.pin_uv_auth": {
+        "en": "PIN creation",
+        "en-tts": "PIN creation",
+        "fr": "Création du PIN",
+        "ja": "PIN作成",
+        "zh": "创建 PIN"
+    },
+    "vault2.fido.make_credentials": {
+        "en": "Make credential",
+        "en-tts": "Make credential",
+        "fr": "Créer un identifiant",
+        "ja": "認証情報を作成",
+        "zh": "创建凭据"
+    },
+    "vault2.fido.exclude_list": {
+        "en": "Exclude credentials",
+        "en-tts": "Exclude credentials",
+        "fr": "Exclure les identifiants",
+        "ja": "認証情報を除外",
+        "zh": "排除凭据"
+    },
+    "vault2.fido.get_assertion": {
+        "en": "Allow?",
+        "en-tts": "Allow?",
+        "fr": "Autoriser ?",
+        "ja": "許可しますか？",
+        "zh": "允许？"
+    },
+    "vault2.u2f.factoryreset": {
+        "en": "Factory reset?",
+        "en-tts": "Factory reset?",
+        "fr": "Réinitialisation d'usine ?",
+        "ja": "工場出荷時設定にリセットしますか？",
+        "zh": "恢复出厂设置？"
+    },
+    "vault2.u2f.authenticator_selection": {
+        "en": "Make primary authenticator?",
+        "en-tts": "Make primary authenticator?",
+        "fr": "Définir comme authentificateur principal ?",
+        "ja": "プライマリ認証器に設定しますか？",
+        "zh": "设为主认证器？"
+    },
+    "vault2.u2f.vendor_configure": {
+        "en": "Allow vendor configuration?",
+        "en-tts": "Allow vendor configuration?",
+        "fr": "Autoriser la configuration du fournisseur ?",
+        "ja": "ベンダー設定を許可しますか？",
+        "zh": "允许供应商配置？"
+    },
     "vault.add_new": {
         "en": "<Add New...>",
         "en-tts": "<Add New...>",

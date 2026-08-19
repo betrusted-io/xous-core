@@ -133,7 +133,7 @@ pub fn keystore(sid: SID) -> ! {
                 }
                 buffer.replace(kwp).unwrap();
             }
-            Opcode::EphemeralOp => {
+            Opcode::Ephemeral => {
                 todo!()
             }
             _ => {

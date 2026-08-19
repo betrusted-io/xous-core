@@ -1,0 +1,153 @@
+# PDDB std::fs CI machine definition (headless SoC + EC pair).
+#
+# Derived from emulation/betrusted.resc via the validated headless probe.
+# Driven by tools/pddb-fs-ci.py (local loop) or emulation/tests/pddb-fs.robot
+# (renode-test).
+#
+# The EC machine is MANDATORY: without it the SoC's first COM transaction
+# null-derefs in ComConnector and takes down the whole Renode process, and the
+# PDDB mount path spin-waits on EC readiness. Do not remove it.
+#
+# Deliberately absent vs. betrusted.resc: gdb servers, socket terminals and
+# analyzers (no fixed listen ports -> parallel CI jobs cannot collide; drive
+# the monitor via stdin instead), and anything linux-server/wifi-switch
+# related (wifi test peer only, not needed here).
+
+# Overridable parameters; defaults resolve relative to this script.
+# Callers (driver/robot) set these before including this file. The flash
+# backing file MUST be a per-run scratch file: the flash model writes through
+# into it (and auto-creates it if missing; pre-fill with 0xFF for a blank NOR).
+$image_dir?=$ORIGIN/../../target/riscv32imac-unknown-xous-elf/release
+$flash_file?=$ORIGIN/../../target/pddb-fs-ci/flash.bin
+$console_log?=$ORIGIN/../../target/pddb-fs-ci/console.log
+$kernel_log?=$ORIGIN/../../target/pddb-fs-ci/kernel.log
+
+# Add emulation/ to the global path, so @peripherals/..., @soc/... and
+# @ec/... resolve exactly as they do for emulation/betrusted.resc.
+path add $ORIGIN/..
+
+using sysbus
+
+# Deterministic runs: fixed emulation seed (feeds the TRNG models).
+emulation SetSeed 0x0
+
+# Serial execution trades emulation speed for stricter cross-run determinism
+# (cf. emulation/xous-swap.resc). Left disabled; the harness pilot and all
+# subsequent validation runs were green without it.
+# emulation SetGlobalSerialExecution true
+
+# Add peripherals that are defined in C#.  You must restart Renode
+# if you modify these files.
+i @peripherals/ABRTCMC.cs
+i @peripherals/BetrustedEcI2C.cs
+i @peripherals/BetrustedSocI2C.cs
+i @peripherals/BetrustedSpinor.cs
+i @peripherals/BetrustedWatchdog.cs
+i @peripherals/BQ24157.cs
+i @peripherals/BQ27421.cs
+i @peripherals/BtEvents.cs
+i @peripherals/ComConnector.cs
+EnsureTypeIsLoaded "Antmicro.Renode.Peripherals.SPI.Betrusted.IComPeripheral"
+EnsureTypeIsLoaded "Antmicro.Renode.Peripherals.SPI.Betrusted.IComController"
+i @peripherals/ComEc.cs
+i @peripherals/ComSoC.cs
+i @peripherals/EcPower.cs
+i @peripherals/EcWifi.cs
+i @peripherals/engine.cs
+i @peripherals/Jtag.cs
+i @peripherals/keyboard.cs
+i @peripherals/keyrom.cs
+i @peripherals/LiteX_Timer_32.cs
+i @peripherals/LM3509.cs
+i @peripherals/LSM6DS3.cs
+i @peripherals/memlcd.cs
+i @peripherals/MXIC_MX66UM1G45G.cs
+i @peripherals/sha512.cs
+i @peripherals/spinor_soft_int.cs
+i @peripherals/ticktimer.cs
+i @peripherals/trng_kernel.cs
+i @peripherals/trng_server.cs
+i @peripherals/TLV320AIC3100.cs
+i @peripherals/TUSB320LAI.cs
+i @peripherals/WF200.cs
+i @peripherals/wfi.cs
+
+EnsureTypeIsLoaded "Antmicro.Renode.Peripherals.CPU.VexRiscv"
+i @peripherals/vexriscv-aes.cs
+
+EnsureTypeIsLoaded "Antmicro.Renode.Peripherals.Timers.Betrusted.TickTimer"
+i @peripherals/susres.cs
+
+# Create the COM SPI bus
+emulation CreateComConnector "com"
+
+############### Define the Betrusted SoC ###############
+mach create "SoC"
+machine LoadPlatformDescription @soc/betrusted-soc.repl
+
+sysbus Tag <0xB0000000, 0xB0006000> "Framebuffer"
+
+# Silence GPIO
+sysbus SilenceRange <0xf0003000, 0xF0003FFF>
+# Silence POWER
+sysbus SilenceRange <0xF0014000 100>
+
+# Attach the flash backing to the per-run scratch file (writes persist!)
+sysbus.spinor.flash BackingFile $flash_file
+
+# Load the SPI flash into RAM
+sysbus LoadBinary $ORIGIN/../../utralib/renode/soc_csr.bin 0x20000000
+
+# Connect the SoC to the SPI bus
+connector Connect sysbus.com com
+
+# The macro `reset` gets called implicitly when running `machine Reset`
+macro reset
+"""
+    sysbus LoadBinary $image_dir/loader.bin 0x20500000
+    sysbus LoadBinary $image_dir/xous.img 0x20980000
+    # Set $a0 to point at the args binary
+    cpu SetRegisterUnsafe 10 0x20980000
+    cpu PC 0x20501000
+"""
+
+# File-backed UART capture with immediate flush (xous-swap.resc idiom).
+# All CI markers/sentinels appear on `console` (the log-server UART);
+# `uart` carries kernel debug only.
+uart CreateFileBackend $kernel_log true
+console CreateFileBackend $console_log true
+
+runMacro $reset
+
+mach clear
+
+############### Define the Betrusted EC ###############
+mach create "EC"
+machine LoadPlatformDescription @ec/betrusted-ec.repl
+
+# Connect the EC to the SPI bus
+connector Connect sysbus.com com
+
+macro reset
+"""
+    sysbus LoadBinary @ec/bt-ec.bin 0x20000000
+    sysbus LoadBinary @ec/wf200_fw.bin 0x2009C000
+    sysbus LoadBinary @ec/loader.bin 0x00000000
+    cpu PC 0
+    cpu SP 0x1001FFFC
+"""
+runMacro $reset
+
+mach clear
+
+# Renode 1.16.1 logs a per-access "Using `GetRegisterUnsafe` API is obsolete"
+# WARNING from each cpu (the wfi/idle path hits it continuously), which grew
+# the driver's run.log to ~29 GB over one 77-test cold run. Suppress cpu
+# messages below Error on both machines; everything else keeps its level.
+mach set "SoC"
+logLevel 3 sysbus.cpu
+mach set "EC"
+logLevel 3 sysbus.cpu
+mach clear
+
+start

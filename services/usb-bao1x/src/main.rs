@@ -108,7 +108,7 @@ pub(crate) fn main_hw() -> ! {
     assert!(
         bao1x_hal::usb::driver::CRG_UDC_TOTAL_MEM_LEN <= bao1x_hal::usb::driver::CRG_IFRAM_PAGES * 0x1000
     );
-    log::info!(
+    log::debug!(
         "total memory len: {:x}, allocated: {:x}",
         bao1x_hal::usb::driver::CRG_UDC_TOTAL_MEM_LEN,
         bao1x_hal::usb::driver::CRG_IFRAM_PAGES * 0x1000
@@ -122,21 +122,19 @@ pub(crate) fn main_hw() -> ! {
     .expect("couldn't allocate IRQ1 pages");
     let usb = AtomicCsr::new(usb_mapping.as_ptr() as *mut u32);
     let irq_csr = AtomicCsr::new(irq_range.as_ptr() as *mut u32);
-    log::info!("IRQ1 csr: {:x} -> {:x}", utra::irqarray1::HW_IRQARRAY1_BASE, unsafe {
+    log::debug!("IRQ1 csr: {:x} -> {:x}", utra::irqarray1::HW_IRQARRAY1_BASE, unsafe {
         irq_csr.base() as usize
     });
 
-    log::info!("making hw object");
     let mut corigine_usb =
         unsafe { CorigineUsb::new(ifram_range.as_ptr() as usize, usb.clone(), irq_csr.clone()) };
-    log::info!("reset..");
     corigine_usb.reset(); // initial reset of the core; we want some time to pass before doing the next items
 
     // safety: this is only safe because we will actually claim the IRQ after all the initializations are
     // done, and we promise not to enable interrupts until that time, either.
     unsafe {
         corigine_usb.irq_claimed();
-        log::info!("claimed irq");
+        log::debug!("claimed irq");
     }
     let cw = CorigineWrapper::new(corigine_usb);
     let usb_alloc = UsbBusAllocator::new(cw.clone());
@@ -279,7 +277,7 @@ pub(crate) fn main_hw() -> ! {
     iox.set_gpio_pin_dir(se0_port, se0_pin, bao1x_api::IoxDir::Input); // release SE0 state, allowing for enumeration
     // NOTE: if SE0 is required, the KPC has to be un-configured to allow the SE0 I/O to actually be driven
 
-    log::info!("Entering main loop");
+    log::debug!("Entering main loop");
 
     let mut msg_opt = None;
     loop {
@@ -309,6 +307,16 @@ pub(crate) fn main_hw() -> ! {
                     // log::warn!("Received an interrupt but no actual event reported");
                 }
             },
+            #[cfg(all(feature = "board-baosec", feature = "oem-baosec-lite"))]
+            Opcode::PmicIrq => {
+                use bao1x_hal::axp2101::VbusIrq;
+                if let Some(scalar) = msg.body.scalar_message_mut() {
+                    let vbus_irq = VbusIrq::from(scalar.arg1);
+                    if vbus_irq == VbusIrq::Remove {
+                        cu.unplug();
+                    }
+                }
+            }
             Opcode::U2fRxDeferred => {
                 // notify the event listener, if any
                 if observer_conn.is_some() && observer_op.is_some() {
@@ -404,7 +412,7 @@ pub(crate) fn main_hw() -> ! {
                 }
             }
             Opcode::IrqFidoRx => {
-                if let Some(raw_report) = cu.hid_packet.take() {
+                if let Some(raw_report) = cu.hid_packet.pop_front() {
                     let u2f_report = HIDReport(raw_report);
                     if let Some(mut listener) = fido_listener.take() {
                         let mut response = unsafe {
@@ -432,6 +440,12 @@ pub(crate) fn main_hw() -> ! {
                 let mut buffer =
                     unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let mut u2f_ipc = buffer.to_original::<U2fMsgIpc, _>().unwrap();
+                if cu.device.state() != usb_device::device::UsbDeviceState::Configured {
+                    log::warn!("U2fTx: HANGUP");
+                    u2f_ipc.code = U2fCode::Hangup;
+                    buffer.replace(u2f_ipc).unwrap();
+                    continue;
+                }
                 if fido_listener_pid == msg.sender.pid() {
                     let mut u2f_msg = RawFidoReport::default();
                     assert_eq!(u2f_ipc.code, U2fCode::Tx, "Expected U2fCode::Tx in wrapper");
@@ -441,6 +455,15 @@ pub(crate) fn main_hw() -> ! {
                         cu.fido_tx_queue.borrow_mut().push_back(u2f_msg);
                     }
                     cu.sw_irq(UsbIrqReq::FidoTx);
+                    // ensure that the interrupt has happened, because the interrupt can create
+                    // concurrency issues on the fido_tx_queue if we've re-entered this function
+                    // before the interrupt has processed
+                    while !cu.irq_serviced.load(Ordering::SeqCst) {
+                        xous::yield_slice();
+                    }
+                    // clear the serviced flag here - this is OK because this is the only other thread
+                    // that can access the variable.
+                    cu.irq_serviced.store(false, Ordering::SeqCst);
                     log::debug!("enqueued U2F packet {:x?}", u2f_ipc.data);
                     u2f_ipc.code = U2fCode::TxAck;
                 } else {
@@ -450,6 +473,10 @@ pub(crate) fn main_hw() -> ! {
             }
             Opcode::SendKeyCode => {
                 if let Some(scalar) = msg.body.scalar_message_mut() {
+                    if cu.device.state() != usb_device::device::UsbDeviceState::Configured {
+                        continue;
+                    }
+
                     let code0 = scalar.arg1;
                     let code1 = scalar.arg2;
                     let code2 = scalar.arg3;
@@ -493,6 +520,12 @@ pub(crate) fn main_hw() -> ! {
                     unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let mut usb_send = buffer.to_original::<api::UsbString, _>().unwrap();
                 let mut sent = 0;
+                if cu.device.state() != usb_device::device::UsbDeviceState::Configured {
+                    log::warn!("Aborting send, no USB configured");
+                    usb_send.sent = Some(0);
+                    buffer.replace(usb_send).unwrap();
+                    continue;
+                }
 
                 // check keymap on every call because we may need to toggle this for e.g. plugging
                 // into a new host with a different map
@@ -696,8 +729,12 @@ pub(crate) fn main_hw() -> ! {
                 serial_listener.take();
             }
             Opcode::SerialFlush => msg_scalar_unpack!(msg, _, _, _, _, {
-                // this will hardware flush any pending items in usb_serial driver
-                cu.serial_port.flush().ok();
+                if cu.device.state() != usb_device::device::UsbDeviceState::Configured {
+                    continue;
+                }
+                // The interrupt handler may access the same usbd-serial state through
+                // UsbDevice::poll(), so the flush must use the IRQ-safe wrapper.
+                cu.serial_flush_irq_safe().ok();
                 // this tries to return any data that's pending within the main loop's buffers
                 match serial_listen_mode {
                     SerialListenMode::BinaryListener => {
@@ -738,18 +775,57 @@ pub(crate) fn main_hw() -> ! {
                 }
             }),
             Opcode::SerialSendData => {
+                if cu.device.state() != usb_device::device::UsbDeviceState::Configured {
+                    continue;
+                }
                 let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                 let data = buffer.to_original::<UsbSerialBinary, _>().unwrap();
-                let mut total_sent = 0;
+
+                // This is a best-effort, non-blocking path. Stop at the first short
+                // write or error because only a contiguous prefix can be accepted.
                 for chunk in data.d.chunks(crate::hw::SERIAL_MAX_PACKET_SIZE) {
-                    match cu.serial_port.write(chunk) {
-                        Ok(sent) => total_sent += sent,
-                        Err(e) => {
-                            log::error!("Error in SerialSendData: {:?}", e);
-                        }
+                    match cu.serial_write_irq_safe(chunk) {
+                        Ok(sent) if sent == chunk.len() => {}
+                        Ok(_) | Err(_) => break,
                     }
                 }
-                log::debug!("Serial sent {} bytes", total_sent);
+            }
+            Opcode::SerialSendDataBlocking => {
+                let mut buffer =
+                    unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+
+                let mut request = buffer.to_original::<UsbSerialSend, _>().unwrap();
+
+                if cu.device.state() != usb_device::device::UsbDeviceState::Configured {
+                    // The IPC request itself was handled successfully, but no bytes
+                    // can be accepted while the USB device is not configured.
+                    request.sent = Some(0);
+                    buffer.replace(request).unwrap();
+                    continue;
+                }
+
+                let mut total_sent = 0usize;
+
+                // usbd-serial has a smaller internal transmit buffer than the IPC
+                // payload, so submit the request in USB-sized chunks.
+                //
+                // Only a contiguous prefix is reported as accepted. Stop at the
+                // first short write or error and let the caller retry the remainder.
+                for chunk in request.d.chunks(crate::hw::SERIAL_MAX_PACKET_SIZE) {
+                    match cu.serial_write_irq_safe(chunk) {
+                        Ok(sent) => {
+                            total_sent += sent;
+
+                            if sent < chunk.len() {
+                                break;
+                            }
+                        }
+                        Err(_) => break,
+                    }
+                }
+
+                request.sent = Some(total_sent as u32);
+                buffer.replace(request).unwrap();
             }
             Opcode::LogString => {
                 // the logger API is "best effort" only. Because retries and response codes can cause problems
@@ -762,7 +838,7 @@ pub(crate) fn main_hw() -> ! {
                             for chunk in
                                 usb_send.s.as_bytes().chunks(bao1x_hal::usb::driver::CRG_UDC_APP_BUFSIZE)
                             {
-                                cu.serial_port.write(&chunk).ok();
+                                cu.serial_write_irq_safe(&chunk).ok();
                             }
                         }
                         _ => {} // silent errors
@@ -791,7 +867,7 @@ pub(crate) fn main_hw() -> ! {
                 break;
             }
             _ => {
-                unimplemented!(
+                log::warn!(
                     "Opcode {:?} not implemented for this version of the USB stack: {:?}",
                     opcode,
                     msg

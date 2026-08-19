@@ -72,7 +72,7 @@ impl Captouch {
         let resource_grant = bio_ss.claim_resources(&Self::resource_spec())?;
         let config =
             CoreConfig { clock_mode: bao1x_api::bio::ClockMode::ExternalPin(BioPin::new(pin.as_u8())) };
-        bio_ss.init_core(resource_grant.cores[0], &captouch_sense_code(), 0, config)?;
+        bio_ss.init_core(resource_grant.cores[0], captouch_sense_code(), config)?;
 
         // claim pin resource - this only claims the resource, it does not configure it
         bio_ss.claim_dynamic_pin(pin.as_u8(), &Captouch::resource_spec().claimer)?;

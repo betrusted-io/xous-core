@@ -14,6 +14,9 @@ pub const PAGE: u8 = ROW as u8 / 8;
 // IFRAM space reserved for UDMA channel commands
 const SIDEBAND_LEN: usize = 256;
 
+// 0x4f is a bit too bright
+pub const DEFAULT_BRIGHTNESS: u8 = 0x3f;
+
 pub struct MainThreadToken(());
 impl MainThreadToken {
     pub fn new() -> Self { MainThreadToken(()) }
@@ -180,6 +183,7 @@ pub struct Oled128x128<'a> {
     powerdown: bool,
     power_port: IoxPort,
     power_pin: u8,
+    clk_div: u8,
 }
 
 impl<'a> Oled128x128<'a> {
@@ -264,7 +268,17 @@ impl<'a> Oled128x128<'a> {
             power_port,
             power_pin,
             powerdown: false,
+            clk_div: ((perclk_freq / 2) / 2_000_000) as u8,
         }
+    }
+
+    // used to recover a wedged SPI interface
+    pub fn reinit_spi(&mut self) {
+        self.spim.send_cmd_list(&[crate::udma::SpimCmd::Config(
+            SpimClkPol::LeadingEdgeRise,
+            SpimClkPha::CaptureOnLeading,
+            self.clk_div,
+        )]);
     }
 
     /// This should only be called to initialize the panic handler with its own
@@ -297,8 +311,9 @@ impl<'a> Oled128x128<'a> {
             Option<CommandSet>,
         ),
         bool,
+        u8,
     ) {
-        (self.spim.into_raw_parts(), self.powerdown)
+        (self.spim.into_raw_parts(), self.powerdown, self.clk_div)
     }
 
     /// Creates a clone of the display handle. This is only safe if the handles are used in a
@@ -328,6 +343,7 @@ impl<'a> Oled128x128<'a> {
                 Option<CommandSet>,
             ),
             bool,
+            u8,
         ),
         iox: &'a T,
     ) -> Self
@@ -351,6 +367,7 @@ impl<'a> Oled128x128<'a> {
                 command_set,
             ),
             powerdown,
+            clk_div,
         ) = display_parts;
         // compile them into a new object
         let mut spim = unsafe {
@@ -395,6 +412,7 @@ impl<'a> Oled128x128<'a> {
             powerdown,
             power_pin,
             power_port,
+            clk_div,
         }
     }
 
@@ -404,7 +422,7 @@ impl<'a> Oled128x128<'a> {
 
     pub fn screen_size(&self) -> Point { Point::new(WIDTH, LINES) }
 
-    pub fn redraw(&mut self) { self.draw(); }
+    pub fn redraw(&mut self) -> Result<(), xous::Error> { self.draw() }
 
     pub fn blit_screen(&mut self, bmp: &[u32]) { self.buffer.copy_from_slice(bmp); }
 
@@ -414,21 +432,21 @@ impl<'a> Oled128x128<'a> {
 
     pub fn stash(&mut self) { self.stash.copy_from_slice(&self.buffer); }
 
-    pub fn pop(&mut self) {
+    pub fn pop(&mut self) -> Result<(), xous::Error> {
         self.buffer.copy_from_slice(&self.stash);
-        self.redraw();
+        self.redraw()
     }
 
     fn set_data(&self) { self.iox.set_gpio_pin_value(self.cd_port, self.cd_pin, IoxValue::High); }
 
     fn set_command(&self) { self.iox.set_gpio_pin_value(self.cd_port, self.cd_pin, IoxValue::Low); }
 
-    pub fn send_command<'b, U>(&'b mut self, cmd: U)
+    pub fn send_command<'b, U>(&'b mut self, cmd: U) -> Result<(), xous::Error>
     where
         U: IntoIterator<Item = u8> + 'b,
     {
         if self.powerdown {
-            return;
+            return Ok(());
         }
         self.set_command();
         let total_buf_len = self.buffer.len() * size_of::<u32>();
@@ -448,16 +466,18 @@ impl<'a> Oled128x128<'a> {
                 .txrx_data_async_from_parts::<u8>(total_buf_len, len, true, false)
                 .expect("Couldn't initiate oled command");
         }
-        self.spim.txrx_await(false).unwrap_or_else(|_e| {
-            #[cfg(feature = "std")]
-            log::error!("txrx err {:?}", _e);
-            &[]
-        });
+        self.spim
+            .txrx_await(false)
+            .inspect_err(|_| {
+                #[cfg(feature = "std")]
+                log::error!("timeout in send_command");
+            })
+            .map(|_| ())
     }
 
-    pub fn init(&mut self) {
+    pub fn init(&mut self) -> Result<(), xous::Error> {
         if self.powerdown {
-            return;
+            return Ok(());
         }
         use Command::*;
         let init_sequence = [
@@ -465,7 +485,7 @@ impl<'a> Oled128x128<'a> {
             SetDCDCSettings(0x0),
             SetStartLine(0),
             SetDisplayOffset(0),
-            SetContrastControl(0x3f), // was 0x4f, was a bit too bright
+            SetContrastControl(DEFAULT_BRIGHTNESS),
             SetAddressMode(AddressMode::Column),
             SetSegmentReMap(false),
             SetCOMScanDirection(Direction::Inverted),
@@ -480,21 +500,43 @@ impl<'a> Oled128x128<'a> {
 
         for command in init_sequence {
             let bytes = command.encode();
-            self.send_command(bytes);
+            self.send_command(bytes)?;
         }
         // clear the frame buffer
         self.buffer_mut().fill(0xFFFF_FFFF);
-        self.draw();
+        self.draw()?;
 
         let display_on = [DisplayOnOff(DisplayState::On)];
         for command in display_on {
             let bytes = command.encode();
-            self.send_command(bytes);
+            self.send_command(bytes)?;
         }
+        Ok(())
+    }
+
+    pub fn flip_vertical(&mut self, flip: bool) -> Result<(), xous::Error> {
+        use Command::*;
+        let cmds = if flip {
+            // flipped
+            [SetSegmentReMap(true), SetCOMScanDirection(Direction::Normal)]
+        } else {
+            // normal
+            [SetSegmentReMap(false), SetCOMScanDirection(Direction::Inverted)]
+        };
+        for c in cmds {
+            let bytes = c.encode();
+            self.send_command(bytes)?;
+        }
+        Ok(())
     }
 
     pub fn powerdown(&mut self) {
         self.powerdown = true;
+        let powoff = [Command::DisplayOnOff(DisplayState::Off)];
+        for command in powoff {
+            let bytes = command.encode();
+            self.send_command(bytes).ok();
+        }
         // assert reset
         crate::board::assert_periph_reset(self.iox, true);
         self.iox.set_gpio_pin_value(self.cd_port, self.cd_pin, IoxValue::Low);
@@ -512,14 +554,233 @@ impl<'a> Oled128x128<'a> {
         crate::board::assert_periph_reset(self.iox, false);
         self.powerdown = false;
     }
+
+    pub fn brightness(&mut self, level: u8) -> Result<(), xous::Error> {
+        let bytes = Command::SetContrastControl(level).encode();
+        self.send_command(bytes)
+    }
+
+    #[cfg(feature = "std")]
+    pub fn render_bitmap(&mut self, bitmap: ux_api::service::api::BaosecBitmap) {
+        const W: isize = WIDTH as _;
+        const H: isize = LINES as _;
+
+        // Clamp bounding box to valid bitmap dimensions.
+        // If br > 128, truncate. If tl < 0, clamp to 0.
+        let src_x0 = bitmap.bounding_box.tl.x.max(0);
+        let src_y0 = bitmap.bounding_box.tl.y.max(0);
+        let src_x1 = bitmap.bounding_box.br.x.min(W);
+        let src_y1 = bitmap.bounding_box.br.y.min(H);
+
+        for src_y in src_y0..src_y1 {
+            // Map this bitmap row to its destination row in the framebuffer.
+            let dst_y = src_y + bitmap.top_left.y;
+
+            // Skip rows that land outside the framebuffer.
+            if dst_y < 0 || dst_y >= H {
+                continue;
+            }
+
+            for src_x in src_x0..src_x1 {
+                // Map this bitmap column to its destination column.
+                let dst_x = src_x + bitmap.top_left.x;
+
+                // Skip columns that land outside the framebuffer.
+                if dst_x < 0 || dst_x >= W {
+                    continue;
+                }
+
+                // --- read source bit ---
+                let src_linear = (src_x + src_y * W) as usize;
+                let src_word = src_linear >> 5; // / 32
+                let src_shift = src_linear & 0x1F; // % 32
+                let on = (bitmap.bits[src_word] >> src_shift) & 1;
+
+                // --- write destination bit ---
+                let dst_linear = (dst_x + dst_y * W) as usize;
+                let dst_word = dst_linear >> 5;
+                let dst_shift = dst_linear & 0x1F;
+
+                if on != 0 {
+                    self.buffer[dst_word] |= 1 << dst_shift;
+                } else {
+                    self.buffer[dst_word] &= !(1 << dst_shift);
+                }
+            }
+        }
+    }
+
+    /// A diffusion-transition effect courtesy of Claude Sonnet 4.6. Query fed in `render_bitmap` code
+    /// and asked for a variant that does a "diffusive dither" transition. Applied largely without changes;
+    /// the main change was adjusting the seed to be passed, in instead of fixed, so the transition can be
+    /// different every call.
+    #[cfg(feature = "std")]
+    pub fn render_bitmap_diffuse(
+        &mut self,
+        bitmap: &ux_api::service::api::BaosecBitmap,
+        frames: usize,
+        seed: u64,
+    ) -> Result<(), xous::Error> {
+        use std::collections::VecDeque;
+
+        const W: isize = WIDTH as isize;
+        const H: isize = LINES as isize;
+
+        // -- 1. Build per-pixel metadata for the destination region --------------
+        //
+        // We work in framebuffer linear-index space (0..WIDTH*LINES).
+        // Three bitmasks, each 512 u32 words == 16 384 bits == one bit per pixel.
+
+        let mut in_region = [0u32; 512]; // 1 = this fb pixel is touched by the bitmap
+        let mut target_bit = [0u32; 512]; // desired final value for pixels in region
+        let mut settled = [0u32; 512]; // 1 = pixel already written this transition
+
+        // Clamp the source bounding box (mirrors render_bitmap).
+        let src_x0 = bitmap.bounding_box.tl.x.max(0);
+        let src_y0 = bitmap.bounding_box.tl.y.max(0);
+        let src_x1 = bitmap.bounding_box.br.x.min(W);
+        let src_y1 = bitmap.bounding_box.br.y.min(H);
+
+        let mut total: usize = 0;
+
+        for src_y in src_y0..src_y1 {
+            let dst_y = src_y + bitmap.top_left.y;
+            if dst_y < 0 || dst_y >= H {
+                continue;
+            }
+            for src_x in src_x0..src_x1 {
+                let dst_x = src_x + bitmap.top_left.x;
+                if dst_x < 0 || dst_x >= W {
+                    continue;
+                }
+
+                let src_lin = (src_x + src_y * W) as usize;
+                let dst_lin = (dst_x + dst_y * W) as usize;
+
+                in_region[dst_lin >> 5] |= 1 << (dst_lin & 31);
+                total += 1;
+
+                let bit = (bitmap.bits[src_lin >> 5] >> (src_lin & 31)) & 1;
+                if bit != 0 {
+                    target_bit[dst_lin >> 5] |= 1 << (dst_lin & 31);
+                }
+            }
+        }
+
+        if total == 0 || frames == 0 {
+            return Ok(());
+        }
+
+        // -- 2. Collect region pixel indices for random seeding ------------------
+
+        let mut region_pixels: Vec<usize> = Vec::with_capacity(total);
+        for i in 0..(WIDTH as usize * LINES as usize) {
+            if (in_region[i >> 5] >> (i & 31)) & 1 != 0 {
+                region_pixels.push(i);
+            }
+        }
+
+        // -- 3. Tiny xorshift-64 RNG (no std::collections dependency needed) -----
+
+        let mut rng: u64 = seed ^ total as u64;
+        macro_rules! rand {
+            () => {{
+                rng ^= rng << 13;
+                rng ^= rng >> 7;
+                rng ^= rng << 17;
+                rng
+            }};
+        }
+
+        // -- 4. Diffusion loop ----------------------------------------------------
+
+        let pixels_per_frame = (total / frames).max(1);
+
+        // Scatter a handful of seeds so diffusion starts from multiple origins.
+        let mut frontier: VecDeque<usize> = VecDeque::new();
+        let n_seeds = (total / 32).clamp(1, 64);
+        for _ in 0..n_seeds {
+            let dl = region_pixels[(rand!() as usize) % total];
+            if (settled[dl >> 5] >> (dl & 31)) & 1 == 0 {
+                settled[dl >> 5] |= 1 << (dl & 31);
+                frontier.push_back(dl);
+            }
+        }
+
+        let mut committed: usize = 0;
+
+        while committed < total {
+            let mut this_frame: usize = 0;
+
+            while this_frame < pixels_per_frame {
+                // If the frontier runs dry, plant a new random seed.
+                if frontier.is_empty() {
+                    let mut planted = false;
+                    for _ in 0..64 {
+                        let dl = region_pixels[(rand!() as usize) % total];
+                        if (settled[dl >> 5] >> (dl & 31)) & 1 == 0 {
+                            settled[dl >> 5] |= 1 << (dl & 31);
+                            frontier.push_back(dl);
+                            planted = true;
+                            break;
+                        }
+                    }
+                    if !planted {
+                        break;
+                    } // all pixels settled
+                }
+
+                // -- commit the next frontier pixel -------------------------------
+                let dl = frontier.pop_front().unwrap();
+
+                let on = (target_bit[dl >> 5] >> (dl & 31)) & 1;
+                if on != 0 {
+                    self.buffer[dl >> 5] |= 1 << (dl & 31);
+                } else {
+                    self.buffer[dl >> 5] &= !(1 << (dl & 31));
+                }
+                this_frame += 1;
+
+                // -- expand to unsettled cardinal neighbours in the region ---------
+                let dst_x = (dl % WIDTH as usize) as isize;
+                let dst_y = (dl / WIDTH as usize) as isize;
+
+                for (nx, ny) in
+                    [(dst_x - 1, dst_y), (dst_x + 1, dst_y), (dst_x, dst_y - 1), (dst_x, dst_y + 1)]
+                {
+                    if nx < 0 || nx >= W || ny < 0 || ny >= H {
+                        continue;
+                    }
+                    let ndl = (nx + ny * W) as usize;
+                    if (in_region[ndl >> 5] >> (ndl & 31)) & 1 == 0 {
+                        continue;
+                    }
+                    if (settled[ndl >> 5] >> (ndl & 31)) & 1 != 0 {
+                        continue;
+                    }
+                    settled[ndl >> 5] |= 1 << (ndl & 31);
+                    frontier.push_back(ndl);
+                }
+            }
+
+            committed += this_frame;
+            if this_frame > 0 {
+                self.redraw()?;
+            }
+            if this_frame == 0 {
+                break;
+            } // guard against impossible stuck state
+        }
+        Ok(())
+    }
 }
 
 impl<'a> FrameBuffer for Oled128x128<'a> {
     /// Copies the SRAM buffer to IFRAM and then transfers that over SPI
-    fn draw(&mut self) {
+    fn draw(&mut self) -> Result<(), xous::Error> {
         self.hw_buf.copy_from_slice(&self.buffer);
         if self.powerdown {
-            return;
+            return Ok(());
         }
         let chunk_size = 16;
         let chunks = self.buffer().len() * size_of::<u32>() / chunk_size;
@@ -530,8 +791,8 @@ impl<'a> FrameBuffer for Oled128x128<'a> {
             // the transaction is done before the data is done transmitting, and we have to
             // toggle set_data() only after the physical transaction is done, not after the
             // the last UDMA action has been queued.
-            self.send_command(Command::SetPageAddress(0).encode());
-            self.send_command(Command::SetColumnAddress(page as u8).encode());
+            self.send_command(Command::SetPageAddress(0).encode())?;
+            self.send_command(Command::SetColumnAddress(page as u8).encode())?;
             // wait for commands to finish before toggling set_data
             // self.spim.tx_data_await(false);
             // crate::println!("Send page {}, offset {:x}", page, page * chunk_size);
@@ -542,12 +803,12 @@ impl<'a> FrameBuffer for Oled128x128<'a> {
                     .txrx_data_async_from_parts::<u8>(page * chunk_size, chunk_size, true, false)
                     .expect("Couldn't initiate oled data transfer");
             }
-            self.spim.txrx_await(false).unwrap_or_else(|_e| {
+            self.spim.txrx_await(false).inspect_err(|_| {
                 #[cfg(feature = "std")]
-                log::error!("txrx err {:?}", _e);
-                &[]
-            });
+                log::error!("timeout in draw");
+            })?;
         }
+        Ok(())
     }
 
     fn clear(&mut self) { self.buffer_mut().fill(0xFFFF_FFFF); }

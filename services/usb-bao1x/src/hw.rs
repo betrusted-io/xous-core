@@ -47,7 +47,7 @@ pub struct Bao1xUsb<'a> {
         >,
     >,
     // storage for hid_packets to expatriate from the interrupt handler
-    pub hid_packet: Option<[u8; 64]>,
+    pub hid_packet: VecDeque<[u8; 64]>,
     pub serial_port: SerialPort<'a, CorigineWrapper, [u8; 1024], [u8; 1024]>,
     // holds one HS packet - must be statically allocated in IRQ handler. Valid length is
     // passed as part of the interrupt recovery message.
@@ -57,6 +57,7 @@ pub struct Bao1xUsb<'a> {
     // from the interrupt handler.
     pub double_lock: AtomicBool,
     pub led_state: KeyboardLedsReport,
+    pub irq_serviced: AtomicBool,
 }
 
 impl<'a> Bao1xUsb<'a> {
@@ -117,11 +118,12 @@ impl<'a> Bao1xUsb<'a> {
             fido_tx_queue: RefCell::new(VecDeque::new()),
             kbd_tx_queue: RefCell::new(VecDeque::new()),
             irq_req: None,
-            hid_packet: None,
+            hid_packet: VecDeque::with_capacity(4),
             serial_port,
             serial_rx: [0u8; SERIAL_MAX_PACKET_SIZE],
             double_lock: AtomicBool::new(false),
             led_state: KeyboardLedsReport::default(),
+            irq_serviced: AtomicBool::new(false),
         }
     }
 
@@ -146,7 +148,7 @@ impl<'a> Bao1xUsb<'a> {
         self.irq_csr.wo(utra::irqarray1::EV_EDGE_TRIGGERED, 0);
         self.irq_csr.wo(utra::irqarray1::EV_POLARITY, 0);
 
-        self.wrapper.core().init();
+        self.wrapper.core().init(None);
         self.wrapper.core().start();
         self.wrapper.core().update_current_speed();
 
@@ -162,13 +164,13 @@ impl<'a> Bao1xUsb<'a> {
 
     /// Process an unplug event - only valid on baosec, because dabao doesn't have a battery and unplugging
     /// it would power it down.
-    #[cfg(all(feature = "board-baosec", not(feature = "oem-baosec-lite")))]
+    #[cfg(all(feature = "board-baosec"))]
     pub fn unplug(&mut self) {
         // disable all interrupts so we can safely go through initialization routines
         self.irq_csr.wo(utra::irqarray1::EV_ENABLE, 0);
 
         self.wrapper.core().reset();
-        self.wrapper.core().init();
+        self.wrapper.core().init(None);
         self.wrapper.core().start();
         self.wrapper.core().update_current_speed();
 
@@ -190,6 +192,58 @@ impl<'a> Bao1xUsb<'a> {
         // re-enable IRQs
         self.irq_csr.wo(utra::irqarray1::EV_PENDING, 0xFFFF_FFFF);
         self.irq_csr.wo(utra::irqarray1::EV_ENABLE, CORIGINE_IRQ_MASK | SW_IRQ_MASK);
+    }
+
+    /// Writes data to the USB CDC serial transmit buffer while preventing
+    /// re-entry from the Corigine USB interrupt handler.
+    ///
+    /// `serial_port.write()` modifies the internal `usbd-serial` transmit
+    /// buffer. The USB interrupt handler may call `UsbDevice::poll()`, which
+    /// can flush and modify the same buffer when an IN transfer completes.
+    ///
+    /// Allowing those operations to run concurrently can corrupt the buffer's
+    /// read and write positions and lead to an out-of-bounds access. Mask the
+    /// Corigine interrupt only for the duration of the buffer update.
+    ///
+    /// Pending interrupt events are not cleared here. An event raised while
+    /// the interrupt is masked remains pending and is processed after the
+    /// previous interrupt-enable state is restored.
+    pub fn serial_write_irq_safe(&mut self, data: &[u8]) -> usb_device::Result<usize> {
+        // IRQARRAY1 is currently dedicated to the Corigine USB implementation,
+        // so this code assumes there are no concurrent writers to EV_ENABLE.
+        // If another IRQARRAY1 user is added, access to EV_ENABLE must be
+        // centralized or protected by an IRQ-safe synchronization mechanism.
+        let previous_enable = self.irq_csr.r(utra::irqarray1::EV_ENABLE);
+
+        self.irq_csr.wo(utra::irqarray1::EV_ENABLE, previous_enable & !CORIGINE_IRQ_MASK);
+
+        compiler_fence(Ordering::SeqCst);
+
+        let result = self.serial_port.write(data);
+
+        compiler_fence(Ordering::SeqCst);
+
+        self.irq_csr.wo(utra::irqarray1::EV_ENABLE, previous_enable);
+
+        result
+    }
+
+    /// Flushes the USB CDC serial transmit buffer without allowing the USB
+    /// interrupt handler to access the same `usbd-serial` state concurrently.
+    pub fn serial_flush_irq_safe(&mut self) -> usb_device::Result<()> {
+        let previous_enable = self.irq_csr.r(utra::irqarray1::EV_ENABLE);
+
+        self.irq_csr.wo(utra::irqarray1::EV_ENABLE, previous_enable & !CORIGINE_IRQ_MASK);
+
+        compiler_fence(Ordering::SeqCst);
+
+        let result = self.serial_port.flush();
+
+        compiler_fence(Ordering::SeqCst);
+
+        self.irq_csr.wo(utra::irqarray1::EV_ENABLE, previous_enable);
+
+        result
     }
 }
 
@@ -299,7 +353,7 @@ pub(crate) fn composite_handler(_irq_no: usize, arg: *mut usize) {
                     match class.device::<RawFido<'_, _>, _>().read_report() {
                         Ok(u2f_report) => {
                             // crate::println!("got report {:x?}", u2f_report);
-                            usb.hid_packet = Some(u2f_report.packet);
+                            usb.hid_packet.push_back(u2f_report.packet);
                             xous::try_send_message(
                                 usb.conn,
                                 Message::new_scalar(Opcode::IrqFidoRx.to_usize().unwrap(), 0, 0, 0, 0),
@@ -355,6 +409,7 @@ pub(crate) fn composite_handler(_irq_no: usize, arg: *mut usize) {
                 while let Some(u2f_msg) = usb.fido_tx_queue.borrow_mut().pop_front() {
                     u2f.write_report(&u2f_msg).ok();
                 }
+                usb.irq_serviced.store(true, Ordering::SeqCst);
             }
             Some(UsbIrqReq::KbdTx) => {
                 let keyboard = composite.device::<NKROBootKeyboard<'_, _>, _>();

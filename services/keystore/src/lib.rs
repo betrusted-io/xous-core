@@ -1,3 +1,4 @@
+use bao1x_api::{BackupFlags, OneWayEncoding, OneWayErr};
 pub use cipher::{
     BlockBackend, BlockCipher, BlockClosure, BlockDecrypt, BlockEncrypt, BlockSizeUser, ParBlocksSizeUser,
     consts::U16, generic_array::GenericArray, inout::InOut,
@@ -191,6 +192,235 @@ impl Keystore {
             }
             _ => unimplemented!(),
         }
+    }
+
+    pub fn is_developer(&self) -> Result<bool, xous::Error> {
+        match xous::send_message(
+            self.conn,
+            xous::Message::new_blocking_scalar(Opcode::IsDeveloper.to_usize().unwrap(), 0, 0, 0, 0),
+        )? {
+            xous::Result::Scalar5(_, is_developer, _, _, _) => {
+                if is_developer == 0 {
+                    Ok(true)
+                } else {
+                    Ok(false)
+                }
+            }
+            _ => unimplemented!(),
+        }
+    }
+
+    pub fn set_flags(&self, flags: BackupFlags) -> Result<(), xous::Error> {
+        xous::send_message(
+            self.conn,
+            xous::Message::new_blocking_scalar(
+                Opcode::SetFlags.to_usize().unwrap(),
+                flags.raw_value() as usize,
+                0,
+                0,
+                0,
+            ),
+        )
+        .map(|_| ())
+    }
+
+    pub fn get_flags(&self) -> Result<BackupFlags, xous::Error> {
+        match xous::send_message(
+            self.conn,
+            xous::Message::new_blocking_scalar(Opcode::GetFlags.to_usize().unwrap(), 0, 0, 0, 0),
+        )? {
+            xous::Result::Scalar5(_, flags, _, _, _) => Ok(BackupFlags::new_with_raw_value(flags as u32)),
+            _ => unimplemented!(),
+        }
+    }
+
+    /// Marked as `unsafe` because the offset needs to be correct. It's recommended to use
+    /// `inc_owc_coded()` where possible. This function is necessary for the cases that don't
+    /// fit into the `encode_oneway` mechanism, e.g. key revocations, etc.
+    ///
+    /// All you have to do to be safe is no be super-sure you got the offset right.
+    #[cfg(feature = "owc-inc")]
+    pub unsafe fn inc_owc(&self, offset: usize) -> Result<(), OneWayErr> {
+        let result = xous::send_message(
+            self.conn,
+            xous::Message::new_blocking_scalar(
+                Opcode::IncOneWayCounter.to_usize().unwrap(),
+                offset,
+                OWC_MAGIC_INC[0],
+                OWC_MAGIC_INC[1],
+                OWC_MAGIC_INC[2],
+            ),
+        );
+        match result {
+            Ok(xous::Result::Scalar5(_, arg1, _arg2, _arg3, _arg4)) => {
+                match num_traits::FromPrimitive::from_usize(arg1) {
+                    Some(OneWayErr::None) => Ok(()),
+                    Some(e) => Err(e),
+                    _ => Err(OneWayErr::InternalError),
+                }
+            }
+            _ => Err(OneWayErr::InternalError),
+        }
+    }
+
+    /// Automatically increments the correct slot based on the OFFSET encoded in the definition
+    #[cfg(feature = "owc-inc")]
+    pub fn inc_owc_coded<T>(&self) -> Result<(), OneWayErr>
+    where
+        T: OneWayEncoding,
+        T::Error: core::fmt::Debug,
+    {
+        let offset: usize = T::OFFSET;
+        if offset < bao1x_hal::acram::MAX_ONEWAY_COUNTERS {
+            unsafe { self.inc_owc(offset) }
+        } else {
+            Err(OneWayErr::OutOfBounds)
+        }
+    }
+
+    pub fn get_owc(&self, offset: usize) -> Result<u32, OneWayErr> {
+        let result = xous::send_message(
+            self.conn,
+            xous::Message::new_blocking_scalar(
+                Opcode::GetOneWayCounter.to_usize().unwrap(),
+                offset,
+                OWC_MAGIC_GET[0],
+                OWC_MAGIC_GET[1],
+                OWC_MAGIC_GET[2],
+            ),
+        );
+        match result {
+            Ok(xous::Result::Scalar5(_id, arg1, arg2, _arg3, _arg4)) => {
+                match num_traits::FromPrimitive::from_usize(arg1) {
+                    Some(OneWayErr::None) => Ok(arg2 as u32),
+                    Some(e) => Err(e),
+                    _ => Err(OneWayErr::InternalError),
+                }
+            }
+            _ => Err(OneWayErr::InternalError),
+        }
+    }
+
+    pub fn get_owc_decoded<T>(&self) -> Result<T, OneWayErr>
+    where
+        T: OneWayEncoding,
+        T: TryFrom<u32>,
+        T::Error: core::fmt::Debug,
+    {
+        let raw = self.get_owc(T::OFFSET)?;
+        T::try_from(raw).map_err(|_| OneWayErr::InvalidCoding)
+    }
+
+    #[cfg(feature = "bao1x")]
+    pub fn set_ephemeral_key(&self, key: &[u8; bao1x_hal::buram::KEY_LEN]) -> Result<(), xous::Error> {
+        let offset = 0;
+        xous::send_message(
+            self.conn,
+            xous::Message::new_blocking_scalar(
+                Opcode::Ephemeral.to_usize().unwrap(),
+                EphemeralOp::SetLsb.to_usize().unwrap(),
+                u32::from_le_bytes(key[offset..offset + 4].try_into().unwrap()) as usize,
+                u32::from_le_bytes(key[offset + 4..offset + 8].try_into().unwrap()) as usize,
+                u32::from_le_bytes(key[offset + 8..offset + 12].try_into().unwrap()) as usize,
+            ),
+        )
+        .map(|_| ())?;
+
+        let offset = bao1x_hal::buram::KEY_LEN / 2;
+        xous::send_message(
+            self.conn,
+            xous::Message::new_blocking_scalar(
+                Opcode::Ephemeral.to_usize().unwrap(),
+                EphemeralOp::SetMsb.to_usize().unwrap(),
+                u32::from_le_bytes(key[offset..offset + 4].try_into().unwrap()) as usize,
+                u32::from_le_bytes(key[offset + 4..offset + 8].try_into().unwrap()) as usize,
+                u32::from_le_bytes(key[offset + 8..offset + 12].try_into().unwrap()) as usize,
+            ),
+        )
+        .map(|_| ())
+    }
+
+    #[cfg(feature = "bao1x")]
+    pub fn get_ephemeral_key(&self) -> Result<[u8; bao1x_hal::buram::KEY_LEN], xous::Error> {
+        let mut key = [0u8; bao1x_hal::buram::KEY_LEN];
+        let offset = 0;
+        match xous::send_message(
+            self.conn,
+            xous::Message::new_blocking_scalar(
+                Opcode::Ephemeral.to_usize().unwrap(),
+                EphemeralOp::GetLsb.to_usize().unwrap(),
+                0,
+                0,
+                0,
+            ),
+        )? {
+            xous::Result::Scalar5(_, _, arg2, arg3, arg4) => {
+                key[offset..offset + 4].copy_from_slice(&arg2.to_le_bytes());
+                key[offset + 4..offset + 8].copy_from_slice(&arg3.to_le_bytes());
+                key[offset + 8..offset + 12].copy_from_slice(&arg4.to_le_bytes());
+            }
+            _ => unimplemented!(),
+        }
+        let offset = bao1x_hal::buram::KEY_LEN / 2;
+        match xous::send_message(
+            self.conn,
+            xous::Message::new_blocking_scalar(
+                Opcode::Ephemeral.to_usize().unwrap(),
+                EphemeralOp::GetMsb.to_usize().unwrap(),
+                0,
+                0,
+                0,
+            ),
+        )? {
+            xous::Result::Scalar5(_, _, arg2, arg3, arg4) => {
+                key[offset..offset + 4].copy_from_slice(&arg2.to_le_bytes());
+                key[offset + 4..offset + 8].copy_from_slice(&arg3.to_le_bytes());
+                key[offset + 8..offset + 12].copy_from_slice(&arg4.to_le_bytes());
+            }
+            _ => unimplemented!(),
+        }
+        Ok(key)
+    }
+
+    #[cfg(feature = "app-keys")]
+    pub fn read_app_key(&self, index: usize) -> Result<[u8; 32], xous::Error> {
+        let app_key = AppKey::ReadRequest { guard: APPKEY_GUARD, index };
+        let mut buf = Buffer::into_buf(app_key).or(Err(xous::Error::InternalError))?;
+        buf.lend_mut(self.conn, Opcode::AppKeyOp.to_u32().unwrap()).or(Err(xous::Error::InternalError))?;
+        match buf.to_original::<AppKey, _>().unwrap() {
+            AppKey::ReadResponse { data } => Ok(data),
+            AppKey::AccessDenied => Err(xous::Error::AccessDenied),
+            _ => Err(xous::Error::InternalError),
+        }
+    }
+
+    #[cfg(feature = "app-keys")]
+    pub fn write_app_key(&self, index: usize, data: &[u8; 32]) -> Result<(), xous::Error> {
+        let mut storage = [0u8; 32];
+        storage.copy_from_slice(data);
+        let app_key = AppKey::Write { guard: APPKEY_GUARD, index, data: storage };
+        let mut buf = Buffer::into_buf(app_key).or(Err(xous::Error::InternalError))?;
+        buf.lend_mut(self.conn, Opcode::AppKeyOp.to_u32().unwrap()).or(Err(xous::Error::InternalError))?;
+        match buf.to_original::<AppKey, _>().unwrap() {
+            AppKey::Success => Ok(()),
+            AppKey::AccessDenied => Err(xous::Error::AccessDenied),
+            _ => Err(xous::Error::InternalError),
+        }
+    }
+
+    #[cfg(feature = "swap")]
+    pub fn ensure_swap_encryption(
+        &self,
+        status_server: &str,
+        op: usize,
+        token: [u32; 3],
+    ) -> Result<(), xous::Error> {
+        let call =
+            SwapEncryptCall { status_server: status_server.to_owned(), status_opcode: op as u32, token };
+        let buf = Buffer::into_buf(call).or(Err(xous::Error::InternalError))?;
+        buf.send(self.conn, Opcode::EnsureSwapEncryption.to_u32().unwrap())
+            .or(Err(xous::Error::InternalError))?;
+        Ok(())
     }
 }
 

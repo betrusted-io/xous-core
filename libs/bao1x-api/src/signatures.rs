@@ -12,6 +12,11 @@ pub const SIGNATURE_LENGTH: usize = 64; // length of an ed25519 signature.
 pub const PUBLIC_KEY_LENGTH: usize = 32; // length of an ed25519 public key.
 pub const AAD_LENGTH: usize = 60; // at least 37 bytes, rounded up to the nearest 32-byte boundary
 
+pub const PUBLIC_KEY_PQ_LENGTH: usize = 32; // length of a slh-dsa-128-24 key
+// the signature is so large, it has to be post-pended to the firmware blob. Thus the position
+// of the signature varies from run to run
+pub const SIGNATURE_PQ_LENGTH: usize = 3856; // length of a slh-dsa-12824 signature
+
 /// These are notional and subject to change
 #[repr(u32)]
 #[derive(num_enum::TryFromPrimitive, PartialEq, Eq, Clone, Copy)]
@@ -58,7 +63,25 @@ impl FunctionCode {
     }
 }
 
+/// Due to an implementation bug, this is effectively a fixed number
 pub const BAOCHIP_SIG_VERSION: u32 = 0x1_00;
+
+/// This logic allows us to have a meaningful versioning
+pub const BAOCHIP_SIG_MAJ_VER: u8 = 0x01;
+pub const BAOCHIP_SIG_MIN_VER: u8 = 0x00;
+pub const BAOCHIP_SIG_REV_VER: u16 = 0x0000;
+pub const fn baochip_sig_version() -> u32 {
+    BAOCHIP_SIG_REV_VER as u32 | (BAOCHIP_SIG_MIN_VER as u32) << 16 | (BAOCHIP_SIG_MAJ_VER as u32) << 24
+}
+pub const fn baochip_sig_compat(incoming: u32) -> bool {
+    if (incoming >> 24) as u8 == BAOCHIP_SIG_MAJ_VER {
+        BAOCHIP_SIG_MIN_VER > (incoming >> 16) as u8
+            || BAOCHIP_SIG_MIN_VER == (incoming >> 16) as u8 && (BAOCHIP_SIG_REV_VER >= incoming as u16)
+    } else {
+        false
+    }
+}
+
 pub const PADDING_LEN: usize = SIGBLOCK_LEN - size_of::<SignatureInFlash>();
 pub const MAGIC_NUMBER: [u32; 2] = [u32::from_be_bytes(*b"yumy"), u32::from_be_bytes(*b"Bao3")];
 /// Representation of the signature block in memory.
@@ -102,10 +125,61 @@ impl Default for SignatureInFlash {
     }
 }
 impl SignatureInFlash {
-    // The offset is after the jal instruction + signature.
+    /// The offset is after the jal instruction + signature.
     pub const fn sealed_data_offset() -> usize {
         size_of::<u32>() + SIGNATURE_LENGTH + size_of::<u32>() + AAD_LENGTH
     }
+
+    /// The end of the signed code
+    pub fn sealed_data_end(&self) -> usize { self.sealed_data.signed_len as usize + UNSIGNED_LEN }
+
+    /// Returns the address of this structure in memory.
+    pub fn base_addr(&self) -> usize { self as *const Self as usize }
+
+    /// Returns the PQ signature field
+    /// Safety:
+    ///   - Only safe on XIP signature records. Records in off-chip memory have to copy the field out.
+    ///   - `base` must point to the actual XIP base in question
+    pub unsafe fn pq_signature(&self, base: usize) -> &SignaturePqInFlash {
+        let addr = base + self.sealed_data_end();
+
+        // SAFETY: `addr` points to at least SIGNATURE_PQ_LENGTH readable, initialized
+        // bytes for the lifetime of this reference (backed by RRAM, not concurrently
+        // mutated). Alignment is satisfied since SignaturePqInFlash has an alignment of 1.
+        let sig_struct: &SignaturePqInFlash = unsafe { &*(addr as *const SignaturePqInFlash) };
+        sig_struct
+    }
+
+    /// Offset for retrieving signature from off-chip memory implementations
+    pub fn pq_signature_offset(&self) -> usize { self.sealed_data_end() }
+
+    /// Returns `true` if this record is compatible with the current code
+    pub fn is_compatible(&self) -> bool {
+        // corrected_version == 0x0 is the legacy code. We can't break compatibility
+        // with these records under any circumstances, unfortunately. However, if corrected_version
+        // is not 0x0, we can increment the maj/min/rev fields and have a meaningful version in the
+        // signature records.
+        self.sealed_data.version == BAOCHIP_SIG_VERSION
+            && (self.sealed_data.corrected_version == 0x0
+                || baochip_sig_compat(self.sealed_data.corrected_version))
+    }
+}
+
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub struct SignaturePqInFlash {
+    pub signature: [u8; SIGNATURE_PQ_LENGTH],
+}
+unsafe impl Zeroable for SignaturePqInFlash {}
+unsafe impl Pod for SignaturePqInFlash {}
+impl AsRef<[u8]> for SignaturePqInFlash {
+    fn as_ref(&self) -> &[u8] { bytemuck::bytes_of(self) }
+}
+impl AsMut<[u8]> for SignaturePqInFlash {
+    fn as_mut(&mut self) -> &mut [u8] { bytemuck::bytes_of_mut(self) }
+}
+impl Default for SignaturePqInFlash {
+    fn default() -> Self { Self { signature: [0u8; SIGNATURE_PQ_LENGTH] } }
 }
 
 #[repr(C)]
@@ -121,6 +195,24 @@ impl Default for Pubkey {
 }
 impl Pubkey {
     pub fn populate_from(&mut self, record: &Pubkey) {
+        self.pk.copy_from_slice(&record.pk);
+        self.tag.copy_from_slice(&record.tag);
+    }
+}
+
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub struct PubkeyPq {
+    pub pk: [u8; PUBLIC_KEY_PQ_LENGTH],
+    pub tag: [u8; 4],
+}
+unsafe impl Zeroable for PubkeyPq {}
+unsafe impl Pod for PubkeyPq {}
+impl Default for PubkeyPq {
+    fn default() -> Self { Self { pk: [0u8; PUBLIC_KEY_PQ_LENGTH], tag: [0u8; 4] } }
+}
+impl PubkeyPq {
+    pub fn populate_from(&mut self, record: &PubkeyPq) {
         self.pk.copy_from_slice(&record.pk);
         self.tag.copy_from_slice(&record.tag);
     }
@@ -172,6 +264,18 @@ pub struct SealedFields {
     ///
     /// This field is long enough to hold a SHA-1 git hash.
     pub toolchain: [u8; 20],
+    // ==== this is the end of non-pq signatures verion 01_00 ====
+    /// The version field is repeated here, because the original version code check was buggy in that
+    /// any version other than the one exactly specified would cause an incompatibility problem. We can't
+    /// fix that my changing its version - it's now effectively fixed or we brick devices. This
+    /// `corrected_version` field now specifies the actual version of the signature here
+    pub corrected_version: u32,
+    /// This is *guaranteed* to be 0 in non-PQ versions because this is zero-padded by the image generator.
+    /// Thus a value of `0` here means there is no PQ signature.
+    pub pq_enabled: u32,
+    /// Similar in structure to the `pubkeys` field. These are similarly immutable but there isn't
+    /// the backup copy kept in the IFR, as we're running out of space there.
+    pub pubkeys_pq: [PubkeyPq; 4],
 }
 
 impl AsRef<[u8]> for SealedFields {
@@ -189,6 +293,9 @@ impl Default for SealedFields {
             semver: [0u8; 16],
             pubkeys: [Pubkey::default(); 4],
             toolchain: [0u8; 20],
+            corrected_version: baochip_sig_version(),
+            pq_enabled: 0,
+            pubkeys_pq: [PubkeyPq::default(); 4],
         }
     }
 }
@@ -206,6 +313,9 @@ pub struct SwapSourceHeader {
 impl AsRef<[u8]> for SwapSourceHeader {
     fn as_ref(&self) -> &[u8] { bytemuck::bytes_of(self) }
 }
+impl AsMut<[u8]> for SwapSourceHeader {
+    fn as_mut(&mut self) -> &mut [u8] { bytemuck::bytes_of_mut(self) }
+}
 impl Default for SwapSourceHeader {
     fn default() -> Self {
         Self { version: 0, partial_nonce: [0; 8], mac_offset: 0, aad_len: 0, aad: [0; 64] }
@@ -218,9 +328,13 @@ pub struct SwapDescriptor {
     pub ram_offset: u32,
     pub ram_size: u32,
     pub name: u32,
+    /// This field is deprecated. It is ignored but retained so that the record shape
+    /// remains backward compatible
     pub key: [u8; 32],
     pub flash_offset: u32,
 }
 impl AsRef<[u8]> for SwapDescriptor {
     fn as_ref(&self) -> &[u8] { bytemuck::bytes_of(self) }
 }
+
+pub const SWAP_VERSION: u32 = 0x01_01_0000;

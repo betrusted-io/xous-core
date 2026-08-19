@@ -26,65 +26,71 @@ fn char_offset(c: char) -> isize {
     fallback
 }
 
-pub fn msg<'a>(fb: &mut dyn FrameBuffer, text: &'a str, ll_pos: Point, fg: ColorNative, bg: ColorNative) {
-    let mut ll_pos = ll_pos.clone();
-    // this routine is adapted from the embedded graphics crate https://docs.rs/embedded-graphics/0.7.1/embedded_graphics/
+pub fn msg<'a>(
+    fb: &mut dyn FrameBuffer,
+    text: &'a str,
+    ll_pos: Point,
+    fg: ColorNative,
+    bg: ColorNative,
+    upside_down: bool,
+    screen_size: Point, // e.g. Point::new(SCREEN_WIDTH, SCREEN_HEIGHT); ignored when !upside_down
+) {
+    let mut ll_pos = ll_pos; // no need for .clone() on Copy types
     let char_per_row = FONT_IMAGE_WIDTH / CHAR_WIDTH;
-    let mut idx = 0;
+    let mut idx: isize = 0;
+
     for current_char in text.chars() {
-        let mut char_walk_x = 0;
-        let mut char_walk_y = 0;
+        let cur_byte = current_char as u8;
+        let is_cr = cur_byte == 0x0d;
+        let is_lf = cur_byte == 0x0a;
+        let is_visible = !is_cr && !is_lf;
 
+        // -- Per-character constants (hoisted out of the pixel loop) ----------
+        let char_offset = char_offset(current_char);
+        let row = char_offset / char_per_row;
+        let char_x = (char_offset - (row * char_per_row)) * CHAR_WIDTH;
+        let char_y = row * CHAR_HEIGHT;
+        // Base bit index in the font bitmap for the top-left of this glyph
+        let base_bitmap_idx = char_x + FONT_IMAGE_WIDTH * char_y;
+        // Screen X of the left edge of this character
+        let char_screen_x = ll_pos.x + CHAR_WIDTH * idx;
+
+        // -- Pixel walk -------------------------------------------------------
+        let mut char_walk_x: isize = 0;
+        let mut char_walk_y: isize = 0;
         loop {
-            // Char _code_ offset from first char, most often a space
-            // E.g. first char = ' ' (32), target char = '!' (33), offset = 33 - 32 = 1
-            let char_offset = char_offset(current_char);
-            let row = char_offset / char_per_row;
+            if is_visible {
+                let bitmap_bit_idx = base_bitmap_idx + char_walk_x + char_walk_y * FONT_IMAGE_WIDTH;
+                let bitmap_byte = (bitmap_bit_idx / 8) as usize;
+                let bitmap_bit = bitmap_bit_idx as u8 & 7 ^ 7;
+                let color = if FONT_IMAGE[bitmap_byte] & (1 << bitmap_bit) != 0 { fg } else { bg };
 
-            // Top left corner of character, in pixels
-            let char_x = (char_offset - (row * char_per_row)) * CHAR_WIDTH;
-            let char_y = row * CHAR_HEIGHT;
+                let px = char_screen_x + char_walk_x;
+                let py = ll_pos.y + char_walk_y;
 
-            // Bit index
-            // = X pixel offset for char
-            // + Character row offset (row 0 = 0, row 1 = (192 * 8) = 1536)
-            // + X offset for the pixel block that comprises this char
-            // + Y offset for pixel block
-            let bitmap_bit_index =
-                char_x + (FONT_IMAGE_WIDTH * char_y) + char_walk_x + (char_walk_y * FONT_IMAGE_WIDTH);
+                // For upside-down: mirror the screen position.
+                let draw_point = if upside_down {
+                    Point::new(screen_size.x - 1 - px, screen_size.y - 1 - py)
+                } else {
+                    Point::new(px, py)
+                };
 
-            let bitmap_byte = bitmap_bit_index / 8;
-            let bitmap_bit = 7 - (bitmap_bit_index % 8);
-
-            let color = if FONT_IMAGE[bitmap_byte as usize] & (1 << bitmap_bit) != 0 { fg } else { bg };
-
-            let x = ll_pos.x + CHAR_WIDTH * idx + char_walk_x;
-            let y = ll_pos.y + char_walk_y;
-
-            // draw color at x, y
-            if (current_char as u8 != 0xd) && (current_char as u8 != 0xa) {
-                // don't draw CRLF specials
-                fb.put_pixel(Point::new(x, y), color);
+                fb.put_pixel(draw_point, color);
             }
 
             char_walk_x += 1;
-
             if char_walk_x >= CHAR_WIDTH {
                 char_walk_x = 0;
                 char_walk_y += 1;
-
-                // Done with this char, move on to the next one
                 if char_walk_y >= CHAR_HEIGHT {
-                    if current_char as u8 == 0xd {
-                        // '\n'
+                    if is_cr {
                         ll_pos.y += CHAR_HEIGHT;
-                    } else if current_char as u8 == 0xa {
-                        // '\r'
+                    } else if is_lf {
                         ll_pos.x = LEFT_MARGIN;
+                        idx = 0;
                     } else {
                         idx += 1;
                     }
-
                     break;
                 }
             }

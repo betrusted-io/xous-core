@@ -1205,6 +1205,27 @@ impl Repl {
                 }
             }
             "sensor" => {
+                use core::convert::TryInto;
+
+                use digest::Digest;
+                use sha2_bao1x::Sha512;
+                fn hash_region(region: &[u8]) -> [u8; 128] {
+                    let mut hasher = Sha512::new();
+                    hasher.update(&region);
+                    let digest: [u8; 64] = hasher.finalize().try_into().unwrap();
+                    let mut buffer = [0u8; 128];
+                    hex::encode_to_slice(digest, &mut buffer).unwrap();
+                    buffer
+                }
+                // hash a ~1.5M region of RAM, avoiding stack/heap areas
+                let mem_region = unsafe { core::slice::from_raw_parts(0x6101_0000 as *const u8, 0x1D_0000) };
+                let init_hash = hash_region(&mem_region);
+                let init_str = core::str::from_utf8(&init_hash).unwrap();
+                crate::println!("init hash: {}", init_str);
+
+                let sramtrm = CSR::new(utra::coresub_sramtrm::HW_CORESUB_SRAMTRM_BASE as *mut u32);
+                crate::println!("sramsec: {:x}", sramtrm.r(utra::coresub_sramtrm::SFR_RAMSEC));
+
                 let mut sensor = CSR::new(utra::sensorc::HW_SENSORC_BASE as *mut u32);
                 let mut irq13 = CSR::new(utra::irqarray13::HW_IRQARRAY13_BASE as *mut u32);
                 let mut irq15 = CSR::new(utra::irqarray15::HW_IRQARRAY15_BASE as *mut u32);
@@ -1270,6 +1291,11 @@ impl Repl {
                     if cur_irq15 != last_irq15 {
                         crate::println!("irq15: {:x}", cur_irq15);
                         last_irq15 = cur_irq15;
+                    }
+                    let check_hash = hash_region(&mem_region);
+                    if check_hash != init_hash {
+                        let check_str = core::str::from_utf8(&check_hash).unwrap();
+                        crate::println!("check hash: {}", check_str);
                     }
                     critical_section::with(|cs| {
                         if crate::USB_RX.borrow(cs).borrow().len() > 0

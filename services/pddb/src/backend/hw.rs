@@ -2261,7 +2261,6 @@ impl PddbOs {
         // step 1. Erase the entire PDDB region - leaves the state in all 1's
         if !fast {
             log::info!("Erasing the PDDB region");
-            #[cfg(feature = "gen1")]
             if let Some(modals) = progress {
                 modals
                     .start_progress(
@@ -2311,7 +2310,6 @@ impl PddbOs {
                     }
                 }
             }
-            #[cfg(feature = "gen1")]
             if let Some(modals) = progress {
                 modals.update_progress(PDDB_A_LOC + PDDB_A_LEN as u32).expect("couldn't update progress bar");
                 modals.finish_progress().expect("couldn't dismiss progress bar");
@@ -2321,7 +2319,6 @@ impl PddbOs {
         }
 
         // step 2. fill in the page table with junk, which marks it as cryptographically empty
-        #[cfg(feature = "gen1")]
         if let Some(modals) = progress {
             modals
                 .start_progress(t!("pddb.initpt", locales::LANG), 0, size_of::<PageTableInFlash>() as u32, 0)
@@ -2337,7 +2334,6 @@ impl PddbOs {
                 }
             }
         }
-        #[cfg(feature = "gen1")]
         if let Some(modals) = progress {
             modals
                 .update_progress(size_of::<PageTableInFlash>() as u32)
@@ -2355,7 +2351,6 @@ impl PddbOs {
             }
             self.patch_pagetable_raw(&temp, remainder_start as u32);
         }
-        #[cfg(feature = "gen1")]
         if let Some(modals) = progress {
             modals.finish_progress().expect("couldn't dismiss progress bar");
             #[cfg(feature = "ux-swap-delay")]
@@ -2367,7 +2362,6 @@ impl PddbOs {
         //if !self.rootkeys.ensure_aes_password() {
         //    return Err(Error::new(ErrorKind::PermissionDenied, "unlock password was incorrect"));
         //}
-        #[cfg(feature = "gen1")]
         if let Some(modals) = progress {
             modals
                 .start_progress(t!("pddb.key", locales::LANG), 0, 100, 0)
@@ -2394,7 +2388,6 @@ impl PddbOs {
         self.system_basis_key = Some(BasisKeys { pt: system_basis_key_pt, data: system_basis_key }); // this causes system_basis_key to be owned by self and go out of scope
         let mut crypto_keys = StaticCryptoData::default();
         crypto_keys.version = SCD_VERSION; // should already be set by `default()` but let's be sure.
-        #[cfg(feature = "gen1")]
         if let Some(modals) = progress {
             modals.update_progress(50).expect("couldn't update progress bar");
             #[cfg(feature = "ux-swap-delay")]
@@ -2414,7 +2407,6 @@ impl PddbOs {
         self.entropy.borrow_mut().get_slice(&mut crypto_keys.salt_base);
         // commit keys
         self.patch_keys(crypto_keys.deref(), 0);
-        #[cfg(feature = "gen1")]
         if let Some(modals) = progress {
             modals.update_progress(100).expect("couldn't update progress bar");
             #[cfg(feature = "ux-swap-delay")]
@@ -2436,7 +2428,6 @@ impl PddbOs {
         // step 5. fscb handling
         // pick a set of random pages from the free pool and assign it to the fscb
         // pass the generator an empty cache - this causes it to treat the entire disk as free space
-        #[cfg(feature = "gen1")]
         if let Some(modals) = progress {
             modals
                 .start_progress(t!("pddb.fastspace", locales::LANG), 0, 100, 0)
@@ -2448,7 +2439,6 @@ impl PddbOs {
         for (&src, dst) in free_pool.iter().zip(fast_space.free_pool.iter_mut()) {
             *dst = src;
         }
-        #[cfg(feature = "gen1")]
         if let Some(modals) = progress {
             modals.update_progress(50).expect("couldn't update progress bar");
             #[cfg(feature = "ux-swap-delay")]
@@ -2470,7 +2460,6 @@ impl PddbOs {
         // step 5. salt the free space with random numbers. this can take a while, we might need a "progress
         // report" of some kind... this is coded using "direct disk" offsets...under the assumption
         // that we only ever really want to do this here, and not re-use this routine elsewhere.
-        #[cfg(feature = "gen1")]
         if let Some(modals) = progress {
             modals
                 .start_progress(
@@ -2524,7 +2513,6 @@ impl PddbOs {
             #[cfg(all(feature = "gen2", target_os = "xous"))]
             self.patch(&temp, offset);
         }
-        #[cfg(feature = "gen1")]
         if let Some(modals) = progress {
             modals.update_progress(PDDB_A_LEN as u32).expect("couldn't update progress bar");
             #[cfg(feature = "ux-swap-delay")]
@@ -2535,7 +2523,6 @@ impl PddbOs {
         }
 
         // step 6. create the system basis root structure
-        #[cfg(feature = "gen1")]
         if let Some(modals) = progress {
             modals
                 .start_progress(t!("pddb.structure", locales::LANG), 0, 100, 0)
@@ -2553,7 +2540,6 @@ impl PddbOs {
 
         // step 7. Create a hashmap for our reverse PTE, allocate sectors, and add it to the Pddb's cache
         self.fast_space_read(); // we reconstitute our fspace map even though it was just generated, partially as a sanity check that everything is ok
-        #[cfg(feature = "gen1")]
         if let Some(modals) = progress {
             modals.update_progress(33).expect("couldn't update progress bar");
             #[cfg(feature = "ux-swap-delay")]
@@ -2590,7 +2576,6 @@ impl PddbOs {
         let syskey = self.system_basis_key.take().unwrap(); // take the key out
         self.data_encrypt_and_patch_page_with_commit(&syskey.data, &aad, &mut block, &pp);
         self.system_basis_key = Some(syskey); // put the key back
-        #[cfg(feature = "gen1")]
         if let Some(modals) = progress {
             modals.update_progress(66).expect("couldn't update progress bar");
             #[cfg(feature = "ux-swap-delay")]
@@ -2603,7 +2588,6 @@ impl PddbOs {
             // mark the entry as clean, as it has been sync'd to disk
             phys.set_clean(true);
         }
-        #[cfg(feature = "gen1")]
         if let Some(modals) = progress {
             modals.update_progress(100).expect("couldn't update progress bar");
             #[cfg(feature = "ux-swap-delay")]

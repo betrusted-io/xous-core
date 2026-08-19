@@ -89,7 +89,7 @@ where
             if let Some(mut completed) = self.pages.remove(&page_addr) {
                 // Extract the data to pass to callback
                 let data = mem::replace(&mut completed.data, Box::new([0u8; SECTOR_SIZE]));
-                // crate::println!("calling on_complete with {:x}, {:x?}", page_addr, &data[..8]);
+                // crate::println_d!("calling on_complete with {:x}, {:x?}", page_addr, &data[..8]);
                 (self.on_complete)(page_addr, data);
                 return Ok(true);
             }

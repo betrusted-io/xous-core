@@ -18,12 +18,13 @@ pub mod signatures;
 pub use offsets::*;
 pub mod clocks;
 pub mod pubkeys;
-use arbitrary_int::u31;
+use arbitrary_int::u30;
 use bitbybit::bitfield;
 pub use clocks::*;
 pub mod bio;
 #[cfg(feature = "std")]
 pub mod bio_resources;
+pub mod checks;
 
 /// UF2 Family ID. Randomly generated, no collisions with the known list, still to be merged
 /// into the "official" list
@@ -32,8 +33,9 @@ pub const BAOCHIP_1X_UF2_FAMILY: u32 = 0xa7d7_6373;
 // density 18, memory type 20, mfg ID C2 ==> MX25L128833F
 // density 38, memory type 25, mfg ID C2 ==> MX25U12832F
 // mfg ID 0b ==> XT25Q64FWOIGT cost down option (8MiB)
-// mfg ID ba ==> ZD25Q64B super-cost down option (8MiB)
-pub const SPI_FLASH_IDS: [u32; 4] = [0x1820c2, 0x3825c2, 0x17600b, 0x1732ba];
+// mfg ID ba ==> ZD25Q64B super-cost down option (8MiB / 3.3V)
+// mfg ID 85 ==> PY25Q64HA (8MiB / 3.3V)
+pub const SPI_FLASH_IDS: [u32; 5] = [0x1820c2, 0x3825c2, 0x17600b, 0x1732ba, 0x172085];
 // KGD 5D, mfg ID 9D; remainder of bits are part of the EID
 pub const RAM_IDS: [u32; 3] = [0x5D9D, 0x559d, 0x5D0D];
 
@@ -49,6 +51,11 @@ pub const SERVER_NAME_KBD: &str = "_Matrix keyboard driver_";
 /// Do not change this constant, it is hard-coded into libraries in order to break
 /// circular dependencies on the IFRAM block.
 pub const SERVER_NAME_BAO1X_HAL: &str = "_bao1x-SoC HAL_";
+/// Server for peripherals that *also* depend on the core Bao1x HAL. These have to
+/// be in a separate server to avoid lock-up issues of the server depending on itself
+/// for services.
+pub const SERVER_NAME_BAO1X_OTHERS: &str = "_HAL-everthing-else_";
+pub const SERVER_NAME_BAO1X_I2C: &str = "_bao1x-i2c_";
 
 /// Number of boots to trigger the 'audit' command. It's set to be bigger than 1, because
 /// the chip tester may power cycle the chip during the provisioning process before the
@@ -61,8 +68,13 @@ pub const AUTO_AUDIT_LIMIT: u32 = 3;
 #[bitfield(u32)]
 #[derive(PartialEq, Eq, Debug)]
 pub struct BackupFlags {
-    #[bits(1..=31, rw)]
-    reserved: u31,
+    #[bits(2..=31, rw)]
+    reserved: u30,
+    /// When true, the system has previously booted. This is reserved for OS-level management. It is
+    /// not automatically managed by the bootloader. However, after an AORST_N, the flag should be `false`
+    /// by hardware design.
+    #[bit(1, rw)]
+    warm_boot: bool,
     /// When `false`, indicates that the time in the RTC register is not synchronized to the offset
     /// that is read from disk. Upon first encounter with an external time source, the offset should
     /// be captured and recorded to disk.

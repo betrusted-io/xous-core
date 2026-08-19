@@ -5,12 +5,12 @@ use aes_gcm_siv::{AeadInPlace, Aes256GcmSiv, KeyInit, Nonce, Tag};
 use bao1x_api::pubkeys::LOADER_TO_SWAP;
 use bao1x_api::udma::*;
 use bao1x_api::*;
+use bao1x_hal::ERASE_VALUE;
 use bao1x_hal::acram::SlotManager;
 use bao1x_hal::board::{APP_UART_IFRAM_ADDR, SPIM_FLASH_IFRAM_ADDR, SPIM_RAM_IFRAM_ADDR, SWAP_KEY};
 use bao1x_hal::ifram::IframRange;
 use bao1x_hal::iox::Iox;
 use bao1x_hal::sce;
-use bao1x_hal::sigcheck::ERASE_VALUE;
 use bao1x_hal::udma::{GlobalConfig, Spim, SpimClkPha, SpimClkPol, SpimCs};
 use rand_chacha::ChaCha8Rng;
 use rand_chacha::rand_core::RngCore;
@@ -22,6 +22,9 @@ use crate::swap::*;
 use crate::*;
 
 /// hard coded at offset 0 of SPI FLASH for now, until we figure out if and how to move this around.
+/// UPDATE: i think this is basically fixed here, if we have to move it, we need to change it in
+/// a lot of locations and I don't see much need to move it. Keeping the constant for now but
+/// maybe eventually we can just eliminate it since it's 0.
 const SWAP_IMG_START: usize = 0;
 
 pub struct SwapHal {
@@ -37,6 +40,8 @@ pub struct SwapHal {
     ram_swap_key: [u8; 32],
     src_cipher: Aes256GcmSiv,
     dst_cipher: Aes256GcmSiv,
+    pub tag: Option<[u8; 4]>,
+    pub unencrypted: HardenedBool,
     flash_spim: Spim,
     ram_spim: Spim,
     buf: RawPage,
@@ -203,7 +208,7 @@ impl SwapHal {
             // safety: buf.data is aligned to 4096-byte boundary and filled with initialized data
             let ssh: &SwapSourceHeader =
                 unsafe { (buf.data.as_ptr() as *const SwapSourceHeader).as_ref().unwrap() };
-            #[cfg(feature = "debug-print")]
+            #[cfg(feature = "unsafe-debug-print")]
             {
                 println!("SwapSourceHeader: {:x?}", ssh);
                 println!("Swap key: {:x?}", &swap.key);
@@ -215,7 +220,8 @@ impl SwapHal {
                 partial_nonce: [0u8; 8],
                 aad_storage: [0u8; 64],
                 aad_len: 0,
-                src_cipher: Aes256GcmSiv::new((&swap.key).into()),
+                // start with the "0-key" guess
+                src_cipher: Aes256GcmSiv::new((&[0u8; 32]).into()),
                 flash_spim,
                 ram_spim,
                 swap_mac_start: ram_size_actual,
@@ -224,13 +230,18 @@ impl SwapHal {
                 buf_addr: 0,
                 buf,
                 ram_swap_key: dest_key,
+                tag: None,
+                unencrypted: HardenedBool::TRUE,
             };
             hal.aad_storage[..ssh.aad_len as usize].copy_from_slice(&ssh.aad[..ssh.aad_len as usize]);
             hal.aad_len = ssh.aad_len as usize;
             hal.partial_nonce.copy_from_slice(&ssh.partial_nonce);
 
-            // trial decryption with swap key to see if it's valid
-            match hal.decrypt_src_page_at(0) {
+            // trial decryption with 0 key - if it's valid, then we have been presented a new swap image, and
+            // we have to check the signature while loading the data. For now, we also have a redundant
+            // signature check while the actual loading check is implemented that eliminates the
+            // sigcheck-to-load TOCTOU.
+            match hal.decrypt_src_page_at::<sha2_bao1x::Sha512>(0, None) {
                 Ok(_) => {
                     // check signature only if the swap key is all 0's
                     // this is not very glitch-hardened because at this point, the adversary has full
@@ -239,93 +250,108 @@ impl SwapHal {
                     // In practice for full security, the swap shall be encrypted to a custom symmetric
                     // key unique to each device, which takes the place of the signature check. This
                     // check is thus assumed to be performed only upon the first presentation of
-                    // a signed update.
-                    if swap.key == [0u8; 32] {
-                        crate::println!("Fresh swap image found - checking signature before proceeding");
-                        match bao1x_hal::sigcheck::validate_image(
-                            LOADER_TO_SWAP,
-                            Some(&mut hal.flash_spim),
-                            None,
-                        ) {
-                            Ok((k, k2, tag, _target)) => {
-                                println!(
-                                    "*** Swap signature check by key @ {}/{}({}) OK ***",
-                                    k,
-                                    !k2,
-                                    core::str::from_utf8(&tag).unwrap_or("invalid tag")
-                                );
-                                bollard!(bao1x_hal::sigcheck::die_no_std, 4);
-                                if k != !k2 {
-                                    bao1x_hal::sigcheck::die_no_std();
+                    // a signed update, and done in the defender's controlled environment.
+                    //
+                    // It is the keystore's responsibility to coordinate with the swap layer after
+                    // boot to encrypt the swap memory to the local key. Once this is done, the TOCTOU is
+                    // gone.
+                    crate::println!("Fresh swap image found - checking signature before proceeding");
+                    match bao1x_hal::sigcheck::validate_image(LOADER_TO_SWAP, Some(&mut hal.flash_spim), None)
+                    {
+                        Ok((k, k2, tag, _target, pq_tag)) => {
+                            let tag_owned;
+                            println!(
+                                "*** Swap signature check by key @ {}/{}({}) pq {} OK ***",
+                                k,
+                                !k2,
+                                core::str::from_utf8(&tag).unwrap_or("invalid tag"),
+                                if let Some(tag) = pq_tag {
+                                    tag_owned = tag;
+                                    core::str::from_utf8(&tag_owned).unwrap_or("invalid tag")
+                                } else {
+                                    "No PQ sig"
                                 }
-                                bollard!(bao1x_hal::sigcheck::die_no_std, 4);
-                                // k is just a nominal slot number. If either match, assume we are dealing
-                                // with a developer image.
-                                if tag
-                                    == *bao1x_api::pubkeys::KEYSLOT_INITIAL_TAGS
-                                        [bao1x_api::pubkeys::DEVELOPER_KEY_SLOT]
-                                    || k == bao1x_api::pubkeys::DEVELOPER_KEY_SLOT
-                                    || !k2 == bao1x_api::pubkeys::DEVELOPER_KEY_SLOT
-                                {
-                                    // we can't erase keys in the loader, because the keys have already been
-                                    // locked out at this point. Thus,
-                                    // ensure that the system is already in developer mode.
-                                    let owc = bao1x_hal::acram::OneWayCounter::new();
-                                    bollard!(bao1x_hal::sigcheck::die_no_std, 4);
-                                    if owc.get(bao1x_api::DEVELOPER_MODE).unwrap() == 0 {
-                                        println!("{}LOADER.SWAPDIE,{}", BOOKEND_START, BOOKEND_END);
-                                        println!(
-                                            "Swap is devkey signed, but system is not in developer mode. Dying!"
-                                        );
-                                        bao1x_hal::sigcheck::die_no_std();
-                                    } else {
-                                        bollard!(bao1x_hal::sigcheck::die_no_std, 4);
-                                        // check if it's still 0 - force a double-glitch
-                                        if owc.get(bao1x_api::DEVELOPER_MODE).unwrap() == 0 {
-                                            bao1x_hal::sigcheck::die_no_std();
-                                        }
-                                        bollard!(bao1x_hal::sigcheck::die_no_std, 4);
-                                        println!("{}LOADER.SWAPDEV,{}", BOOKEND_START, BOOKEND_END);
-                                        println!(
-                                            "Developer key detected on swap. Proceeding in developer mode!"
-                                        );
-                                    }
-                                    let backup = bao1x_hal::buram::BackupManager::new();
-                                    bollard!(bao1x_hal::sigcheck::die_no_std, 4);
-                                    let owc = bao1x_hal::acram::OneWayCounter::new();
-                                    if owc.get(bao1x_api::IN_SYSTEM_BOOT_SETUP_DONE).unwrap() != 0 {
-                                        let erase_proof: &[u8; 32] = backup
-                                            .get_slice(bao1x_hal::buram::ERASURE_PROOF_RANGE_BYTES)
-                                            .try_into()
-                                            .unwrap();
-                                        if erase_proof != &[ERASE_VALUE; 32] {
-                                            bao1x_hal::sigcheck::die_no_std();
-                                        }
-                                    }
-                                    bollard!(bao1x_hal::sigcheck::die_no_std, 4);
-                                }
-                            }
-                            Err(e) => {
-                                println!("{}LOADER.SWAPSIGFAIL,{}", BOOKEND_START, BOOKEND_END);
-                                println!("Fresh swap image did not pass public key validation: {:?}", e);
+                            );
+                            bollard!(bao1x_hal::sigcheck::die_no_std, 4);
+                            if k != !k2 {
                                 bao1x_hal::sigcheck::die_no_std();
                             }
+                            bollard!(bao1x_hal::sigcheck::die_no_std, 4);
+                            // k is just a nominal slot number. If either match, assume we are dealing
+                            // with a developer image.
+                            if tag
+                                == *bao1x_api::pubkeys::KEYSLOT_INITIAL_TAGS
+                                    [bao1x_api::pubkeys::DEVELOPER_KEY_SLOT]
+                                || k == bao1x_api::pubkeys::DEVELOPER_KEY_SLOT
+                                || !k2 == bao1x_api::pubkeys::DEVELOPER_KEY_SLOT
+                                || pq_tag
+                                    == Some(
+                                        *bao1x_api::pubkeys::KEYSLOT_INITIAL_TAGS
+                                            [bao1x_api::pubkeys::DEVELOPER_KEY_SLOT],
+                                    )
+                            {
+                                // we can't erase keys in the loader, because the keys have already been
+                                // locked out at this point. Thus,
+                                // ensure that the system is already in developer mode.
+                                let owc = bao1x_hal::acram::OneWayCounter::new();
+                                bollard!(bao1x_hal::sigcheck::die_no_std, 4);
+                                if owc.get(bao1x_api::DEVELOPER_MODE).unwrap() == 0 {
+                                    println!("{}LOADER.SWAPDIE,{}", BOOKEND_START, BOOKEND_END);
+                                    println!(
+                                        "Swap is devkey signed, but system is not in developer mode. Dying!"
+                                    );
+                                    bao1x_hal::sigcheck::die_no_std();
+                                } else {
+                                    bollard!(bao1x_hal::sigcheck::die_no_std, 4);
+                                    // check if it's still 0 - force a double-glitch
+                                    if owc.get(bao1x_api::DEVELOPER_MODE).unwrap() == 0 {
+                                        bao1x_hal::sigcheck::die_no_std();
+                                    }
+                                    bollard!(bao1x_hal::sigcheck::die_no_std, 4);
+                                    println!("{}LOADER.SWAPDEV,{}", BOOKEND_START, BOOKEND_END);
+                                    println!("Developer key detected on swap. Proceeding in developer mode!");
+                                }
+                                let backup = bao1x_hal::buram::BackupManager::new();
+                                bollard!(bao1x_hal::sigcheck::die_no_std, 4);
+                                let owc = bao1x_hal::acram::OneWayCounter::new();
+                                if owc.get(bao1x_api::IN_SYSTEM_BOOT_SETUP_DONE).unwrap() != 0 {
+                                    let erase_proof: &[u8; 32] = backup
+                                        .get_slice(bao1x_hal::buram::ERASURE_PROOF_RANGE_BYTES)
+                                        .try_into()
+                                        .unwrap();
+                                    if erase_proof != &[ERASE_VALUE; 32] {
+                                        bao1x_hal::sigcheck::die_no_std();
+                                    }
+                                }
+                                bollard!(bao1x_hal::sigcheck::die_no_std, 4);
+                            }
+                            hal.tag = Some(tag)
                         }
-                        // TODO: encrypt the swap image to SWAP_KEY if PARANOID_MODE is set.
+                        Err(e) => {
+                            println!("{}LOADER.SWAPSIGFAIL,{}", BOOKEND_START, BOOKEND_END);
+                            println!("Fresh swap image did not pass public key validation: {:?}", e);
+                            bao1x_hal::sigcheck::die_no_std();
+                        }
                     }
                 }
                 Err(_) => {
                     // The fully-hardened system should be using a swap that is hardened to the swap key.
                     // The premise is that the blue team has control of the system when the swap is loaded,
                     // and thus the encryption step does not need to be hardened.
+
                     let slot_mgr = SlotManager::new();
                     let swap_key = slot_mgr.read(&SWAP_KEY).unwrap();
                     // replace the cipher with the new key
                     hal.src_cipher = Aes256GcmSiv::new((*swap_key).into());
-                    if hal.decrypt_src_page_at(0).is_err() {
+                    hal.unencrypted = HardenedBool::FALSE;
+                    if hal.decrypt_src_page_at::<sha2_bao1x::Sha512>(0, None).is_err() {
                         println!("{}LOADER.SWAPDECFAIL,{}", BOOKEND_START, BOOKEND_END);
                         println!("Swap image failed cryptographic integrity checks!");
                         bao1x_hal::sigcheck::die_no_std();
+                    } else {
+                        println!(
+                            "*** Swap encrypted with AEAD by device key, signature check not required ***"
+                        );
                     }
                 }
             }
@@ -340,13 +366,31 @@ impl SwapHal {
 
     fn aad(&self) -> &[u8] { &self.aad_storage[..self.aad_len] }
 
+    pub fn read_flash(&mut self, offset: usize, len: usize) {
+        self.flash_spim.mem_read(offset as u32, &mut self.buf.data[..len], false);
+    }
+
     /// `offset` is the offset from the beginning of the encrypted region (not full disk region)
     /// Generally a caller should just .unwrap() the result; an encryption failure is a fatal error
     /// in most cases except when testing the key.
-    pub fn decrypt_src_page_at(&mut self, offset: usize) -> Result<&[u8], Error> {
+    pub fn decrypt_src_page_at<D: digest::Update>(
+        &mut self,
+        offset: usize,
+        h: Option<&mut D>,
+    ) -> Result<&[u8], Error> {
         assert!((offset & 0xFFF) == 0, "offset is not page-aligned");
         self.buf_addr = offset;
         self.flash_spim.mem_read((self.image_start + offset) as u32, &mut self.buf.data, false);
+        if let Some(h) = h {
+            #[cfg(feature = "debug-swap-sig")]
+            crate::println!(
+                "  {:x}: {:x?}..{:x?}",
+                self.image_start + offset,
+                &self.buf.data[..6],
+                &self.buf.data[4090..]
+            );
+            h.update(&self.buf.data);
+        }
         let mut nonce = [0u8; size_of::<Nonce>()];
         nonce[..4].copy_from_slice(&(offset as u32).to_be_bytes());
         nonce[4..].copy_from_slice(&self.partial_nonce);

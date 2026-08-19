@@ -21,6 +21,22 @@ lazy_static! {
     ]);
 }
 
+/// GET GitHub REST `releases` JSON with optional bearer auth.
+/// In GitHub Actions, set `GITHUB_TOKEN` (see workflow) to avoid anonymous rate limits (403).
+fn github_releases_get_json(url: &str) -> Result<serde_json::Value, String> {
+    let mut req = ureq::get(url).set("Accept", "application/vnd.github.v3+json");
+    let token = std::env::var("GITHUB_TOKEN")
+        .ok()
+        .filter(|t| !t.is_empty())
+        .or_else(|| std::env::var("GH_TOKEN").ok().filter(|t| !t.is_empty()));
+    if let Some(ref t) = token {
+        req = req.set("Authorization", &format!("Bearer {}", t));
+    }
+    let j: serde_json::Value =
+        req.call().map_err(|e| format!("{}", e))?.into_json().map_err(|e| format!("{}", e))?;
+    Ok(j)
+}
+
 /// Since we use the same TARGET for all calls to `build()`,
 /// cache it inside an atomic boolean. If this is `true` then
 /// it means we can assume the check passed already.
@@ -232,15 +248,11 @@ pub(crate) fn ensure_compiler(
         let url = TOOLCHAIN_RELEASE_URLS
             .get(target)
             .ok_or_else(|| format!("Can't find toolchain URL for target {}", target))?;
-        let j: serde_json::Value = ureq::get(url)
-            .set("Accept", "application/vnd.github.v3+json")
-            .call()
-            .map_err(|e| format!("{}", e))?
-            .into_json()
-            .map_err(|e| format!("{}", e))?;
-        // let j: serde_json::Value = serde_json::from_str(CONTENT).expect("Cannot parse manifest file");
-
-        let releases = j.as_array().unwrap();
+        let j = github_releases_get_json(url)?;
+        let releases = j.as_array().ok_or_else(|| {
+            "GitHub API response was not a release list (try setting GITHUB_TOKEN in CI; check rate limits)"
+                .to_string()
+        })?;
         let mut tag_urls = std::collections::BTreeMap::new();
 
         let target_prefix = format!("{}.{}.{}", major, minor, patch);
@@ -371,12 +383,12 @@ pub(crate) fn ensure_compiler(
 }
 
 /// Regenerate the locales files. This is only done when the command is explicitly run.
-pub(crate) fn generate_locales() -> Result<(), std::io::Error> {
+pub(crate) fn generate_locales(cargo_configs: &[String]) -> Result<(), std::io::Error> {
     let ts = filetime::FileTime::from_system_time(std::time::SystemTime::now());
     filetime::set_file_mtime("locales/src/lib.rs", ts)?;
     let mut path = project_root();
     path.push("locales");
-    let status = Command::new(cargo()).current_dir(path).args(["build", "--package", "locales"]).status()?;
+    let status = cargo(cargo_configs).current_dir(path).args(["build", "--package", "locales"]).status()?;
     if !status.success() {
         return Err(std::io::Error::new(std::io::ErrorKind::Other, "Couldn't generate the locales"));
     }
@@ -384,10 +396,10 @@ pub(crate) fn generate_locales() -> Result<(), std::io::Error> {
 }
 
 /// Import the Wycheproof test vectors
-pub(crate) fn wycheproof_import() -> Result<(), crate::DynError> {
+pub(crate) fn wycheproof_import(cargo_configs: &[String]) -> Result<(), crate::DynError> {
     let input_file = "tools/wycheproof-import/x25519_test.json";
     let output_file = "services/shellchat/src/cmds/x25519_test.bin";
-    let status = Command::new(cargo())
+    let status = cargo(cargo_configs)
         .current_dir(project_root())
         .args(["run", "--package", "wycheproof-import", "--", input_file, output_file])
         .status()?;
@@ -401,7 +413,10 @@ pub(crate) fn wycheproof_import() -> Result<(), crate::DynError> {
     Ok(())
 }
 
-pub(crate) fn track_language_changes(last_lang: &str) -> Result<(), crate::DynError> {
+pub(crate) fn track_language_changes(
+    last_lang: &str,
+    cargo_configs: &[String],
+) -> Result<(), crate::DynError> {
     let last_config = "target/LAST_LANG";
     let mut contents = String::new();
 
@@ -416,7 +431,7 @@ pub(crate) fn track_language_changes(last_lang: &str) -> Result<(), crate::DynEr
         println!("Locale language changed to {}", last_lang);
         let mut file = OpenOptions::new().create(true).write(true).truncate(true).open(last_config).unwrap();
         write!(file, "{}", last_lang).unwrap();
-        generate_locales()?
+        generate_locales(cargo_configs)?
     } else {
         println!("No change to the target locale language of {}", contents);
     }

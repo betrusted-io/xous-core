@@ -190,6 +190,9 @@ fn keyboard_service() {
             Some(KeyboardOpcode::HandlerTrigger) => {
                 todo!("Write this once we have an IRQ handler for keyboard interrupts");
             }
+            Some(KeyboardOpcode::SetOrientation) => {
+                // nop - doesn't do anything on emulation
+            }
             None => {
                 log::error!("couldn't convert KeyboardOpcode");
                 break;

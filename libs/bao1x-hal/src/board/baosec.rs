@@ -18,7 +18,10 @@ pub const SPINOR_ERASE_SIZE: u32 = bao1x_api::offsets::baosec::SPINOR_ERASE_SIZE
 pub const SPINOR_BULK_ERASE_SIZE: u32 = bao1x_api::offsets::baosec::SPINOR_BULK_ERASE_SIZE;
 pub const SPINOR_LEN: u32 = bao1x_api::offsets::baosec::SPI_FLASH_LEN as _;
 pub const PDDB_LOC: u32 = bao1x_api::offsets::baosec::PDDB_ORIGIN as _;
+#[cfg(not(feature = "oem-baosec-lite"))]
 pub const PDDB_LEN: u32 = bao1x_api::offsets::baosec::PDDB_LEN as _;
+#[cfg(feature = "oem-baosec-lite")]
+pub const PDDB_LEN: u32 = 2560 * 1024; // 2.5MiB length
 
 // Define the virtual region that memory-mapped FLASH should go to
 // top 8 megs are reserved for staging updates, backups, etc.
@@ -397,6 +400,8 @@ pub enum KeyPress {
     Left,
     Center,
     Right,
+    #[cfg(feature = "accel-kbd")]
+    Accel,
     Invalid,
     None,
 }
@@ -435,12 +440,13 @@ pub fn scan_keyboard<T: IoSetup + IoGpio>(
 
 // key:    sr1 & 0xFF | sr0 & 0xFF
 //  -- must read sr0 to pick up multiple key hit --
-// down:   0x10 | 0xfffe 1111_1110
-// select: 0x11 | 0xfffd 1111_1101 (press in on jog dial)
-// up:     0x12 | 0xfffb 1111_1011
-// right:  0x14 | 0xffef 1110_1111
-// left:   0x15 | 0xffdf 1101_1111
-// center: 0x16 | 0xffbf 1011_1111
+// down:   0x10 | 0xfffe 1111_1111_1110
+// select: 0x11 | 0xfffd 1111_1111_1101 (press in on jog dial)
+// up:     0x12 | 0xfffb 1111_1111_1011
+// right:  0x14 | 0xffef 1111_1110_1111
+// left:   0x15 | 0xffdf 1111_1101_1111
+// center: 0x16 | 0xffbf 1111_1011_1111
+// accel:  0x19 | 0xfdff 1101_1111_1111
 
 /// SR0 will contain the current raw status of all the keys and the interrupt
 /// system will continue to notify us that an event is happening until all keys
@@ -452,15 +458,17 @@ pub fn kpc_sr0_to_key(raw_event: u32) -> [KeyPress; 4] {
     let mut key_presses: [KeyPress; 4] = [KeyPress::None; 4];
     let mut key_press_index = 0;
     let masked = raw_event & 0x7F;
-    for position in 0..7 {
+    for position in 0..12 {
         if (masked & (1 << position)) == 0 {
             let kp_candidate = match position {
                 0 => KeyPress::Down,
                 1 => KeyPress::Select,
                 2 => KeyPress::Up,
-                4 => KeyPress::Right,
-                5 => KeyPress::Left,
+                4 => KeyPress::Left,
+                5 => KeyPress::Right,
                 6 => KeyPress::Center,
+                #[cfg(feature = "accel-kbd")]
+                9 => KeyPress::Accel,
                 _ => KeyPress::Invalid,
             };
             if kp_candidate != KeyPress::Invalid && key_press_index < key_presses.len() {
@@ -484,9 +492,11 @@ pub fn kpc_sr1_to_key(raw_event: u32) -> KeyPress {
         0x10 => KeyPress::Down,
         0x11 => KeyPress::Select,
         0x12 => KeyPress::Up,
-        0x14 => KeyPress::Right,
-        0x15 => KeyPress::Left,
+        0x14 => KeyPress::Left,
+        0x15 => KeyPress::Right,
         0x16 => KeyPress::Center,
+        #[cfg(feature = "accel-kbd")]
+        0x19 => KeyPress::Accel,
         _ => KeyPress::Invalid,
     }
 }

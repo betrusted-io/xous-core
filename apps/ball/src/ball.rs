@@ -1,4 +1,3 @@
-use gam::menu::api::DrawStyle;
 use gam::menu::*;
 use gam::*;
 use locales::t;
@@ -11,9 +10,9 @@ enum BallMode {
     Tilt,
 }
 
-const BALL_RADIUS: i16 = 10;
+const BALL_RADIUS: isize = 10;
 const MOMENTUM_LIMIT: i32 = 8;
-const BORDER_WIDTH: i16 = 5;
+const BORDER_WIDTH: isize = 5;
 pub(crate) struct Ball {
     gam: gam::Gam,
     gid: Gid,
@@ -78,7 +77,7 @@ impl Ball {
             screensize,
             _token: token.unwrap(),
             ball,
-            momentum: Point::new(x as i16, y as i16),
+            momentum: Point::new(x as isize, y as isize),
             trng,
             modals,
             mode: BallMode::Random,
@@ -95,8 +94,8 @@ impl Ball {
         draw_list.push(GamObjectType::Circ(self.ball)).unwrap();
         if self.mode == BallMode::Tilt {
             let (x, y, _z, _id) = self.com.gyro_read_blocking().unwrap();
-            let ix = x as i16;
-            let iy = y as i16;
+            let ix = x as isize;
+            let iy = y as isize;
             log::debug!("x: {}, y: {}", ix, iy);
             // negative x => tilt to right
             // positive x => tilt to left
@@ -144,7 +143,7 @@ impl Ball {
             if hit_bott {
                 y = -y.abs();
             }
-            self.momentum = Point::new(x as i16, y as i16);
+            self.momentum = Point::new(x as isize, y as isize);
         }
 
         // draw the new location for the ball

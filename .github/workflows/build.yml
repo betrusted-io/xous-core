@@ -2,9 +2,11 @@ on:
   push:
     branches:
       - main
+      - dev
   pull_request:
     branches:
       - main
+      - dev
 
 name: Build xous-core
 
@@ -39,3 +41,16 @@ jobs:
 
       - name: Build CI targets
         run: cargo xtask ${{ matrix.task }} --no-verify
+
+  bao1x-checks:
+    name: bao1x slot-map consistency checks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Update to latest toolchain
+        run: rustup update
+
+      - name: Checkout sources
+        uses: actions/checkout@v4
+
+      - name: Run slot-map consistency checks
+        run: cargo run --bin bao1x-checks --manifest-path libs/bao1x-checks/Cargo.toml

@@ -67,6 +67,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     if let Some(rev) = git_rev_opt {
         builder.set_git_rev(rev);
     }
+    let cargo_configs = get_flag("--config")?;
+    builder.set_cargo_configs(cargo_configs.clone());
     if do_version {
         builder.add_feature("timestamp");
     };
@@ -136,6 +138,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     if !kernel_key.is_empty() {
         builder.kernel_key_file(kernel_key[0].to_string());
     }
+    let pq_key = get_flag("--pq-key")?;
+    if !pq_key.is_empty() {
+        builder.pq_key_file(pq_key[0].to_string());
+        builder.pq_cache_file(None); // this has to be switched off, in case no pq-cache is specified
+    }
+    let pq_cache = get_flag("--pq-cache")?;
+    if !pq_cache.is_empty() {
+        builder.pq_cache_file(Some(pq_cache[0].to_string()));
+    }
+    if env::args().filter(|x| x == "--no-pq").count() != 0 {
+        builder.skip_pq(true);
+    }
+
     let swap_key = get_flag("--swap")?;
     if swap_key.len() != 0 {
         let swap_parts: Vec<&str> = swap_key[0].split(':').collect();
@@ -184,7 +199,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     for feature in features {
         builder.add_feature(&feature);
         if feature.starts_with("xous/lang-") {
-            track_language_changes(&feature)?;
+            track_language_changes(&feature, &cargo_configs)?;
             language_set = true;
         }
     }
@@ -203,7 +218,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     if !language_set {
         // the default language is english
-        track_language_changes("en")?;
+        track_language_changes("en", &cargo_configs)?;
     }
     let gdb_stub = env::args().filter(|x| x == "--gdb-stub").count() != 0;
     if gdb_stub {
@@ -246,6 +261,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .add_services(&user_pkgs)
                 .stream(BuildStream::Debug)
                 .add_apps(&get_cratespecs());
+        }
+        Some("pddb-fs-ci") => {
+            builder
+                .target_renode()
+                .add_services(&user_pkgs)
+                .add_service("pddb-fs-tests", LoaderRegion::Ram)
+                .add_services(&get_cratespecs());
+            builder.add_loader_feature("resume");
+            builder.add_feature("pddb/smalldb").add_feature("pddb/deterministic");
         }
         Some("renode-test") => {
             builder.target_renode().add_services(&base_pkgs).add_services(&get_cratespecs());
@@ -361,6 +385,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .target_hosted()
                 .add_services(&user_pkgs)
                 .add_feature("pddb/ci")
+                .add_feature("pddb/pddbtest")
+                .add_feature("pddb/autobasis")
                 .add_feature("pddb/deterministic");
         }
         Some("pddb-btest") => {
@@ -622,7 +648,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             local_args.push("artybio");
 
             let status =
-                std::process::Command::new(cargo()).current_dir(project_root()).args(&local_args).status()?;
+                cargo(&cargo_configs).current_dir(project_root()).args(&local_args).status()?;
             if !status.success() {
                 return Err("Baremetal build failed".into());
             }
@@ -877,8 +903,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
 
         // ---- other single-purpose commands ----
-        Some("generate-locales") => generate_locales()?,
-        Some("wycheproof-import") => wycheproof_import()?,
+        Some("generate-locales") => generate_locales(&cargo_configs)?,
+        Some("wycheproof-import") => wycheproof_import(&cargo_configs)?,
         Some("dummy-template") => generate_app_menus(&Vec::new()),
         task => {
             if let Some(task) = task {
@@ -981,6 +1007,9 @@ be merged in with explicit app/service treatment with the following flags:
 [--git-describe version] Force a git describe version string (e.g., 'v0.10.0-19-g0d934e1') instead of running `git describe --long`. For build systems that lack git state.
                          Note: there is no sanity checking on the passed version. If it's specified incorrectly, subtle, weird things could happen.
 [--git-rev commit]       Force a git commit hash (e.g., '0d934e1...') for swap image nonce. Required with --git-describe for reproducible builds.
+[--no-pq]                Force PQ signing to be off (defaults to dev PQ key otherwise)
+[--pq-key <keyfile>]     Use this PQ key file instead of the dev key. Ignored if --no-pq specified.
+[--pq-cache <cache>]     Use this PQ cache file. If provided and valid, speeds up the PQ signing operation.
 
 - An 'app' must be enumerated in apps/manifest.json.
    A pre-processor configures the launch menu based on the list of specified apps.
@@ -1011,6 +1040,7 @@ Hosted emulation:
  baosec-emu              Run user image in hosted mode but for the baosec target
  pddb-ci                 PDDB config for CI testing (eg: TRNG->deterministic for reproducible errors). [cratespecs] ignored.
  pddb-btest              PDDB stress tester for secret basis creation/deletion [cratespecs] ignored.
+ pddb-fs-ci              Renode image with the on-target PDDB std::fs test runner (smalldb). [cratespecs] are services
  hosted-debug            Run user image in hosted mode with debug flags. [cratespecs] are apps
  gfx-dev                 Testing mode for graphics primitives. [cratespecs] are services
  pddb-dev                Testing for compilation errors on hardware targets on the PDDB.

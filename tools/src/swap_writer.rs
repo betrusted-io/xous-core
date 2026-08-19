@@ -1,16 +1,16 @@
 use std::convert::TryInto;
+use std::fs;
 use std::io::{Cursor, Result, Seek, SeekFrom, Write};
+use std::path::Path;
 use std::process::Command;
 
 use aes_gcm_siv::{
     Aes256GcmSiv, Nonce,
     aead::{Aead, KeyInit, Payload},
 };
-use bao1x_api::signatures::SwapSourceHeader;
+use bao1x_api::signatures::{SWAP_VERSION, SwapSourceHeader};
 
 use crate::sign_image::{Version, sign_image};
-
-const SWAP_VERSION: u32 = 0x01_01_0000;
 
 pub fn git_rev(override_rev: Option<&str>) -> u64 {
     let hash = if let Some(rev) = override_rev {
@@ -82,18 +82,37 @@ impl SwapHeader {
     }
 }
 
+pub fn load_pq_key_bytes<P: AsRef<Path>>(
+    pq_private_key: Option<(P, Option<P>)>,
+) -> std::result::Result<Option<([u8; 64], Option<P>)>, Box<dyn std::error::Error + Send + Sync>> {
+    match pq_private_key {
+        None => Ok(None),
+        Some((path, other)) => {
+            let bytes = fs::read(path.as_ref())?;
+            if bytes.len() != 64 {
+                return Err(
+                    format!("Expected exactly 64 bytes for PQ private key, got {}", bytes.len()).into()
+                );
+            }
+            let key_array: [u8; 64] = bytes.try_into().expect("Length already verified");
+            Ok(Some((key_array, other)))
+        }
+    }
+}
+
 impl SwapWriter {
     pub fn new() -> Self { SwapWriter { buffer: Cursor::new(Vec::new()) } }
 
     /// Take the swap file and wrap it data structures that facilitate per-device encryption
     /// after deployment to a user device.
-    pub fn encrypt_to<T>(
+    pub fn encrypt_to<T, P: AsRef<Path>>(
         &mut self,
         mut f: T,
         private_key: &pem::Pem,
         anti_rollback_manual: Option<usize>,
         git_rev_override: Option<&str>,
         semver: Option<[u8; 16]>,
+        pq_private_key: Option<(P, Option<P>)>,
     ) -> Result<usize>
     where
         T: Write + Seek,
@@ -122,13 +141,14 @@ impl SwapWriter {
             nonce_vec.extend_from_slice(&((offset as u32) * 0x1000).to_be_bytes());
             nonce_vec.extend_from_slice(&header.partial_nonce.to_be_bytes());
             let nonce = Nonce::from_slice(&nonce_vec);
+            // println!("pt: {:x?}", &padded_block[..32]);
             // println!("nonce: {:x?}", nonce);
             // println!("aad: {:x?}", header.aad);
             let enc = cipher
                 .encrypt(nonce, Payload { aad: &header.aad, msg: &padded_block })
                 .expect("couldn't encrypt block");
             assert!(enc.len() == 0x1010);
-            // println!("data: {:x?}", &enc[..32]);
+            // println!("ct: {:x?}", &enc[..32]);
             // println!("tag: {:x?}", &enc[0x1000..]);
             image.write(&enc[..0x1000])?;
             macs.extend_from_slice(&enc[0x1000..]);
@@ -149,6 +169,8 @@ impl SwapWriter {
             function,
             anti_rollback_manual,
             false,
+            load_pq_key_bytes(pq_private_key)
+                .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?,
         )
         .map_err(|_| std::io::Error::new(std::io::ErrorKind::Other, "Can't sign swap image"))?;
         // write the header, less space for the signature

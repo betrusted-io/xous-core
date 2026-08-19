@@ -3,10 +3,7 @@ use arbitrary_int::Number;
 use bao1x_api::IoxHal;
 use bao1x_api::{bio::*, bio_code};
 use utra::bio_bdma;
-use utralib::{
-    utra::bio_bdma::{SFR_ELEVEL_FIFO_EVENT_LEVEL0, SFR_IRQMASK_0},
-    *,
-};
+use utralib::{utra::bio_bdma::*, *};
 
 #[cfg(not(feature = "std"))]
 use crate::iox::Iox;
@@ -219,7 +216,7 @@ impl BioSharedState {
 
         for core in 0..4 {
             // crate::println!("ldst trial");
-            self.load_code(mem_init_code(), 0, BioCore::from(core));
+            self.load_code(mem_init_code(), BioCore::from(core));
             self.set_core_run_states([core == 0, core == 1, core == 2, core == 3]);
             for _ in 0..16 {
                 let _ = self.bio.r(utra::bio_bdma::SFR_RXF0);
@@ -233,7 +230,7 @@ impl BioSharedState {
         self.set_core_run_states([false, false, false, false]);
     }
 
-    pub fn load_code(&mut self, prog: &[u8], offset_bytes: usize, core: BioCore) {
+    pub fn load_code(&mut self, prog: (&[u8], Option<u32>), core: BioCore) {
         // turn off just the target core
         let core_num = 1 << (core as usize);
         self.bio.wo(
@@ -241,8 +238,16 @@ impl BioSharedState {
             self.bio.r(utra::bio_bdma::SFR_CTRL) & !(core_num | core_num << 4 | core_num << 8),
         );
         // crate::println!("load code from {:x}", prog.as_ptr() as usize);
-        let offset = offset_bytes / core::mem::size_of::<u32>();
-        for (i, chunk) in prog.chunks(4).enumerate() {
+        let offset = if let Some(pad_word) = prog.1 {
+            // insert the pad_word up top. This ensures the page-offsets of the code line up
+            // with what the linker had specified, effectively replacing the length field with
+            // a word (usually specified as a NOP instruction)
+            self.imem_slice[core as usize][0] = pad_word;
+            1
+        } else {
+            0
+        };
+        for (i, chunk) in prog.0.chunks(4).enumerate() {
             if chunk.len() == 4 {
                 let word: u32 = u32::from_le_bytes(chunk.try_into().unwrap());
                 self.imem_slice[core as usize][i + offset] = word;
@@ -255,7 +260,7 @@ impl BioSharedState {
                 self.imem_slice[core as usize][i + offset] = ragged_word;
             }
         }
-        match self.verify_code(&prog, offset_bytes, core) {
+        match self.verify_code(&prog.0, offset * size_of::<u32>(), core) {
             Err(BioError::CodeCheck(offset)) => {
                 crate::println!("Code verification error at {:x}", offset)
             }
@@ -400,10 +405,12 @@ impl BioSharedState {
                 // mask in the core that is now listening to the clock
                 let existing_extclk = self.bio.rf(bio_bdma::SFR_EXTCLOCK_USE_EXTCLK);
                 self.bio.rmwf(bio_bdma::SFR_EXTCLOCK_USE_EXTCLK, (1 << core as u32) | existing_extclk);
-                crate::println!("core: {:?} - extclock {:x}", core, self.bio.r(bio_bdma::SFR_EXTCLOCK));
+                // crate::println!("core: {:?} - extclock {:x}", core, self.bio.r(bio_bdma::SFR_EXTCLOCK));
                 return None;
             }
         };
+        #[cfg(feature = "std")]
+        log::debug!("config: {:?}, int {}, fraq {}, actual {}", config, div_int, div_frac, actual_freq);
         let sfr_value = (div_int as u32) << 16 | (div_frac as u32) << 8;
         match core {
             BioCore::Core0 => {
@@ -444,15 +451,14 @@ impl<'a> BioApi<'a> for BioSharedState {
     fn init_core(
         &mut self,
         core: BioCore,
-        code: &[u8],
-        offset: usize,
+        code: (&[u8], Option<u32>),
         config: CoreConfig,
     ) -> Result<Option<u32>, BioError> {
         if self.core_config[core as usize].is_some() {
             return Err(BioError::ResourceInUse);
         }
         self.core_config[core as usize] = Some(config);
-        self.load_code(code, offset, core);
+        self.load_code(code, core);
         Ok(self.apply_config(&config, core))
     }
 
@@ -490,12 +496,18 @@ impl<'a> BioApi<'a> for BioSharedState {
     fn update_bio_freq(&mut self, freq: u32) -> u32 {
         let prev_freq = self.fclk_freq_hz;
         self.fclk_freq_hz = freq;
+        #[cfg(feature = "std")]
+        log::debug!("new freq: {}, old freq: {}", freq, prev_freq);
         for (i, config) in self.core_config.clone().iter().enumerate() {
             if let Some(config) = config {
                 self.apply_config(config, i.into());
             }
         }
         prev_freq
+    }
+
+    fn prep_freq_change(&mut self, _wfi: bool) {
+        // at the hw level, there's nothing to do; a handler at the `std` level is invoked instead
     }
 
     unsafe fn get_core_handle(&self, _fifo: Fifo) -> Result<Option<CoreHandle>, BioError> {
@@ -617,15 +629,16 @@ impl<'a> BioApi<'a> for BioSharedState {
 
     fn setup_fifo_event_triggers(&mut self, config: FifoEventConfig) -> Result<(), BioError> {
         let event_offset = config.which.to_usize_checked() * 2 + config.trigger_slot.raw_value() as usize;
-        assert!(event_offset <= 7, "Computed event offset is invalid");
-        // safety: this is safe because which is bounds checked with to_usize_checked() and the
-        // implementation of arbitrary_int that encodes trigger_slot is also bounds checked. The assert
-        // above also helps confirm a lack of logic bugs.
-        unsafe {
-            self.bio
-                .base()
-                .add(SFR_ELEVEL_FIFO_EVENT_LEVEL0.offset() + event_offset)
-                .write_volatile(config.level.level().as_u32());
+        match event_offset {
+            0 => self.bio.rmwf(SFR_ELEVEL_FIFO_EVENT_LEVEL0, config.level.level().as_u32()),
+            1 => self.bio.rmwf(SFR_ELEVEL_FIFO_EVENT_LEVEL1, config.level.level().as_u32()),
+            2 => self.bio.rmwf(SFR_ELEVEL_FIFO_EVENT_LEVEL2, config.level.level().as_u32()),
+            3 => self.bio.rmwf(SFR_ELEVEL_FIFO_EVENT_LEVEL3, config.level.level().as_u32()),
+            4 => self.bio.rmwf(SFR_ELEVEL_FIFO_EVENT_LEVEL4, config.level.level().as_u32()),
+            5 => self.bio.rmwf(SFR_ELEVEL_FIFO_EVENT_LEVEL5, config.level.level().as_u32()),
+            6 => self.bio.rmwf(SFR_ELEVEL_FIFO_EVENT_LEVEL6, config.level.level().as_u32()),
+            7 => self.bio.rmwf(SFR_ELEVEL_FIFO_EVENT_LEVEL7, config.level.level().as_u32()),
+            _ => unimplemented!("Computed event offset is invalid"),
         }
         let mask = 1u32 << event_offset as u32;
         let mut lt_gt_eq_set = 0u32;
@@ -667,6 +680,23 @@ impl<'a> BioApi<'a> for BioSharedState {
             self.bio.wo(bio_bdma::SFR_IRQ_EDGE, !(1 << irq_offset as u32) & edge);
         }
         Ok(())
+    }
+
+    fn debug(&self, core: BioCore) {
+        match core {
+            BioCore::Core0 => {
+                crate::println!("DBG_{:?}: {:x}", core, self.bio.r(utralib::utra::bio_bdma::SFR_DBG0))
+            }
+            BioCore::Core1 => {
+                crate::println!("DBG_{:?}: {:x}", core, self.bio.r(utralib::utra::bio_bdma::SFR_DBG1))
+            }
+            BioCore::Core2 => {
+                crate::println!("DBG_{:?}: {:x}", core, self.bio.r(utralib::utra::bio_bdma::SFR_DBG2))
+            }
+            BioCore::Core3 => {
+                crate::println!("DBG_{:?}: {:x}", core, self.bio.r(utralib::utra::bio_bdma::SFR_DBG3))
+            }
+        }
     }
 }
 

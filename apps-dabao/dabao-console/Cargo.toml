@@ -29,7 +29,11 @@ xous-usb-hid = { git = "https://github.com/betrusted-io/xous-usb-hid.git", branc
 bio-lib = { path = "../../libs/bio-lib" }
 arbitrary-int = "1.2"
 
-# aes testing
+# loadable BIO
+keystore = { path = "../../services/keystore", features = ["board-dabao"] }
+base64 = { version = "0.22.1", default-features = false, features = ["alloc"] }
+crc32fast = "1.5.0"
+
 [features]
 bao1x = ["utralib/bao1x", "usb-bao1x/bao1x", "aes/bao1x"]
 board-dabao = [
@@ -37,8 +41,14 @@ board-dabao = [
     "bao1x-hal/board-dabao",
     # "bao1x-hal/debug-print-uart",
     "usb-bao1x/board-dabao",
+    # default BIO libs
+    "bio-lib/ws2812",
+    "bio-lib/captouch",
 ]
+bio-math-test = ["bio-lib/c-math-test"]
+bio-wheel-test = ["bio-lib/c-colorwheel"]
 ctap-bringup = []
-usb = []
+extra-cmds = []
 aestests = ["aes"]
-default = ["usb"]
+
+default = []

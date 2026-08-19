@@ -1,8 +1,14 @@
 use core::{mem::size_of, slice};
 
+#[cfg(any(feature = "board-baosec", feature = "board-baosor"))]
+use ux_api::minigfx::FrameBuffer;
+
 #[cfg(feature = "atsama5d27")]
 pub use crate::platform::atsama5d27::load::InitialProcess;
 use crate::*;
+// define an uninhabited stub type for boards without framebuffers
+#[cfg(not(any(feature = "board-baosec", feature = "board-baosor")))]
+pub trait FrameBuffer {}
 
 #[repr(C)]
 #[cfg(not(feature = "atsama5d27"))]
@@ -30,7 +36,7 @@ pub struct InitialProcess {
 /// We don't memorize the allocated results (in part because we don't have malloc/alloc to stick
 /// the table, and we don't know a priori how big it will be); we simply memorize the maximum extent,
 /// after which we allocate the book-keeping tables.
-pub fn phase_1(cfg: &mut BootConfig, detached_app: bool) {
+pub fn phase_1(cfg: &mut BootConfig, detached_app: bool, fb: Option<&mut dyn FrameBuffer>) {
     // Allocate space for the stack pointer.
     // The bootloader should have placed the stack pointer at the end of RAM
     // prior to jumping to our program. Reserve space for the stack, so that it does not smash
@@ -161,7 +167,7 @@ pub fn phase_1(cfg: &mut BootConfig, detached_app: bool) {
     // Copy the processes to RAM, if requested.
     if !cfg.no_copy {
         println!("Copying processes");
-        copy_processes(cfg);
+        copy_processes(cfg, fb);
     }
     // activate this to debug stack-smashing during copy_process(). The RPT is the first structure that gets
     // smashed if the stack overflows! It should be all 0's if the stack did not overrun.
@@ -499,9 +505,11 @@ impl TagType {
 
 /// Copy program data from the SPI flash into newly-allocated RAM
 /// located at the end of memory space.
-fn copy_processes(cfg: &mut BootConfig) {
+fn copy_processes(cfg: &mut BootConfig, mut _fb: Option<&mut dyn FrameBuffer>) {
     let mut _pid = 1;
-    for tag in cfg.args.iter() {
+    #[cfg(feature = "board-baosec")]
+    let arg_len = cfg.args.iter().count();
+    for (_i, tag) in cfg.args.iter().enumerate() {
         let tag_type = TagType::from(tag.name);
         match tag_type {
             TagType::IniF | TagType::IniE => {
@@ -639,6 +647,132 @@ fn copy_processes(cfg: &mut BootConfig) {
                 // if swap is not enabled, don't pull this code in, to keep the bootloader light-weight
                 #[cfg(feature = "swap")]
                 {
+                    use bao1x_api::signatures::*;
+                    use bao1x_hal::board::SWAP_HEADER_LEN;
+                    use bao1x_hal::sigcheck::*;
+                    use digest::Digest;
+
+                    let mut last_decrypt_address = None;
+                    let mut expected_block_address = 0x1000; // hard coded constant - the physical address read
+                    let owc = bao1x_hal::acram::OneWayCounter::new();
+                    let mut hashed_count = 0;
+                    let (dev_mode1, dev_mode2) = owc.hardened_get(bao1x_api::DEVELOPER_MODE).unwrap();
+                    let (mut h, sig_check) = if cfg.swap_hal.as_ref().unwrap().tag.is_some() {
+                        let img_offset = SWAP_HEADER_LEN - SIGBLOCK_LEN;
+                        let start_hash = img_offset + UNSIGNED_LEN;
+
+                        // a sig check was previously done, and we determined what tag it was and that
+                        // it was good. Re-derive the parameters for the check in this load.
+                        let pubkey_ptr = bao1x_api::BOOT1_START as *const SignatureInFlash;
+                        let pk_src: &SignatureInFlash = unsafe { pubkey_ptr.as_ref().unwrap() };
+                        if pk_src.sealed_data.magic != MAGIC_NUMBER {
+                            #[cfg(feature = "debug-swap-sig")]
+                            crate::println!("Invalid magic number in verifying key record");
+                            die_no_std();
+                        }
+                        let mut sig = SignatureInFlash::default();
+                        cfg.swap_hal.as_mut().unwrap().read_flash(0, PAGE_SIZE);
+                        sig.as_mut().copy_from_slice(
+                            &cfg.swap_hal.as_ref().unwrap().buf_as_ref()
+                                [img_offset..img_offset + size_of::<SignatureInFlash>()],
+                        );
+                        let mut ssh = SwapSourceHeader::default();
+                        ssh.as_mut().copy_from_slice(
+                            &cfg.swap_hal.as_ref().unwrap().buf_as_ref()[..size_of::<SwapSourceHeader>()],
+                        );
+                        assert!(ssh.mac_offset & 0xFFF == 0, "MAC offset has improper alignment");
+                        if ssh.version != SWAP_VERSION {
+                            die_no_std();
+                        }
+                        let end_data_blocks = ssh.mac_offset as usize + 0x1000;
+
+                        let signed_len = sig.sealed_data.signed_len;
+                        if sig.sealed_data.magic != MAGIC_NUMBER {
+                            #[cfg(feature = "debug-swap-sig")]
+                            crate::println!("Invalid magic number on incoming record to be verified");
+                            die_no_std();
+                        }
+                        if !sig.is_compatible() {
+                            crate::println!(
+                                "Version {:x} sig is too new for {:x}",
+                                sig.sealed_data.corrected_version,
+                                BAOCHIP_SIG_VERSION
+                            );
+                            die_no_std();
+                        }
+
+                        let function_codes = &[FunctionCode::Swap as u32, FunctionCode::UpdatedSwap as u32];
+                        // checking the function code prevents exploiting code meant for other partitions
+                        // signed with a valid signature as code for the next
+                        // stage boot.
+                        if !function_codes.contains(&sig.sealed_data.function_code) {
+                            #[cfg(feature = "debug-swap-sig")]
+                            crate::println!("Function code {} not expected", sig.sealed_data.function_code);
+                            die_no_std();
+                        }
+                        let end = img_offset as usize + UNSIGNED_LEN + signed_len as usize;
+                        #[cfg(feature = "debug-swap-sig")]
+                        crate::println!(
+                            "offset: {:x}, unsigned_len: {:x}, signed_len: {:x}",
+                            img_offset,
+                            UNSIGNED_LEN,
+                            signed_len
+                        );
+                        assert!(end <= bao1x_api::offsets::baosec::SPI_FLASH_LEN);
+                        // check one more time because bypassing the first check would give an easy win
+                        // for encrypting a developer image
+                        let origin_tag = cfg.swap_hal.as_ref().unwrap().tag.expect("Checked value is None");
+                        if origin_tag
+                            == *bao1x_api::pubkeys::KEYSLOT_INITIAL_TAGS
+                                [bao1x_api::pubkeys::DEVELOPER_KEY_SLOT]
+                            && dev_mode1 == 0
+                        {
+                            crate::println!("Developer key on swap, but not in developer mode!");
+                            die_no_std();
+                        }
+                        // search for the ed25519 key based on tag
+                        let mut verifying_key = None;
+                        for pkey in pk_src.sealed_data.pubkeys.iter() {
+                            if pkey.tag == origin_tag {
+                                verifying_key = Some(
+                                    ed25519_dalek_bao1x::VerifyingKey::from_bytes(&pkey.pk)
+                                        .expect("bad verifying key"),
+                                );
+                            }
+                        }
+                        let mut h = sha2_bao1x::Sha512::new();
+                        // emplace the signed header data into the hasher
+                        h.update(&cfg.swap_hal.as_ref().unwrap().buf_as_ref()[start_hash..0x1000]);
+                        #[cfg(feature = "debug-swap-sig")]
+                        crate::println!(
+                            "{:x?}",
+                            &cfg.swap_hal.as_ref().unwrap().buf_as_ref()[start_hash..0x1000]
+                        );
+                        hashed_count += 0x1000 - start_hash;
+                        #[cfg(feature = "debug-swap-sig")]
+                        crate::println!("hashed_count: {:x}", hashed_count);
+                        // double-check the dev key hardening
+                        if origin_tag
+                            == *bao1x_api::pubkeys::KEYSLOT_INITIAL_TAGS
+                                [bao1x_api::pubkeys::DEVELOPER_KEY_SLOT]
+                            && dev_mode2 == 0
+                        {
+                            #[cfg(feature = "debug-swap-sig")]
+                            crate::println!("Developer key on swap, but not in developer mode!");
+                            die_no_std();
+                        }
+                        (Some(h), Some((verifying_key, sig, signed_len as usize, end_data_blocks)))
+                    } else {
+                        (None, None)
+                    };
+
+                    if cfg.swap_hal.as_ref().unwrap().unencrypted.is_true().expect("corrupt bool")
+                        && sig_check.is_none()
+                    {
+                        // all unencrypted images require signature checking
+                        die_no_std();
+                    }
+
                     // IniS does not necessarily exist in linear memory space, so it requires special
                     // handling. Instead of copying the IniS data into RAM, it's copied
                     // into encrypted swap (e.g. the RAM area (again, not necessarily in
@@ -726,18 +860,93 @@ fn copy_processes(cfg: &mut BootConfig) {
                             //   - the available decrypted data is larger than the target region to encrypt
                             //   - the available decrypted data is smaller than the target region to encrypt
                             //   - the available decrypted data is equal to the target region to encrypt
+
                             let src_swap_img_page = src_swap_img_addr & !(PAGE_SIZE - 1);
                             let src_swap_img_offset = src_swap_img_addr & (PAGE_SIZE - 1);
                             // it's almost free to check, so we check at every loop start
-                            if (cfg.swap_hal.as_ref().expect("swap HAL uninit").decrypt_page_addr()
+                            if last_decrypt_address != Some(src_swap_img_page) {
+                                // src_swap_img_page is in offsets relative to start of ELF - add 0x1000 to
+                                // get absolute block
+                                let phys_address = src_swap_img_page + 0x1000;
+
+                                if expected_block_address > phys_address {
+                                    // haven't seen this in practice - but let's make some noise if it
+                                    // happens, so we can write code to handle it
+                                    crate::println!("***** UNHANDLED: BACKWARDS BLOCK ADDRESSING *****");
+                                }
+                                // "catch up" any front-padding blocks skipped by the ELF format
+                                if let Some(h) = h.as_mut() {
+                                    while expected_block_address < phys_address {
+                                        cfg.swap_hal
+                                            .as_mut()
+                                            .unwrap()
+                                            .read_flash(expected_block_address, PAGE_SIZE);
+                                        h.update(cfg.swap_hal.as_ref().unwrap().buf_as_ref());
+                                        #[cfg(feature = "debug-swap-sig")]
+                                        crate::println!(
+                                            "catch-up from: {:x} - total {:x}",
+                                            expected_block_address,
+                                            hashed_count
+                                        );
+                                        #[cfg(feature = "debug-swap-sig")]
+                                        crate::println!(
+                                            "  {:x}: {:x?}..{:x?}",
+                                            expected_block_address,
+                                            &cfg.swap_hal.as_ref().unwrap().buf_as_ref()[..6],
+                                            &cfg.swap_hal.as_ref().unwrap().buf_as_ref()[4090..]
+                                        );
+                                        expected_block_address += PAGE_SIZE;
+                                        hashed_count += PAGE_SIZE;
+                                    }
+                                }
+                                // always load the page - we need it to do the hash verification.
+                                // this causes a small amount of inefficiency as we're decrypting about
+                                // 2-3 extra pages that we don't strictly have to decrypt, but this
+                                // overhead is small compared to the gains in logical simplicity.
+                                /* if (cfg.swap_hal.as_ref().expect("swap HAL uninit").decrypt_page_addr()
                                 != src_swap_img_page)
-                                && !section.no_copy()
-                            {
-                                cfg.swap_hal
-                                    .as_mut()
-                                    .expect("swap HAL uninit")
-                                    .decrypt_src_page_at(src_swap_img_page)
-                                    .unwrap();
+                                && !section.no_copy() */
+                                {
+                                    cfg.swap_hal
+                                        .as_mut()
+                                        .expect("swap HAL uninit")
+                                        .decrypt_src_page_at(src_swap_img_page, h.as_mut())
+                                        .unwrap();
+                                }
+                                // This code makes a very strong assumption that the blocks are loaded in
+                                // sequence, with no skips in address. Currently, this is true, but I could
+                                // see it getting not true if, for example,
+                                // multiple apps are packed into the swap area.
+                                if sig_check.is_some() {
+                                    assert!(
+                                        expected_block_address == phys_address,
+                                        "Loader skipped a block or was not monatomic! Suspect linker change."
+                                    );
+                                }
+                                // harden the check/nocheck check
+                                if sig_check.is_none() {
+                                    if cfg
+                                        .swap_hal
+                                        .as_ref()
+                                        .unwrap()
+                                        .unencrypted
+                                        .is_true()
+                                        .expect("hardened bool failed")
+                                    {
+                                        // image must be encrypted to skip the read-in sigcheck
+                                        die_no_std();
+                                    }
+                                } else {
+                                    hashed_count += PAGE_SIZE;
+                                    expected_block_address += PAGE_SIZE;
+                                }
+                                last_decrypt_address = Some(src_swap_img_page);
+                                #[cfg(feature = "debug-swap-sig")]
+                                crate::println!(
+                                    "loaded from: {:x} - total {:x}",
+                                    expected_block_address - 0x1000,
+                                    hashed_count
+                                );
                             }
                             let decrypt_avail = remaining_in_page(src_swap_img_addr);
                             let dst_page_avail = remaining_in_page(dst_page_vaddr);
@@ -794,6 +1003,122 @@ fn copy_processes(cfg: &mut BootConfig) {
                             println!("  last_copy_vaddr: {:x}", last_copy_vaddr);
                         }
                     }
+
+                    // fill in tags, check the signature
+                    if let Some((verifying_key, sig, signed_len, end_data_blocks)) = sig_check {
+                        let mut h = h.take().unwrap();
+                        #[cfg(feature = "debug-swap-sig")]
+                        crate::println!("signed len {:x}, hashed_count {:x}", signed_len, hashed_count);
+                        assert!(end_data_blocks & 0xFFF == 0);
+                        #[cfg(feature = "debug-swap-sig")]
+                        crate::println!(
+                            "expected_block_address: {:x}; end_data_blocks: {:x}",
+                            expected_block_address,
+                            end_data_blocks
+                        );
+                        while expected_block_address < end_data_blocks {
+                            cfg.swap_hal.as_mut().unwrap().read_flash(expected_block_address, PAGE_SIZE);
+                            #[cfg(feature = "debug-swap-sig")]
+                            crate::println!(
+                                "  {:x}: {:x?}..{:x?}",
+                                expected_block_address,
+                                &cfg.swap_hal.as_ref().unwrap().buf_as_ref()[..6],
+                                &cfg.swap_hal.as_ref().unwrap().buf_as_ref()[4090..]
+                            );
+                            h.update(cfg.swap_hal.as_ref().unwrap().buf_as_ref());
+                            hashed_count += PAGE_SIZE;
+                            #[cfg(feature = "debug-swap-sig")]
+                            crate::println!(
+                                "tail decrypt from: {:x} - total {:x}",
+                                expected_block_address,
+                                hashed_count
+                            );
+                            expected_block_address += PAGE_SIZE;
+                        }
+
+                        let remainder = signed_len - hashed_count;
+                        #[cfg(feature = "debug-swap-sig")]
+                        crate::println!("update mac: {:x}", remainder);
+                        let end = expected_block_address + remainder;
+                        while expected_block_address < end {
+                            let len = PAGE_SIZE.min(end - expected_block_address);
+                            cfg.swap_hal
+                                .as_mut()
+                                .expect("swap HAL uninit")
+                                .read_flash(expected_block_address, len);
+                            h.update(&cfg.swap_hal.as_ref().unwrap().buf_as_ref()[..len]);
+                            #[cfg(feature = "debug-swap-sig")]
+                            crate::println!("tail-add {:x}", len);
+                            #[cfg(feature = "debug-swap-sig")]
+                            crate::println!(
+                                "  {:x}: {:x?}..{:x?}",
+                                expected_block_address,
+                                &cfg.swap_hal.as_ref().unwrap().buf_as_ref()[..6],
+                                &cfg.swap_hal.as_ref().unwrap().buf_as_ref()[len - 6..len]
+                            );
+                            hashed_count += len;
+                            expected_block_address += len;
+                        }
+                        #[cfg(feature = "debug-swap-sig")]
+                        crate::println!("hashed_count: {:x}, signed_len: {:x}", hashed_count, signed_len);
+                        assert!(hashed_count == signed_len as usize, "hashed length is incorrect");
+
+                        let ed25519_signature = ed25519_dalek_bao1x::Signature::from(sig.signature);
+                        if sig.aad_len == 0 {
+                            #[cfg(feature = "debug-swap-sig")]
+                            crate::println!("ph path");
+                            match verifying_key.expect("missing verifying key").verify_prehashed(
+                                h,
+                                None,
+                                &ed25519_signature,
+                            ) {
+                                Ok(_) => {
+                                    crate::println!("ed25519ph verification passed");
+                                }
+                                _ => {
+                                    crate::println!("ed25519ph failed");
+                                    die_no_std()
+                                }
+                            }
+                        } else {
+                            #[cfg(feature = "debug-swap-sig")]
+                            crate::println!("aad path");
+                            let sha512_hashed_image = h.finalize();
+                            #[cfg(feature = "debug-swap-sig")]
+                            crate::println!("hash: {:x?}", sha512_hashed_image.as_slice());
+                            // create a *new* hasher because a token can only sign a hash, not the full image.
+                            let mut h = sha2_bao1x::Sha256::new();
+                            h.update(&sha512_hashed_image.as_slice());
+                            let hashed_hash = h.finalize();
+
+                            let mut msg = alloc::vec::Vec::<u8>::new();
+                            assert!((sig.aad_len as usize) <= sig.aad.len());
+                            msg.extend_from_slice(&sig.aad[..sig.aad_len as usize]);
+                            msg.extend_from_slice(hashed_hash.as_slice());
+
+                            #[cfg(feature = "debug-swap-sig")]
+                            crate::println!("verifying sig");
+                            match verifying_key
+                                .expect("missing verifying key")
+                                .verify_strict(&msg, &ed25519_signature)
+                            {
+                                Ok(_) => {
+                                    crate::println!("FIDO2 ed25519 verification passed");
+                                }
+                                _ => {
+                                    crate::println!("FIDO2 ed25519 failed");
+                                    die_no_std();
+                                }
+                            }
+                        }
+                    } else {
+                        if cfg.swap_hal.as_ref().unwrap().unencrypted.is_true().expect("hardened bool failed")
+                        {
+                            // image must be encrypted to skip the read-in sigcheck
+                            die_no_std();
+                        }
+                    }
+
                     // flush the encryption buffer
                     if working_buf_dirty {
                         cfg.swap_hal.as_mut().expect("swap HAL uninit").encrypt_swap_to(
@@ -878,6 +1203,14 @@ fn copy_processes(cfg: &mut BootConfig) {
                 }
             }
             _ => {}
+        }
+        #[cfg(feature = "board-baosec")]
+        if let Some(ref mut fb) = _fb {
+            let start = 5;
+            let end = 70;
+            let increment = (end - start) / arg_len;
+            let percentage = start + increment * _i;
+            crate::platform::progress_bar(*fb, percentage);
         }
     }
 }

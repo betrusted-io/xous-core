@@ -22,6 +22,7 @@ use precursor_hal::board::*;
 use rand_core::RngCore;
 use root_keys::key2bits::*;
 use sha2::{Digest, Sha256, Sha512_256Sw, Sha512Hw, Sha512Sw};
+use subtle::ConstantTimeEq;
 use utralib::generated::*;
 use ux_api::service::api::BulkRead;
 use xous_semver::SemVer;
@@ -881,28 +882,12 @@ impl<'a> RootKeys {
             unsafe {
                 match pw_type {
                     PasswordType::Boot => {
-                        if (*pcache_ptr).hashed_boot_pw_valid == 1 {
-                            for (&src, &dst) in digest.iter().zip((*pcache_ptr).hashed_boot_pw.iter()) {
-                                if dst != src {
-                                    return false;
-                                }
-                            }
-                            true
-                        } else {
-                            false
-                        }
+                        (*pcache_ptr).hashed_boot_pw_valid == 1
+                            && bool::from(digest.ct_eq(&(*pcache_ptr).hashed_boot_pw))
                     }
                     PasswordType::Update => {
-                        if (*pcache_ptr).hashed_update_pw_valid == 1 {
-                            for (&src, &dst) in digest.iter().zip((*pcache_ptr).hashed_update_pw.iter()) {
-                                if dst != src {
-                                    return false;
-                                }
-                            }
-                            true
-                        } else {
-                            false
-                        }
+                        (*pcache_ptr).hashed_update_pw_valid == 1
+                            && bool::from(digest.ct_eq(&(*pcache_ptr).hashed_update_pw))
                     }
                 }
             }
@@ -1642,7 +1627,7 @@ impl<'a> RootKeys {
                                     {
                                         Ok(verify) => {
                                             log::debug!("got bip39 verification: {:x?}", verify);
-                                            if &verify == &pcache.fpga_key {
+                                            if bool::from(verify.as_slice().ct_eq(&pcache.fpga_key)) {
                                                 log::debug!("verify succeeded");
                                                 modals
                                                     .show_notification(

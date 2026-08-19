@@ -50,7 +50,6 @@ pub enum NavDir {
     Up,
     Down,
     Autotype,
-    Reserved,
 }
 
 /// Centralizes tunable UI parameters for TOTP
@@ -443,9 +442,6 @@ impl VaultUi {
                             self.handle_autotype(item.guid, false).unwrap();
                         }
                     }
-                    NavDir::Reserved => {
-                        // tbd
-                    }
                 }
             }
             VaultMode::Totp => {
@@ -461,9 +457,6 @@ impl VaultUi {
                             // ignore USB errors while sending code
                             self.usb_dev.send_str(&code).ok();
                         }
-                    }
-                    NavDir::Reserved => {
-                        // tbd
                     }
                 }
                 self.totp_code = None;

@@ -5,6 +5,10 @@ Baochip-based boards use the `bao1x` SoC. There are two boards supported out-of-
 - `dabao` is a minimal SoM-style breakout board. Basically just the chip on a board.
 - `baosec` is a hardware security token. It features a camera, display, external memory, buttons, and a supplemental hardware TRNG.
 
+The Baochip bootloader assumes an environment where USB is available. The device will enumerate as a USB mass storage device. Firmware is delivered by copying [`UF2`]((https://makecode.com/blog/one-chip-to-flash-them-all)) files into the drive (it is *not* usable as a generic storage device). Be sure to cleanly unmount or `sync` the drive before booting the device.
+
+The bootloader also makes a "serial console" available over USB. This is the primary method for developers to interact with the device. Read more about [serial consoles](./README-consoles.md).
+
 The build idiom is `cargo xtask <target>`, i.e. `cargo xtask dabao`. The build will generate a [`UF2`](https://makecode.com/blog/one-chip-to-flash-them-all) artifact, which can be found in `target/riscv32imac-unknown-[xous|none]-elf/release/`. You will need to copy all three artifacts generated (loader.uf2, xous.uf2, and apps.uf2) initially to ensure that the loader, kernel, and applications are at the same revision. After that point if the loader and kernel are not updated, one can just update apps.uf2.
 
 Holding down the `PROG` button while plugging the device into USB will cause it to enter a bootloader that enumerates a mass storage device. The build artifacts can then be copied onto the device. Pressing `PROG` again will cause the device to run the program. Targets also enumerate a serial port over USB, which will activate a debug console.
@@ -50,11 +54,11 @@ You can fetch pre-built verions of the .uf2 files from the CI pipeline [here](ht
 
 ### Applications
 
-Three application targets are supported by Xous:
+Three application targets are supported by Xous. Click the target names in this list to see a list of demonstration applications:
 
-- `baremetal` is an unsecured, bare-iron environment. It is `no-std`, but comes with `alloc` pre-initialized and a USB serial console.
-- `dabao` is a Xous environment. It boots a full kernel, supports `std`, and features "detached-apps", i.e., users can develop stand-alone applications that run on the OS without having to touch the kernel image.
-- `baosec` is a Xous environment. It is like `dabao`, but supports swap memory. As a result it can run much larger, more complicated applications. The on-chip RRAM is reserved for the kernel, while the off-chip swap contains user applications.
+- [`baremetal`](./baremetal/) is an unsecured, bare-iron environment. It is `no-std`, but comes with `alloc` pre-initialized and a USB serial console.
+- [`dabao`](./apps-dabao/) is a Xous environment. It boots a full kernel, supports `std`, and features "detached-apps", i.e., users can develop stand-alone applications that run on the OS without having to touch the kernel image.
+- [`baosec`](./apps-baosec/) is a Xous environment. It is like `dabao`, but supports swap memory. As a result it can run much larger, more complicated applications. The on-chip RRAM is reserved for the kernel, while the off-chip swap contains user applications.
 
 Code is delivered via `boot1`. `boot1` is entered by holding down a button while power the device on. The device will show up as a USB mass storage device, at which point a .uf2 file containing the application image is copied to the device, and the update is applied.
 

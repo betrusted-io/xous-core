@@ -6,9 +6,13 @@ use bao1x_api::signatures::SIGBLOCK_LEN;
 use bao1x_api::*;
 #[allow(unused_imports)]
 use bao1x_hal::iox::Iox;
+#[cfg(feature = "board-baosec")]
+use bao1x_hal::sh1107::Oled128x128;
 #[cfg(feature = "bao1x")]
 use bao1x_hal::udma;
 use utralib::generated::*;
+#[cfg(feature = "board-baosec")]
+use ux_api::minigfx::FrameBuffer;
 
 // Notes about the reset vector location
 // This can be set using fuses in the IFR (also called 'info') region
@@ -164,10 +168,10 @@ pub fn early_init_hw() -> u32 {
             &mut iox,
             &mut udma_global,
         );
-        sh1107.init();
+        sh1107.init().ok();
         sh1107.buffer_mut().fill(0xFFFF_FFFF);
         sh1107.blit_screen(&ux_api::bitmaps::baochip128x128::BITMAP);
-        sh1107.draw();
+        sh1107.draw().ok();
     }
 
     #[cfg(feature = "board-dabao")]
@@ -209,6 +213,26 @@ pub fn early_init_hw() -> u32 {
     crate::println!("\n\r~~ Xous Loader ~~\n\r");
 
     perclk
+}
+
+#[cfg(feature = "board-baosec")]
+pub fn oled_init<'a>(
+    iox: &'a mut Iox,
+    udma_global: &'a mut bao1x_hal::udma::GlobalConfig,
+    perclk: u32,
+) -> Oled128x128<'a> {
+    use ux_api::minigfx::FrameBuffer;
+    let mut sh1107 = bao1x_hal::sh1107::Oled128x128::new(
+        bao1x_hal::sh1107::MainThreadToken::new(),
+        perclk,
+        iox,
+        udma_global,
+    );
+    sh1107.init().ok();
+    sh1107.buffer_mut().fill(0xFFFF_FFFF);
+    sh1107.blit_screen(&ux_api::bitmaps::baochip128x128::BITMAP);
+    sh1107.draw().ok();
+    sh1107
 }
 
 #[cfg(feature = "board-dabao")]
@@ -315,4 +339,81 @@ pub fn delay_at_sysfreq(ms: usize, sysclk_freq: u32) {
         while timer.rf(utra::timer0::EV_PENDING_ZERO) == 0 {}
         timer.wfo(utra::timer0::EV_PENDING_ZERO, 1);
     }
+}
+
+#[cfg(feature = "board-baosec")]
+/// Progress is a number from 0-100 that represents how complete the operation is.
+pub fn progress_bar(fb: &mut dyn FrameBuffer, progress: usize) {
+    use ux_api::bitmaps::baochip128x128::MARQUEE_BELOW;
+    use ux_api::minigfx::{DrawStyle, PixelColor, Point, Rectangle};
+
+    const DISPLAY_WIDTH: isize = 128;
+    const DISPLAY_HEIGHT: isize = 128;
+
+    /// Left/right margin of the progress bar relative to the display edges, in pixels.
+    const PROGRESS_BAR_MARGIN: isize = 8;
+
+    /// Maximum height of the progress bar, in pixels.
+    const PROGRESS_BAR_HEIGHT: isize = 8;
+
+    // cast the fb into a concrete type that can be used with the minigfx::op
+    let mut fb = ux_api::minigfx::DynFb(fb);
+
+    let progress = progress.min(100);
+
+    // The available vertical region is between MARQUEE_BELOW and the bottom of the display.
+    let region_top = MARQUEE_BELOW as isize;
+    let region_height = DISPLAY_HEIGHT - region_top;
+
+    // Center the bar vertically within that region.
+    let bar_top = region_top + (region_height - PROGRESS_BAR_HEIGHT) / 2;
+    let bar_bottom = bar_top + PROGRESS_BAR_HEIGHT; // exclusive
+
+    if progress == 0 {
+        // blank out the marquee
+        ux_api::minigfx::op::rectangle(
+            &mut fb,
+            Rectangle::new_with_style(
+                Point::new(0, MARQUEE_BELOW as isize),
+                Point::new(DISPLAY_WIDTH, DISPLAY_HEIGHT),
+                DrawStyle::new(ux_api::minigfx::PixelColor::Dark, ux_api::minigfx::PixelColor::Dark, 1),
+            ),
+            None,
+            false,
+        );
+    }
+
+    // --- Outline (always full width) ---
+    ux_api::minigfx::op::rectangle(
+        &mut fb,
+        Rectangle {
+            tl: Point { x: PROGRESS_BAR_MARGIN, y: bar_top },
+            br: Point { x: DISPLAY_WIDTH - PROGRESS_BAR_MARGIN, y: bar_bottom },
+            style: DrawStyle { fill_color: None, stroke_color: Some(PixelColor::Light), stroke_width: 1 },
+        },
+        None,
+        false,
+    );
+
+    // --- Fill (grows left to right with progress) ---
+    // Interior is 1px inset from the stroke on every side.
+    let inner_x0 = PROGRESS_BAR_MARGIN + 1;
+    let inner_x1 = DISPLAY_WIDTH - PROGRESS_BAR_MARGIN - 1;
+    let inner_width = inner_x1 - inner_x0;
+
+    let fill_width = (inner_width * progress as isize) / 100;
+
+    if fill_width > 0 {
+        ux_api::minigfx::op::rectangle(
+            &mut fb,
+            Rectangle {
+                tl: Point { x: inner_x0, y: bar_top + 1 },
+                br: Point { x: inner_x0 + fill_width, y: bar_bottom - 1 },
+                style: DrawStyle { fill_color: Some(PixelColor::Light), stroke_color: None, stroke_width: 0 },
+            },
+            None,
+            false,
+        );
+    }
+    fb.0.draw().ok();
 }

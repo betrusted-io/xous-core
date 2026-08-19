@@ -3,13 +3,17 @@
 //
 #![allow(dead_code)]
 pub mod bold;
+#[cfg(feature = "emoji")]
 pub mod emoji;
+#[cfg(feature = "ja")]
 pub mod ja;
+#[cfg(feature = "kr")]
 pub mod kr;
 pub mod mono;
 pub mod regular;
 pub mod small;
 pub mod tall;
+#[cfg(feature = "zh")]
 pub mod zh;
 
 use crate::GlyphSprite;
@@ -184,6 +188,7 @@ pub fn tall_glyph(ch: char) -> Result<GlyphSprite, usize> {
     }
 }
 
+#[cfg(feature = "emoji")]
 pub fn emoji_glyph(ch: char) -> Result<GlyphSprite, usize> {
     match emoji::CODEPOINTS.binary_search(&(ch as u32)) {
         Ok(n) => {
@@ -208,6 +213,7 @@ pub fn emoji_glyph(ch: char) -> Result<GlyphSprite, usize> {
     }
 }
 
+#[cfg(feature = "emoji")]
 pub fn emoji_large_glyph(ch: char) -> Result<GlyphSprite, usize> {
     match emoji::CODEPOINTS.binary_search(&(ch as u32)) {
         Ok(n) => {
@@ -232,6 +238,7 @@ pub fn emoji_large_glyph(ch: char) -> Result<GlyphSprite, usize> {
     }
 }
 
+#[cfg(feature = "zh")]
 pub fn zh_glyph(ch: char) -> Result<GlyphSprite, usize> {
     match zh::CODEPOINTS.binary_search(&(ch as u32)) {
         Ok(n) => {
@@ -256,6 +263,7 @@ pub fn zh_glyph(ch: char) -> Result<GlyphSprite, usize> {
     }
 }
 
+#[cfg(feature = "ja")]
 pub fn ja_glyph(ch: char) -> Result<GlyphSprite, usize> {
     match ja::CODEPOINTS.binary_search(&(ch as u32)) {
         Ok(n) => {
@@ -280,6 +288,7 @@ pub fn ja_glyph(ch: char) -> Result<GlyphSprite, usize> {
     }
 }
 
+#[cfg(feature = "kr")]
 pub fn kr_glyph(ch: char) -> Result<GlyphSprite, usize> {
     match kr::CODEPOINTS.binary_search(&(ch as u32)) {
         Ok(n) => {

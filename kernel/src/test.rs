@@ -1210,3 +1210,35 @@ fn renormalizer() {
         assert!(max_element < TEST_LEN as u32);
     }
 }
+
+/// `IncreaseHeap` must reject a `delta` that would overflow
+/// `mem_heap_size + delta`. On an RV32 target, a large `delta`
+/// silently wraps past `mem_heap_size` in unchecked arithmetic,
+/// which can land below `mem_heap_max` and bypass the cap check.
+/// Hosted `usize` is 64-bit so the 32-bit wrap isn't directly
+/// triggerable here, but the syscall must still reject an absurd
+/// delta cleanly.
+#[test]
+fn increase_heap_rejects_absurd_delta() {
+    let main_thread = start_kernel(SERVER_SPEC);
+
+    let xous_client = xous_kernel::create_process_as_thread(xous_kernel::ProcessArgsAsThread::new(
+        "increase_heap_overflow",
+        move || {
+            let flags = xous_kernel::MemoryFlags::R | xous_kernel::MemoryFlags::W;
+
+            // A normal call should succeed.
+            let ok = xous_kernel::increase_heap(4096, flags);
+            assert!(ok.is_ok(), "small IncreaseHeap should succeed, got {:?}", ok);
+
+            // A pathological delta should be rejected, not silently accepted.
+            let err = xous_kernel::increase_heap(usize::MAX, flags);
+            assert!(err.is_err(), "usize::MAX delta must be rejected, got {:?}", err);
+        },
+    ))
+    .expect("spawn client");
+
+    crate::wait_process_as_thread(xous_client).expect("join client");
+    shutdown_kernel();
+    main_thread.join().expect("join kernel");
+}

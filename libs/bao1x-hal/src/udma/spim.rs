@@ -96,10 +96,12 @@ pub enum CommandSet {
     Macronix = 0xc2,
     Xtx = 0x0b,
     Zetta = 0xba,
+    Puya = 0x85,
 }
 // be sure to update this when updating the command set above! this is used to iterate
 // through all valid types by other routines.
-pub const ALL_COMMAND_SETS: [CommandSet; 3] = [CommandSet::Macronix, CommandSet::Xtx, CommandSet::Zetta];
+pub const ALL_COMMAND_SETS: [CommandSet; 4] =
+    [CommandSet::Macronix, CommandSet::Xtx, CommandSet::Zetta, CommandSet::Puya];
 impl TryFrom<u8> for CommandSet {
     type Error = xous::Error;
 
@@ -108,6 +110,7 @@ impl TryFrom<u8> for CommandSet {
             0xc2 => Ok(CommandSet::Macronix),
             0x0b => Ok(CommandSet::Xtx),
             0xba => Ok(CommandSet::Zetta),
+            0x85 => Ok(CommandSet::Puya),
             _ => Err(xous::Error::BadAddress),
         }
     }
@@ -476,7 +479,7 @@ impl Spim {
         &self.ifram.as_phys_slice()[..self.tx_buf_len_bytes / size_of::<T>()]
     }
 
-    fn send_cmd_list(&mut self, cmds: &[SpimCmd]) {
+    pub fn send_cmd_list(&mut self, cmds: &[SpimCmd]) {
         for cmd_chunk in cmds.chunks(SPIM_CMD_BUF_LEN_BYTES / size_of::<u32>()) {
             for (src, dst) in cmd_chunk.iter().zip(self.cmd_buf_mut().iter_mut()) {
                 *dst = (*src).into();
@@ -1010,6 +1013,8 @@ impl Spim {
     /// we try to auto-ID the parts and configure them to behave as much like the Macronix defaults.
     pub fn identify_flash_reset_qpi(&mut self) -> u32 {
         let mut id = self.mem_read_id_flash();
+        #[cfg(feature = "qe-debug")]
+        crate::println!("ifrq id {:x}", id);
         if !bao1x_api::SPI_FLASH_IDS.contains(&(id & 0xFF_FF_FF)) {
             for command_set in ALL_COMMAND_SETS {
                 self.mode = SpimMode::Quad;
@@ -1089,7 +1094,9 @@ impl Spim {
             SpimMode::Standard => self.mem_send_cmd(0x9F),
             SpimMode::Quad => match self.command_set {
                 Some(CommandSet::Macronix) | None => self.mem_send_cmd(0xAF),
-                Some(CommandSet::Xtx) | Some(CommandSet::Zetta) => self.mem_send_cmd(0x9F),
+                Some(CommandSet::Xtx) | Some(CommandSet::Zetta) | Some(CommandSet::Puya) => {
+                    self.mem_send_cmd(0x9F)
+                }
             },
         }
 
@@ -1153,8 +1160,8 @@ impl Spim {
         if activate {
             match self.command_set {
                 Some(CommandSet::Macronix) | None => self.mem_send_cmd(0x35),
-                Some(CommandSet::Xtx) | Some(CommandSet::Zetta) => {
-                    crate::println!("activating Xtx QPI");
+                Some(CommandSet::Xtx) | Some(CommandSet::Zetta) | Some(CommandSet::Puya) => {
+                    crate::println!("activating Xtx/Zetta/Puya QPI");
                     self.mem_send_cmd(0x38)
                 }
             }
@@ -1162,7 +1169,9 @@ impl Spim {
             self.mode = SpimMode::Quad; // pre-assumes quad mode
             match self.command_set {
                 Some(CommandSet::Macronix) | None => self.mem_send_cmd(0xF5),
-                Some(CommandSet::Xtx) | Some(CommandSet::Zetta) => self.mem_send_cmd(0xFF),
+                Some(CommandSet::Xtx) | Some(CommandSet::Zetta) | Some(CommandSet::Puya) => {
+                    self.mem_send_cmd(0xFF)
+                }
             }
         }
         self.mem_cs(false);
@@ -1175,7 +1184,7 @@ impl Spim {
         // cleanup any parameter settings
         match self.command_set {
             Some(CommandSet::Macronix) | None => (),
-            Some(CommandSet::Xtx) | Some(CommandSet::Zetta) => {
+            Some(CommandSet::Xtx) | Some(CommandSet::Zetta) | Some(CommandSet::Puya) => {
                 crate::println!("Xtx setting 6 dummy cycles");
                 // set 6 dummy cycles; 8 is default
                 self.mem_param_set(false, 0xc0, &[0b0010_0000]);
@@ -1405,7 +1414,7 @@ impl Spim {
         }
         self.mem_read_id_flash();
         let addresses: &[u8] = match self.command_set {
-            Some(CommandSet::Xtx) | Some(CommandSet::Zetta) => &[0x05, 0x35, 0x15],
+            Some(CommandSet::Xtx) | Some(CommandSet::Zetta) | Some(CommandSet::Puya) => &[0x05, 0x35, 0x15],
             Some(CommandSet::Macronix) | None => &[0x05],
         };
         let mut ret = 0u32;
@@ -1441,19 +1450,26 @@ impl Spim {
             self.mem_read_id_flash();
         }
         let sr = self.flash_read_status_register();
+        #[cfg(feature = "qe-debug")]
+        crate::println!("sr: {:x}", sr);
         let qe_set = match self.command_set {
             Some(CommandSet::Macronix) => 0b0100_0000 & sr != 0,
-            Some(CommandSet::Xtx) | Some(CommandSet::Zetta) => 0b10_0000_0000 & sr != 0,
+            Some(CommandSet::Xtx) | Some(CommandSet::Zetta) | Some(CommandSet::Puya) => {
+                0b10_0000_0000 & sr != 0
+            }
             None => {
                 crate::println!("Can't set QE on unknown flash type");
                 return;
             }
         };
         if qe_set {
+            #[cfg(feature = "qe-debug")]
+            crate::println!("qe is set");
             // nothing to do, it's already set
             return;
         }
-
+        #[cfg(feature = "qe-debug")]
+        crate::println!("setting qe");
         match self.command_set.unwrap() {
             CommandSet::Macronix => {
                 self.mem_write_status_register(0b0100_0000 | (sr & 0xFF) as u8, ((sr & 0xFF00) >> 8) as u8);
@@ -1461,7 +1477,14 @@ impl Spim {
             CommandSet::Xtx | CommandSet::Zetta => {
                 self.mem_param_set(true, 0x31, &[((sr & 0xFF00 >> 8) as u8) | 0b0000_0010]);
             }
+            CommandSet::Puya => {
+                self.mem_param_set(true, 0x31, &[((sr & 0xFF00 >> 8) as u8) | 0b0000_0010]);
+            }
         }
+        #[cfg(feature = "qe-debug")]
+        let sr = self.flash_read_status_register();
+        #[cfg(feature = "qe-debug")]
+        crate::println!("sr: {:x}", sr);
     }
 
     fn flash_wren(&mut self) {

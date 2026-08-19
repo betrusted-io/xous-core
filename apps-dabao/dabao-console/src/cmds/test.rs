@@ -15,7 +15,7 @@ impl<'a> ShellCmdApi<'a> for Test {
         let mut ret = String::new();
 
         #[allow(unused_variables)]
-        let helpstring = "test [proc] [freemem] [interrupts] [panic] [timer] [env]";
+        let helpstring = "test [proc] [freemem] [interrupts] [panic] [env]";
 
         let mut tokens = args.split(' ');
 
@@ -23,7 +23,7 @@ impl<'a> ShellCmdApi<'a> for Test {
             match sub_cmd {
                 "timer" => {
                     let start = _env.ticktimer.elapsed_ms();
-                    log::info!("Starting test");
+                    log::info!("Timer test - runs forever");
                     let mut seconds = 0;
                     loop {
                         let elapsed = _env.ticktimer.elapsed_ms() - start;
@@ -32,6 +32,9 @@ impl<'a> ShellCmdApi<'a> for Test {
                             seconds += 1;
                         }
                     }
+                }
+                "echo" => {
+                    _env.echo.store(true, std::sync::atomic::Ordering::SeqCst);
                 }
                 "panic" => {
                     log::info!("System will panic now");
@@ -74,6 +77,41 @@ impl<'a> ShellCmdApi<'a> for Test {
                     log::info!("Interrupt handlers:");
                     for line in page_buf.as_str().lines() {
                         log::info!("{}", line);
+                    }
+                }
+                #[cfg(feature = "bio-math-test")]
+                "cos" => {
+                    let mut math = bio_lib::c::math_test::MathTest::new().unwrap();
+                    math.test_cos();
+                }
+                #[cfg(feature = "bio-wheel-test")]
+                "wheel" => {
+                    let mut wheel =
+                        bio_lib::c::colorwheel::Colorwheel::new(arbitrary_int::u5::from_u8(5), 12, 2, None)
+                            .unwrap();
+                    // run forever, code blocks here
+                    wheel.run(None);
+                }
+                "temp" => {
+                    let adc = bao1x_hal_service::Adc::new();
+                    let raw_temp = adc.read_raw(bao1x_hal::udma::AdcSource::Temperature, Some(8));
+                    log::info!(
+                        "raw: {}, temp: {}",
+                        raw_temp,
+                        bao1x_hal::udma::Adc::raw_to_temp_celsius(raw_temp)
+                    );
+                }
+                "adc" => {
+                    let adc = bao1x_hal_service::Adc::new();
+                    // safety - we have manually checked there are no conflicts with this mapping
+                    unsafe { adc.enable_channel(bao1x_hal::udma::AdcExtChannel::Adc0) };
+                    loop {
+                        let raw = adc.read_raw(
+                            bao1x_hal::udma::AdcSource::Ext(bao1x_hal::udma::AdcExtChannel::Adc0),
+                            Some(8),
+                        );
+                        log::info!("raw: {} volts: {:.3}V", raw, bao1x_hal::udma::Adc::raw_to_voltage(raw));
+                        std::thread::sleep(std::time::Duration::from_millis(500));
                     }
                 }
                 "env" => {

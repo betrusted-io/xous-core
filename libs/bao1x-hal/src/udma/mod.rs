@@ -1,9 +1,11 @@
+pub mod adc;
 pub mod i2c;
 pub mod spim;
 pub mod uart;
 
 use core::mem::size_of;
 
+pub use adc::*;
 use bao1x_api::*;
 pub use i2c::*;
 pub use spim::*;

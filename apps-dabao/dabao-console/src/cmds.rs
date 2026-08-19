@@ -1,5 +1,8 @@
 use core::fmt::Write;
-use std::collections::HashMap;
+use std::{
+    collections::HashMap,
+    sync::{Arc, atomic::AtomicBool},
+};
 
 use String;
 use bao1x_hal_service::trng;
@@ -41,6 +44,7 @@ pub struct CommonEnv {
     trng: trng::Trng,
     #[allow(dead_code)]
     xns: xous_names::XousNames,
+    echo: Arc<AtomicBool>,
 }
 impl CommonEnv {
     #[allow(dead_code)]
@@ -78,11 +82,13 @@ mod ver;
 use ver::*;
 mod test;
 use test::*;
+#[cfg(feature = "extra-cmds")]
 mod trng_cmd;
+#[cfg(feature = "extra-cmds")]
 use trng_cmd::*;
-#[cfg(feature = "usb")]
+#[cfg(feature = "extra-cmds")]
 mod usb;
-#[cfg(feature = "usb")]
+#[cfg(feature = "extra-cmds")]
 use usb::*;
 #[cfg(feature = "aestests")]
 mod aes_cmd;
@@ -94,21 +100,25 @@ mod ws2812;
 use ws2812::*;
 mod touch;
 use touch::*;
+mod bio;
+use bio::*;
 
 pub struct CmdEnv {
     common_env: CommonEnv,
     lastverb: String,
     ///// 2. declare storage for your command here.
+    #[cfg(feature = "extra-cmds")]
     trng_cmd: TrngCmd,
-    #[cfg(feature = "usb")]
+    #[cfg(feature = "extra-cmds")]
     usb: Usb,
     #[cfg(feature = "aestests")]
     aes_cmd: Aes,
     ws2812_cmd: Ws2812,
     touch_cmd: Touch,
+    bio: BioLoader,
 }
 impl CmdEnv {
-    pub fn new(xns: &xous_names::XousNames) -> CmdEnv {
+    pub fn new(xns: &xous_names::XousNames, echo: Arc<AtomicBool>) -> CmdEnv {
         let ticktimer = ticktimer::Ticktimer::new().expect("Couldn't connect to Ticktimer");
         // _ prefix allows us to leave the `mut` here without creating a warning.
         // the `mut` option is needed for some features.
@@ -117,6 +127,7 @@ impl CmdEnv {
             cb_registrations: HashMap::new(),
             trng: trng::Trng::new(&xns).unwrap(),
             xns: xous_names::XousNames::new().unwrap(),
+            echo,
         };
         #[cfg(feature = "aestests")]
         let aes_cmd = Aes::new(&xns, &mut _common);
@@ -124,16 +135,18 @@ impl CmdEnv {
             common_env: _common,
             lastverb: String::new(),
             ///// 3. initialize your storage, by calling new()
+            #[cfg(feature = "extra-cmds")]
             trng_cmd: {
                 log::debug!("trng");
                 TrngCmd::new()
             },
-            #[cfg(feature = "usb")]
+            #[cfg(feature = "extra-cmds")]
             usb: Usb::new(),
             #[cfg(feature = "aestests")]
             aes_cmd,
             ws2812_cmd: Ws2812::new(),
             touch_cmd: Touch::new(),
+            bio: BioLoader::new(),
         }
     }
 
@@ -153,15 +166,17 @@ impl CmdEnv {
             ///// 4. add your command to this array, so that it can be looked up and dispatched
             &mut echo_cmd,
             &mut ver_cmd,
+            #[cfg(feature = "extra-cmds")]
             &mut self.trng_cmd,
             &mut i2cdetect_cmd,
             &mut console_cmd,
-            #[cfg(feature = "usb")]
+            #[cfg(feature = "extra-cmds")]
             &mut self.usb,
             #[cfg(feature = "aestests")]
             &mut self.aes_cmd,
             &mut self.ws2812_cmd,
             &mut self.touch_cmd,
+            &mut self.bio,
         ];
 
         if let Some(cmdline) = maybe_cmdline {

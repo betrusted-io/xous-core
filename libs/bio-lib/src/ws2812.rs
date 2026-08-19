@@ -56,7 +56,7 @@ impl Ws2812 {
             LedVariant::C => ws2812c_kernel(),
         };
         log::debug!("grant: {:?}", resource_grant);
-        bio_ss.init_core(resource_grant.cores[0], &kernel, 0, config)?;
+        bio_ss.init_core(resource_grant.cores[0], kernel, config)?;
         bio_ss.set_core_run_state(&resource_grant, true);
 
         // claim pin resource - this only claims the resource, it does not configure it

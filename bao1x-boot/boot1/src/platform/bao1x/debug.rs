@@ -72,14 +72,17 @@ impl SerialRead for Uart {
             udma::Uart::get_handle(utra::udma_uart_2::HW_UDMA_UART_2_BASE, uart_buf_addr, uart_buf_addr)
         };
         let mut c = 0u8;
-        udma_uart.read_async(&mut c);
+        let got = udma_uart.read_async(&mut c);
 
+        // Acknowledge the UART interrupt-controller pending latch so the IRQ can re-fire, but do
+        // NOT use it to decide whether a byte arrived. `pending != 0` only means "some UART event
+        // happened" (framing errors and non-data events included), which delivered phantom or
+        // duplicated bytes. `read_async` already reports whether a valid, error-free frame was
+        // latched, so gate on that instead.
         let mut irqarray5 = CSR::new(utra::irqarray5::HW_IRQARRAY5_BASE as *mut u32);
-        // read & clear the pending bits
         let pending = irqarray5.r(utra::irqarray5::EV_PENDING);
-        // crate::println!("pending {:x} {}", pending, unsafe { char::from_u32_unchecked(c as u32) });
         irqarray5.wo(utra::irqarray5::EV_PENDING, pending);
-        if pending != 0 { Some(c) } else { None }
+        if got != 0 { Some(c) } else { None }
     }
 }
 

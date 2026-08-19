@@ -84,7 +84,7 @@ impl AvTrng {
         bio_ss.claim_dynamic_pin(claimed_pin, &AvTrng::resource_spec().claimer)?;
         let config =
             CoreConfig { clock_mode: bao1x_api::bio::ClockMode::ExternalPin(BioPin::new(claimed_pin)) };
-        bio_ss.init_core(resource_grant.cores[0], &avtrng_bio_code(), 0, config)?;
+        bio_ss.init_core(resource_grant.cores[0], avtrng_bio_code(), config)?;
 
         // power on
         iox.set_gpio_pin_value(power.0, power.1, bao1x_api::IoxValue::High);

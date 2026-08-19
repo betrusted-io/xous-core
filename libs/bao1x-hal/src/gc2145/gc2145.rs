@@ -103,7 +103,18 @@ impl Gc2145 {
     pub fn has_ifram(&self) -> bool { self.ifram.is_some() }
 
     pub fn poke(&self, i2c: &mut dyn I2cApi, adr: u8, dat: u8) {
-        i2c.i2c_write(GC2145_DEV, adr, &[dat]).expect("write failed");
+        const MAX_RETRIES: usize = 3;
+        let mut retries = 0;
+        while retries < MAX_RETRIES {
+            match i2c.i2c_write(GC2145_DEV, adr, &[dat]) {
+                Ok(_) => break,
+                Err(_e) => {
+                    #[cfg(feature = "std")]
+                    log::warn!("I2C error in camera {}/{}: {:?}", retries + 1, MAX_RETRIES, _e);
+                    retries += 1;
+                }
+            }
+        }
     }
 
     // chip does not support sequential reads
@@ -239,7 +250,10 @@ impl Gc2145 {
     }
 
     /// TODO: figure out how to length-bound this to...the frame slice size? line size? idk...
-    pub fn rx_buf<T: UdmaWidths>(&self) -> &[T] { &self.ifram.as_ref().unwrap().as_slice() }
+    /// The offset on the slice is a "cheater" parameter which is empirically calibrated based on
+    /// observed data. I don't know the underlying cause of it, but I suspect it probably has to
+    /// do with data in the pipeline that's not flushed, so the first three elements are "stale"
+    pub fn rx_buf<T: UdmaWidths>(&self) -> &[T] { &self.ifram.as_ref().unwrap().as_slice()[3..] }
 
     /// TODO: figure out how to length-bound this to...the frame slice size? line size? idk...
     pub unsafe fn rx_buf_phys<T: UdmaWidths>(&self) -> &[T] { &self.ifram.as_ref().unwrap().as_phys_slice() }

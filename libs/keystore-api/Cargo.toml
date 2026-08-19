@@ -29,6 +29,9 @@ efuse = []
 policy-menu = []
 
 gen2 = []
+owc-inc = []
+app-keys = []
+swap = []
 
 std = ["derive-rkyv", "xous-names", "xous-ipc", "locales"]
 derive-rkyv = ["rkyv"]
