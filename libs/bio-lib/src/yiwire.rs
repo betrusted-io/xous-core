@@ -168,7 +168,13 @@ impl YiWire {
                     // Found all devices
                     break;
                 }
-                addrs.push(addr);
+                let computed_crc = crc8(&addr[..7]);
+                let transmitted_crc = addr[7];
+                if computed_crc == transmitted_crc {
+                    addrs.push(addr);
+                } else {
+                    log::warn!("Received device address with incorrect CRC got {computed_crc}, expected {transmitted_crc}");
+                }
                 last_bitmask = bitmask;
             }
         }
@@ -203,10 +209,9 @@ impl YiWire {
 
             let b1 = self.cmd(CMD_READ, 0x20);
             let b2 = self.cmd(CMD_READ, 0x20);
-            // TODO: Compute and compare CRC
-            let _crc = self.cmd(CMD_READ, 0x08);
+            let transmitted_crc = self.cmd(CMD_READ, 0x08) as u8;
             // This array is built so a CRC can be computed
-            let _arry = [  (b1 & 0xFF) as u8,
+            let arry = [  (b1 & 0xFF) as u8,
                              ((b1 >> 8) & 0xFF) as u8,
                              ((b1 >> 16) & 0xFF) as u8,
                              ((b1 >> 24) & 0xFF) as u8,
@@ -214,11 +219,15 @@ impl YiWire {
                              ((b2 >> 8) & 0xFF) as u8,
                              ((b2 >> 16) & 0xFF) as u8,
                              ((b2 >> 24) & 0xFF) as u8 ];
+            let computed_crc = crc8(&arry);
 
-            let temp_raw = (b1 & 0xFFFF) as i16;
-            let temp: f32 = (temp_raw as f32) / 16.0;
-
-            Ok(Some(temp))
+            if transmitted_crc == computed_crc {
+                let temp_raw = (b1 & 0xFFFF) as i16;
+                let temp: f32 = (temp_raw as f32) / 16.0;
+                Ok(Some(temp))
+            } else {
+                Ok(None)
+            }
         } else {
             Ok(None)
         }
@@ -231,6 +240,26 @@ impl YiWire {
         self.rx.csr.r(bio_bdma::SFR_RXF3)
     }
 }
+
+
+// helpers
+fn crc8(data: &[u8]) -> u8 {
+    let mut crc: u8 = 0x00;
+    let reflected_poly: u8 = 0x8C;
+
+    for &byte in data {
+        crc ^= byte;
+        for _ in 0..8 {
+            if (crc & 0x01) != 0 {
+                crc = (crc >> 1) ^ reflected_poly;
+            } else {
+                crc >>= 1;
+            }
+        }
+    }
+    crc
+}
+
 
 
 // yiwire -- ws2812, adapted
