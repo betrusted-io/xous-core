@@ -2569,6 +2569,23 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5443807d6dff69373d433ab9ef5378ad8df50ca6298caf15de6e52e24aaf54d5"
 
 [[package]]
+name = "erasure"
+version = "0.1.0"
+dependencies = [
+ "bao1x-api 0.1.0",
+ "bao1x-hal",
+ "critical-section",
+ "digest 0.10.7",
+ "linked_list_allocator",
+ "riscv",
+ "sha2",
+ "sha2-bao1x",
+ "utralib 0.1.27",
+ "xous 0.9.70 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-riscv",
+]
+
+[[package]]
 name = "errno"
 version = "0.3.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"

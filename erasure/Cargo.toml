@@ -1,0 +1,40 @@
+[package]
+name = "erasure"
+version = "0.1.0"
+authors = ["bunnie <bunnie@kosagi.com>", "jade <jade@semiprecious.net>"]
+edition = "2018"
+description = "Baremetal target for provable memory wipe"
+
+[dependencies]
+xous = "0.9.70"
+utralib = { version = "0.1.27", optional = true, default-features = false }
+bao1x-hal = { path = "../libs/bao1x-hal", optional = true, default-features = false }
+bao1x-api = { path = "../libs/bao1x-api", optional = true, default-features = false }
+vexriscv = { version = "0.5.6", package = "xous-riscv" }
+riscv = { version = "0.14.0", features = ["critical-section-single-hart"] }
+linked_list_allocator = { version = "0.10.5", optional = true }
+critical-section = "1.2.0"
+sha2 = { version = "0.10.8", optional = true, default-features = false }
+digest = { version = "0.10.7", optional = true }
+sha2-bao1x = { path = "../bao1x-boot/sha2-bao1x", optional = true, default-features = false }
+
+[features]
+# Baochip feature tree below
+bao1x = [
+    "utralib/bao1x",
+    "linked_list_allocator",
+    "bao1x-hal/debug-print-uart",
+    "bao1x-hal/security",
+    "bao1x-api",
+    "digest",
+    "sha2-bao1x",
+]
+board-baosec = ["bao1x-hal/loader-baosec"]
+board-dabao = ["bao1x-hal/board-dabao"]
+bao1x-evb = []
+bao1x-usb = []
+bao1x-buttons = []
+verbose-debug = []
+verilator-only = []
+repl = []
+default = ["bao1x-usb"]

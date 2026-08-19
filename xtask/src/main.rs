@@ -693,6 +693,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             builder.set_baremetal(true).target_baremetal_bao1x("baremetal").set_sigblock_size(sigblock_size);
         }
 
+        Some("bao1x-erasure-dabao") => {
+            let board = "board-dabao";
+            builder.set_board(board);
+            builder.add_loader_feature(board);
+            builder.add_loader_feature("bao1x-usb");
+            // Uncomment to get an interactive repl for erasure (helpful for debugging).
+            // builder.add_loader_feature("repl");
+            let sigblock_size = bao1x_api::signatures::SIGBLOCK_LEN;
+            update_flash_origin(
+                "erasure/src/platform/bao1x/link.x",
+                (bao1x_api::BAREMETAL_START + sigblock_size + STATICS_LEN) as u32,
+            )?;
+            builder.set_baremetal(true).target_baremetal_bao1x("erasure").set_sigblock_size(sigblock_size);
+        }
+
         Some("baremetal-bao1x-evb") => {
             let sigblock_size = bao1x_api::signatures::SIGBLOCK_LEN;
             update_flash_origin(
