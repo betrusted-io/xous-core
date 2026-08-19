@@ -6,7 +6,8 @@ Usage:
     python3 clang2rustasm.py <module>  [options]
 
   <module> is a subdirectory name such as "math_test".
-  The script looks for zig-out/<module>.s (produced by "zig build dis -Dmodule=<module>")
+  The script looks for zig-out/<module>.s (produced by
+  "zig build -Dmodule=<module> -Dasm-only=true")
   and writes the converted Rust source to <module>/<module>.rs.
 
 Options:
@@ -50,6 +51,7 @@ HIGH_REG_MAP = {
 # Directives to strip entirely
 STRIP_DIRECTIVES = {
     ".attribute",
+    ".cfi",
     ".file",
     ".ident",
     ".addrsig",
@@ -1660,7 +1662,8 @@ def main():
     if not os.path.exists(input_path):
         print(
             f"Error: assembly file not found: {input_path}\n"
-            f"  Run: python3 -m ziglang build dis -Dmodule={args.module}",
+            f'  Run: "{sys.executable}" -m ziglang build '
+            f'"-Dmodule={args.module}" "-Dasm-only=true"',
             file=sys.stderr,
         )
         sys.exit(1)
