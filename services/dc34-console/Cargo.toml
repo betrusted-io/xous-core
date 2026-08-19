@@ -1,0 +1,105 @@
+[package]
+name = "dc34-console"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+utralib = { version = "0.1.27", optional = true, default-features = false }
+xous-names = { package = "xous-api-names", version = "0.9.71" }
+ticktimer = { package = "xous-api-ticktimer", version = "0.9.70" }
+xous = "0.9.70"
+log-server = { package = "xous-api-log", version = "0.1.69" }
+log = "0.4.14"
+num-derive = { version = "0.4.2", default-features = false }
+num-traits = { version = "0.2.14", default-features = false }
+bao1x-hal = { features = [
+    "std",
+], optional = true, path = "../../libs/bao1x-hal" }
+bao1x-api = { path = "../../libs/bao1x-api" }
+bao1x-hal-service = { optional = true, path = "../bao1x-hal-service" }
+bao1x-emu = { optional = true, path = "../bao1x-emu" }
+usb-bao1x = { path = "../usb-bao1x", features = ["bao1x", "board-baosec", "oem-baosec-lite"] }
+modals = { default-features = false, optional = true, path = "../modals" }
+ux-api = { optional = true, path = "../../libs/ux-api" }
+pddb = { optional = true, path = "../pddb" }
+xous-swapper = { optional = true, path = "../xous-swapper" }
+bytemuck = { version = "1.24.0", features = ["derive"] }
+susres = { package = "xous-api-susres", path = "../../api/xous-api-susres" }
+keystore = { path = "../keystore" }
+rkyv = { version = "0.8.8", default-features = false, features = [
+    "std",
+    "alloc",
+] }
+dc34-api = { path = "../../libs/dc34-api" }
+base64 = { version = "0.22.1", default-features = false, features = ["alloc"] }
+crc32fast = "1.5.0"
+
+bio-lib = { optional = true, path = "../../libs/bio-lib" }
+arbitrary-int = "1.2"
+
+# pddb testing
+rand = { version = "0.8.5", features = ["getrandom"] }
+rand_chacha = { version = "0.3.1" }
+rand_core = "0.6.4"
+
+aes = { default-features = false, features = [
+    "chaffing",
+], path = "../aes" }
+
+# time testing
+chrono = "0.4.33"
+
+# QR code encoding
+base45 = "3.1.0"
+
+# hid bringup
+xous-usb-hid = { git = "https://github.com/betrusted-io/xous-usb-hid.git", branch = "main", optional = true }
+
+getrandom = "=0.2.12"
+
+# aes testing
+[features]
+bao1x = ["utralib/bao1x", "usb-bao1x/bao1x", "aes/bao1x"]
+board-baosec = [
+    "modals/board-baosec",
+    "bao1x-hal-service",
+    "bao1x-hal",
+    "usb-bao1x/board-baosec",
+    "pddb/board-baosec",
+    "xous-swapper",
+    "ux-api/board-baosec",
+    "bio-lib",
+    "bao1x-hal/board-baosec",
+    "bio-lib/ws2812",
+]
+oem-baosec-lite = ["bao1x-hal/sensor-lis2dh12"]
+hosted-baosec = [
+    "modals/hosted-baosec",
+    "usb-bao1x/hosted-baosec",
+    "bao1x-emu",
+    "pddb/hosted-baosec",
+    "bao1x-hal/hosted-baosec",
+]
+owc-test = ["keystore/owc-inc"]
+# stress test for WFI resume
+wfi-stress-test = []
+# gate for misc test routines
+misc-test = []
+# for qa testing
+qa-test = []
+# this flag leaks secrets
+hazardous-test = []
+
+# these flags are for factory only builds
+# owc-inc is necessary because we use a OWC to disable the factory cheat routine after run-once.
+factory-mismatch = ["keystore/owc-inc"]
+factory-wipe = ["keystore/owc-inc"]
+
+uber = []
+
+# Activating this makes this crate *try* to grab the DUART. To improve its odds
+# of winning the race, shift its position to first in the list in the PIDs to be
+# loaded and run.
+duart-debug-hal = ["bao1x-hal/debug-print-duart"]
+
+default = ["oem-baosec-lite"]
