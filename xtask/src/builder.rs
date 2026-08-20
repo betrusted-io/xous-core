@@ -188,6 +188,10 @@ pub(crate) struct Builder {
     pq_key: String,
     pq_cache: Option<String>,
     no_pq: bool,
+    boot0: Option<String>,
+    boot1: Option<String>,
+    uses_boot0_path: bool,
+    uses_boot1_path: bool,
 }
 
 impl Builder {
@@ -227,6 +231,10 @@ impl Builder {
             pq_key: "devkey/dev-pq.key".into(),
             pq_cache: Some("devkey/dev-pq.cache".into()),
             no_pq: false,
+            boot0: None,
+            boot1: None,
+            uses_boot0_path: false,
+            uses_boot1_path: false,
         }
     }
 
@@ -290,6 +298,28 @@ impl Builder {
         self.swap = Some(SwapSpec { offchip_ram_offset: offset, offchip_ram_len: size });
         self
     }
+
+    pub fn is_updater<'a>(&'a mut self, boot0: bool, boot1: bool) -> &'a mut Builder {
+        self.uses_boot0_path = boot0;
+        self.uses_boot1_path = boot1;
+        self
+    }
+
+    pub fn set_boot0<'a>(&'a mut self, target: String) -> &'a mut Builder {
+        self.boot0 = Some(target);
+        self.uses_boot0_path = true;
+        self
+    }
+
+    pub fn set_boot1<'a>(&'a mut self, target: String) -> &'a mut Builder {
+        self.boot1 = Some(target);
+        self.uses_boot1_path = true;
+        self
+    }
+
+    pub fn uses_boot0_path(&self) -> bool { self.uses_boot0_path }
+
+    pub fn uses_boot1_path(&self) -> bool { self.uses_boot1_path }
 
     pub fn is_swap_set(&self) -> bool { self.swap.is_some() }
 
@@ -983,6 +1013,20 @@ impl Builder {
             // these settings will generate the most compact code (but also the hardest to debug)
             env::set_var("CARGO_PROFILE_RELEASE_LTO", "true");
             env::set_var("CARGO_PROFILE_RELEASE_CODEGEN_UNITS", "1");
+
+            if self.uses_boot0_path {
+                env::set_var(
+                    "BOOT0_BIN",
+                    self.boot0.clone().unwrap_or(crate::DEFAULT_BOOT0_PATH.to_string()),
+                );
+            }
+            if self.uses_boot1_path {
+                env::set_var(
+                    "BOOT1_BIN",
+                    self.boot1.clone().unwrap_or(crate::DEFAULT_BOOT1_PATH.to_string()),
+                );
+            }
+
             let mut loader_extra = vec![];
             if self.loader_disable_defaults {
                 loader_extra.push("--no-default-features".to_string());
@@ -1050,7 +1094,10 @@ impl Builder {
                                 "boot0"
                             } else if name == "bao1x-boot1" {
                                 "boot1"
-                            } else if name == "baremetal" || name == "bao1x-alt-boot1" {
+                            } else if name == "baremetal"
+                                || name == "bao1x-alt-boot1"
+                                || name == "boot-updater"
+                            {
                                 "baremetal"
                             } else {
                                 return Err(String::from("Target subtype not supported").into());
