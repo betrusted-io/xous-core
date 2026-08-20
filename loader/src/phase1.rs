@@ -653,6 +653,9 @@ fn copy_processes(cfg: &mut BootConfig, mut _fb: Option<&mut dyn FrameBuffer>) {
                     use digest::Digest;
 
                     let mut last_decrypt_address = None;
+                    // clear the buffer to avoid stale data from potentially being used in case of
+                    // a logic bug in the loop below. 0 is a trap in RISC-V.
+                    cfg.swap_hal.as_mut().unwrap().buf_as_mut().fill(0);
                     let mut expected_block_address = 0x1000; // hard coded constant - the physical address read
                     let owc = bao1x_hal::acram::OneWayCounter::new();
                     let mut hashed_count = 0;
@@ -887,6 +890,18 @@ fn copy_processes(cfg: &mut BootConfig, mut _fb: Option<&mut dyn FrameBuffer>) {
                                     src_swap_img_page + 0x1000 >= *end_data_blocks
                                 })
                                 .unwrap_or(false);
+                            if past_signed_region {
+                                // the only things past the signed region should be no_copy() data.
+                                // if an attacker manages to manipulate the image to put copyable data
+                                // here, we should completely abort the load. Otherwise, stale data from
+                                // the previously decrypted buffer could be copied into memory.
+                                if !section.no_copy() {
+                                    die_no_std();
+                                }
+                                // also zero the buffer - just in case future code decided to
+                                // use it accidentally, at least the contents match the expectation.
+                                cfg.swap_hal.as_mut().unwrap().buf_as_mut().fill(0);
+                            }
                             if !past_signed_region && last_decrypt_address != Some(src_swap_img_page) {
                                 // src_swap_img_page is in offsets relative to start of ELF - add 0x1000 to
                                 // get absolute block
