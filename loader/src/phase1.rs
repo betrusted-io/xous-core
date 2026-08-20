@@ -653,6 +653,9 @@ fn copy_processes(cfg: &mut BootConfig, mut _fb: Option<&mut dyn FrameBuffer>) {
                     use digest::Digest;
 
                     let mut last_decrypt_address = None;
+                    // clear the buffer to avoid stale data from potentially being used in case of
+                    // a logic bug in the loop below. 0 is a trap in RISC-V.
+                    cfg.swap_hal.as_mut().unwrap().buf_as_mut().fill(0);
                     let mut expected_block_address = 0x1000; // hard coded constant - the physical address read
                     let owc = bao1x_hal::acram::OneWayCounter::new();
                     let mut hashed_count = 0;
@@ -864,7 +867,42 @@ fn copy_processes(cfg: &mut BootConfig, mut _fb: Option<&mut dyn FrameBuffer>) {
                             let src_swap_img_page = src_swap_img_addr & !(PAGE_SIZE - 1);
                             let src_swap_img_offset = src_swap_img_addr & (PAGE_SIZE - 1);
                             // it's almost free to check, so we check at every loop start
-                            if last_decrypt_address != Some(src_swap_img_page) {
+                            //
+                            // Nothing past the signed region should be read. The signature
+                            // covers the encrypted data, so the page after it is the MAC
+                            // table; authenticating that fails and panics the loader --
+                            // silently, as its output goes only to the debug UART. This
+                            // happens when an application's last section is `no_copy`
+                            // (.bss), whose pages are loaded for hashing like any other.
+                            //
+                            // Compared by address, not by hashed_count: the catch-up loop
+                            // below advances that counter, so testing it here reads a value
+                            // one page stale. end_data_blocks is 0x1000 + signed_len.
+                            //
+                            // This covers the same case as the `!section.no_copy()` test
+                            // added in 9f43e1df0 and commented out in a5c33e108, without
+                            // contradicting either: no_copy sections inside the signed
+                            // region are still loaded and hashed, and only reads beyond the
+                            // signature are dropped.
+                            let past_signed_region = sig_check
+                                .as_ref()
+                                .map(|(_, _, _, end_data_blocks)| {
+                                    src_swap_img_page + 0x1000 >= *end_data_blocks
+                                })
+                                .unwrap_or(false);
+                            if past_signed_region {
+                                // the only things past the signed region should be no_copy() data.
+                                // if an attacker manages to manipulate the image to put copyable data
+                                // here, we should completely abort the load. Otherwise, stale data from
+                                // the previously decrypted buffer could be copied into memory.
+                                if !section.no_copy() {
+                                    die_no_std();
+                                }
+                                // also zero the buffer - just in case future code decided to
+                                // use it accidentally, at least the contents match the expectation.
+                                cfg.swap_hal.as_mut().unwrap().buf_as_mut().fill(0);
+                            }
+                            if !past_signed_region && last_decrypt_address != Some(src_swap_img_page) {
                                 // src_swap_img_page is in offsets relative to start of ELF - add 0x1000 to
                                 // get absolute block
                                 let phys_address = src_swap_img_page + 0x1000;
