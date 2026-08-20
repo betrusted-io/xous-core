@@ -11,7 +11,7 @@ use utralib::utra::bio_bdma;
 static CMD_RESET: u32 = 0;
 // Write a byte on the bus
 static CMD_WRITE: u32 = 1;
-// Read n bytes from the bus (passed via parameter)
+// Read n bits from the bus (passed via parameter)
 static CMD_READ: u32 = 2;
 // Write a single bit on the bus
 static CMD_WRITE_BIT: u32 = 3;
@@ -302,7 +302,7 @@ bio_code!(yiwire_kernel, YIWIRE_START, YIWIRE_END,
     "li x4, 1",             // 1: WRITE BYTE
     "beq x3, x4, 30f",
 
-    "li x4, 2",             // 2: READ BYTE
+    "li x4, 2",             // 2: READ n BITS
     "beq x3, x4, 40f",
 
     "li x4, 3",             // 1: WRITE BIT
