@@ -1,5 +1,6 @@
 use bao1x_api::{
-    DEVELOPER_MODE, PARANOID_MODE, PARANOID_MODE_DUPE, bollard, pubkeys::BOOT1_TO_LOADER_OR_BAREMETAL,
+    Boot1DeveloperState, DEVELOPER_MODE, PARANOID_MODE, PARANOID_MODE_DUPE, bollard,
+    pubkeys::BOOT1_TO_LOADER_OR_BAREMETAL,
 };
 use bao1x_hal::hardening::{Csprng, disable_clock_skipping, reseed_skipping, setup_clock_skipping};
 
@@ -124,6 +125,23 @@ pub fn try_boot(or_die: bool, csprng: &mut Csprng) {
             if use_skipping {
                 disable_clock_skipping();
             }
+
+            // before we do the actual jump, check the Boot1UpdateState, and ensure it's Good,
+            // because if we got here, Boot1 is as working as it can ever be. This is not security-critical,
+            // I think, so no hardening is done here.
+            loop {
+                let boot1_state = one_way.get_decoded::<Boot1DeveloperState>().unwrap();
+                if boot1_state == bao1x_api::Boot1DeveloperState::Good {
+                    break;
+                } else {
+                    crate::println!(
+                        "Incrementing Boot1UpdateState from {:?}",
+                        one_way.get_decoded::<Boot1DeveloperState>().unwrap()
+                    );
+                }
+                one_way.inc_coded::<Boot1DeveloperState>().ok();
+            }
+
             bao1x_hal::sigcheck::jump_to(target as usize, u32::from_le_bytes(tag) as usize);
         }
         Err(e) => crate::println!("Image did not validate: {:?}", e),
