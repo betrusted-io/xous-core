@@ -128,7 +128,10 @@ impl Coreuser {
             AsidMapping { asid: 5, uid: LEAST_TRUSTED_USER },
             AsidMapping { asid: 6, uid: LEAST_TRUSTED_USER },
             AsidMapping { asid: 7, uid: LEAST_TRUSTED_USER },
-            AsidMapping { asid: 0, uid: CoreuserId::Boot0 }, /* this is for boot - ASID 0 is not valid in
+            // this is defined as Boot1 to complicate attempts to modify Boot0. This mapping
+            // is malleable in the boot context but it at least requires an attacker to change
+            // it, instead of being able to abuse an existing write primitive with different args.
+            AsidMapping { asid: 0, uid: CoreuserId::Boot1 }, /* this is for boot - ASID 0 is not valid in
                                                               * Xous */
         ];
         let asid_fields = [

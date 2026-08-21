@@ -324,7 +324,35 @@ pub unsafe extern "C" fn rust_entry() -> ! {
     bollard!(die, 4);
     let boot_order = match owc.get_decoded::<bao1x_api::AltBootCoding>() {
         // Primary boot selected. Check Boot1 first, then fall back to LOADER/BAREMETAL.
-        Ok(bao1x_api::AltBootCoding::PrimaryPartition) => [BOOT0_TO_BOOT1, BOOT0_TO_ALTBOOT1],
+        Ok(bao1x_api::AltBootCoding::PrimaryPartition) => {
+            match owc.get_decoded::<bao1x_api::Boot1DeveloperState>() {
+                // no print on the Good case
+                Ok(bao1x_api::Boot1DeveloperState::Good) => [BOOT0_TO_BOOT1, BOOT0_TO_ALTBOOT1],
+                Ok(bao1x_api::Boot1DeveloperState::Staged) => {
+                    crate::println!("Boot1DeveloperState Staged -> Attempted");
+                    // roll forward to the attempted state. This should go from Staged -> Attempted
+                    // a successful boot1 boot will bring us to Good
+                    owc.inc_coded::<bao1x_api::Boot1DeveloperState>().ok();
+                    [BOOT0_TO_BOOT1, BOOT0_TO_ALTBOOT1]
+                }
+                Ok(bao1x_api::Boot1DeveloperState::Attempted) => {
+                    crate::println!("Boot1DeveloperState Attempted -> Bad");
+                    // roll forward to the attempted state. This should go from Attempted -> Bad
+                    owc.inc_coded::<bao1x_api::Boot1DeveloperState>().ok();
+                    // if we return in an Attempted state, then, it was a failed boot. Fall back
+                    // to the updater
+                    [BOOT0_TO_ALTBOOT1, BOOT0_TO_BOOT1]
+                }
+                Ok(bao1x_api::Boot1DeveloperState::Bad) => {
+                    crate::println!("Boot1DeveloperState is Bad");
+                    [BOOT0_TO_ALTBOOT1, BOOT0_TO_BOOT1]
+                }
+                Err(_) => {
+                    crate::println!("Internal error: boot1 update encoding is invalid!");
+                    bao1x_hal::sigcheck::die_no_std();
+                }
+            }
+        }
         // Alternate boot selected. Check LOADER/BAREMETAL, then fall back to Boot1.
         Ok(bao1x_api::AltBootCoding::AlternatePartition) => [BOOT0_TO_ALTBOOT1, BOOT0_TO_BOOT1],
         Err(_) => {

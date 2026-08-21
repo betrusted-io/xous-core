@@ -1,9 +1,9 @@
 [package]
-name = "bao1x-boot1"
+name = "boot-updater"
 version = "0.1.0"
-authors = ["bunnie <bunnie@kosagi.com>"]
-edition = "2018"
-description = "Boot1 partition"
+authors = ["bunnie <bunnie@baochip.com>"]
+edition = "2024"
+description = "Bootloader updater utility"
 
 [dependencies]
 xous = "0.9.70"
@@ -39,28 +39,16 @@ bao1x = [
     "bao1x-hal/loader-baosec",
     "bao1x-hal/security",
     # "bao1x-hal/debug-print-duart",
-    # "bao1x-hal/debug-countermeasures",
     "bao1x-api",
     # needed for the boot logo
     "ux-api/loader-baosec",
 ]
 unsafe-debug = []
 verbose-debug = ["bao1x-hal/debug-print-uart", "bao1x-hal/verbose-debug"]
-print-ifr = []
-
-test-boot0-keys = []
-alt-boot1 = []
-test-clock-skipping = []
-uf2-spim = []
-pq-check = []
+boot0 = []
 
 oem = []
 oem-baosec-lite = ["oem", "bao1x-hal/oem-baosec-lite"]
+force-stage = []
 
-qe-debug = ["verbose-debug", "bao1x-hal/debug-print-duart"]
-
-# various pocs for security issues
-pocs = []
-
-verilator-only = []
-default = ["oem-baosec-lite"]
+default = ["oem-baosec-lite", "boot0"]

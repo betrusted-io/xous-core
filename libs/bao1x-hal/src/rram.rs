@@ -412,6 +412,17 @@ impl<'a> Reram {
         // crate::println!("Writing to {:x}: {:x?}", offset, &data[..16.min(data.len())]);
         self.write_slice_retry(offset, data)
     }
+
+    /// safety: absolutely no bounds checking on offset or data done prior to write. Mis-use of this
+    /// function can brick the chip. Useful for red-teaming the chip as it allows dangerous operations.
+    #[cfg(feature = "redteam")]
+    pub unsafe fn crazy_unsafe_write_slice(
+        &mut self,
+        offset: usize,
+        data: &[u8],
+    ) -> Result<usize, xous::Error> {
+        self.write_slice_retry(offset, data)
+    }
 }
 
 #[cfg(feature = "std")]

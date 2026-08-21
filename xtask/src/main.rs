@@ -47,6 +47,11 @@ pub(crate) const TARGET_TRIPLE_RISCV32_KERNEL: &str = "riscv32imac-unknown-none-
 pub(crate) const TARGET_TRIPLE_ARM: &str = "armv7a-unknown-xous-elf";
 pub(crate) const TARGET_TRIPLE_ARM_KERNEL: &str = "armv7a-unknown-none-elf";
 
+/// default path to the boot0 binary image
+const DEFAULT_BOOT0_PATH: &str = "../../../target/riscv32imac-unknown-none-elf/release/bao1x-boot0.img";
+/// default path to the boot1 binary image
+const DEFAULT_BOOT1_PATH: &str = "../../../target/riscv32imac-unknown-none-elf/release/bao1x-boot1.img";
+
 /// Size of the "statics" region used to initialize baremetal targets
 const STATICS_LEN: usize = 0x100;
 
@@ -234,6 +239,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     if env::args().filter(|x| x == "--change-target").count() != 0 {
         builder.set_change_target_flag();
     }
+
+    let boot0_path = get_flag("--boot0")?.first().cloned();
+    let boot1_path = get_flag("--boot1")?.first().cloned();
 
     // ---- now process the verb plus position dependent arguments ----
     let mut args = env::args();
@@ -773,6 +781,30 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .set_sigblock_size(sigblock_size);
         }
 
+        Some("bao1x-boot-updater-lite") => {
+            let board = "oem-baosec-lite";
+            builder.add_loader_feature(board);
+            let sigblock_size = bao1x_api::signatures::SIGBLOCK_LEN;
+            update_flash_origin(
+                "bao1x-boot/boot-updater/src/platform/bao1x/link.x",
+                (bao1x_api::BAREMETAL_START + sigblock_size + STATICS_LEN) as u32,
+            )?;
+            builder
+                .set_baremetal(true)
+                .target_baremetal_bao1x("boot-updater")
+                .set_sigblock_size(sigblock_size)
+                .add_loader_feature("boot0")
+                .add_loader_feature("oem-baosec-lite")
+                .is_updater(true, true);
+
+            if let Some(target) = &boot0_path {
+                builder.set_boot0(target.to_owned());
+            }
+            if let Some(target) = &boot1_path {
+                builder.set_boot1(target.to_owned());
+            }
+        }
+
         Some("baosec") => {
             baosec_common(&mut builder)?;
         }
@@ -908,6 +940,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // at the UI layer but anyways - this avoids accidental duplicate processes which is a good thing
     // in general.
     builder.deduplicate_processes();
+
+    let print_boot0_warn = builder.uses_boot0_path() && boot0_path.is_none();
+    let print_boot1_warn = builder.uses_boot1_path() && boot1_path.is_none();
+
     builder.build()?;
 
     // the intent of this call is to check that crates we are sourcing from crates.io
@@ -923,7 +959,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // this has to be called after the build because the crates need to be downloaded for
     // checking before you can check them!
     let do_verify = env::args().filter(|x| x == "--no-verify").count() == 0;
-    if do_verify {
+    let result = if do_verify {
         match check_project_consistency() {
             Ok(()) => Ok(()),
             Err(e) => {
@@ -941,7 +977,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     } else {
         Ok(())
+    };
+    if print_boot0_warn {
+        println!(
+            "\n**** WARNING: boot0 path defaults to dev build. This is not what you want for a production release ****\n"
+        );
     }
+    if print_boot1_warn {
+        println!(
+            "\n**** WARNING: boot1 path defaults to dev build. This is not what you want for a production release ****\n"
+        );
+    }
+    result
 }
 
 fn print_help() {
@@ -963,6 +1010,8 @@ fn print_help() {
     [--change-target]
     [--git-describe version]
     [--git-rev commit]
+    [--boot0 <path-to-boot0>]
+    [--boot1 <path-to-boot1>]
 
 [cratespecs] is a list of 0 or more items of the following syntax:
    [name]                crate 'name' to be built from local source
@@ -995,6 +1044,8 @@ be merged in with explicit app/service treatment with the following flags:
 [--no-pq]                Force PQ signing to be off (defaults to dev PQ key otherwise)
 [--pq-key <keyfile>]     Use this PQ key file instead of the dev key. Ignored if --no-pq specified.
 [--pq-cache <cache>]     Use this PQ cache file. If provided and valid, speeds up the PQ signing operation.
+[--boot0 <path>]         Updater builds: path to the boot0 binary image (defaults to a built-in path if omitted)
+[--boot1 <path>]         Updater builds: path to the boot1 binary image (defaults to a built-in path if omitted)
 
 - An 'app' must be enumerated in apps/manifest.json.
    A pre-processor configures the launch menu based on the list of specified apps.
