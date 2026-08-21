@@ -61,6 +61,8 @@ qe-debug = ["verbose-debug", "bao1x-hal/debug-print-duart"]
 
 # various pocs for security issues
 pocs = []
+# check and fix IFR values - requires an unsafe setting from bao1x-hal
+fix-ifr = ["bao1x-hal/redteam"]
 
 verilator-only = []
 default = ["oem-baosec-lite"]
