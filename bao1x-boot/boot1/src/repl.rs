@@ -1120,6 +1120,63 @@ impl Repl {
                     count
                 );
             }
+            #[cfg(feature = "pocs")]
+            // checks the following facts:
+            // - with the IFR configured correctly, the boot0 protection is not mutable
+            // - that boot1 "as boot0" by the coreuser logic, which allows it to change boot0
+            // - this is an immutable fact of the chip, the ACL logic always allows a user to change its own
+            //   data
+            // - Side note: boot0/boot1 defs could be modified to "prevent" boot1 from notionally changing
+            //   boot0 contents, but it's easily changed back by just editing the coreuser mapping table. It's
+            //   not until the one-way door on the CU table is sealed that boot0 becomes truly indelible.
+            "poc_boot0_in_boot1" => {
+                let mut rram = bao1x_hal::rram::Reram::new();
+
+                let ifr = unsafe { core::slice::from_raw_parts(0x6040_0100 as *const u8, 0x100) };
+                for (i, chunk) in ifr.chunks(32).enumerate() {
+                    // these "redundant" asserts make it harder to abuse this print as a memory dumping
+                    // primitive, e.g. by glitching or other similar attack
+                    crate::println!("  {:03x}: {:02x?}", i * 32, chunk);
+                }
+
+                // confirm that we can't touch the end of boot0
+                let test = [0x4u8; 32];
+                crate::println!("should fail: {:?}", unsafe {
+                    rram.crazy_unsafe_write_slice(0x0002_0000 - 32, &test)
+                });
+                crate::println!("touched boot0: {:x?}", unsafe {
+                    core::slice::from_raw_parts((0x6002_0000 - 32) as *const u8, 8)
+                });
+                let mut old_ac = [0u8; 32];
+                old_ac.copy_from_slice(unsafe {
+                    core::slice::from_raw_parts((0x6040_0000 + 0x280) as *const u8, 32)
+                });
+                crate::println!("ifr 0x280: {:x?}", &old_ac);
+                crate::println!("DISABLE PROTECTION");
+                let new_ac = [0u8; 32];
+                unsafe { rram.crazy_unsafe_write_slice(0x0040_0000 + 0x280, &new_ac) };
+                bao1x_hal::cache_flush();
+                crate::println!("ifr 0x280: {:x?}", unsafe {
+                    core::slice::from_raw_parts((0x6040_0000 + 0x280) as *const u8, 32)
+                });
+                crate::println!("should pass: {:?}", unsafe {
+                    rram.crazy_unsafe_write_slice(0x0002_0000 - 32, &test)
+                });
+                crate::println!("touched boot0: {:x?}", unsafe {
+                    core::slice::from_raw_parts((0x6002_0000 - 32) as *const u8, 8)
+                });
+                crate::println!("ENABLE PROTECTION");
+                unsafe { rram.crazy_unsafe_write_slice(0x0002_0000 - 32, &[0u8; 32]) };
+                // restore ifr
+                old_ac[31] = 0x3a;
+                unsafe { rram.crazy_unsafe_write_slice(0x0040_0000 + 0x280, &old_ac) };
+                crate::println!("ifr 0x280: {:x?}", unsafe {
+                    core::slice::from_raw_parts((0x6040_0000 + 0x280) as *const u8, 32)
+                });
+                crate::println!("touched boot0: {:x?}", unsafe {
+                    core::slice::from_raw_parts((0x6002_0000 - 32) as *const u8, 8)
+                });
+            }
             "echo" => {
                 for word in args {
                     crate::print!("{} ", word);

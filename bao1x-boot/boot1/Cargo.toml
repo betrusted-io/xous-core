@@ -59,5 +59,8 @@ oem-baosec-lite = ["oem", "bao1x-hal/oem-baosec-lite"]
 
 qe-debug = ["verbose-debug", "bao1x-hal/debug-print-duart"]
 
+# various pocs for security issues
+pocs = []
+
 verilator-only = []
 default = ["oem-baosec-lite"]
