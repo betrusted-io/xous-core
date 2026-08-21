@@ -275,7 +275,7 @@ pub unsafe extern "C" fn rust_entry() -> ! {
         // break out of the loop when USB is disconnected
         if new_portsc != portsc {
             portsc = new_portsc;
-            crate::println!("new portsc {:x}", portsc);
+            // crate::println!("new portsc {:x}", portsc);
             if glue::is_disconnected(portsc) && new_usb_state == UsbDeviceState::Configured {
                 crate::println!("USB disconnected!");
                 break;
