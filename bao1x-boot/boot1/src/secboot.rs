@@ -116,6 +116,11 @@ pub fn try_boot(or_die: bool, csprng: &mut Csprng) {
             }
 
             csprng.random_delay();
+
+            // this must be called before secrets are sealed
+            #[cfg(feature = "fix-ifr")]
+            fix_ifr();
+
             bollard!(bao1x_hal::sigcheck::die_no_std, 4);
             // this has to be called *after* erase_secrets, because we can't erase the secrets
             // once the mappings have been sealed off. This is why we can't use the auto-jump method
@@ -152,5 +157,72 @@ pub fn try_boot(or_die: bool, csprng: &mut Csprng) {
     }
     if use_skipping {
         disable_clock_skipping();
+    }
+}
+
+#[cfg(feature = "fix-ifr")]
+pub fn fix_ifr() {
+    let mut rram = bao1x_hal::rram::Reram::new();
+    {
+        let mut ifr_0x280 = [0u8; 32];
+        ifr_0x280
+            .copy_from_slice(unsafe { core::slice::from_raw_parts((0x6040_0000 + 0x280) as *const u8, 32) });
+        if ifr_0x280
+            == [
+                0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xA8, 0x00,
+                0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                0x00, 0x00,
+            ]
+        {
+            // the 0x3a write protection is missing. Patch it.
+            ifr_0x280[31] = 0x3A;
+            if unsafe { rram.crazy_unsafe_write_slice(0x0040_0000 + 0x280, &ifr_0x280) }.is_err() {
+                crate::println!("Couldn't patch IFR 0x280");
+            } else {
+                crate::println!("IFR 0x280 patched");
+            }
+            bao1x_hal::cache_flush();
+        } else if ifr_0x280
+            == [
+                0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xA8, 0x00,
+                0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                0x00, 0x3A,
+            ]
+        {
+            // everything is OK, don't print anything
+        } else {
+            crate::println!("IFR 0x280 has an unexpected value, skipping patch");
+        }
+    }
+    {
+        let mut ifr_0x340 = [0u8; 32];
+        ifr_0x340
+            .copy_from_slice(unsafe { core::slice::from_raw_parts((0x6040_0000 + 0x340) as *const u8, 32) });
+        if ifr_0x340
+            == [
+                0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                0x00, 0x00,
+            ]
+        {
+            // the 0x3a write protection is missing. Patch it.
+            ifr_0x340[31] = 0x3A;
+            if unsafe { rram.crazy_unsafe_write_slice(0x0040_0000 + 0x340, &ifr_0x340) }.is_err() {
+                crate::println!("Couldn't patch IFR 0x340");
+            } else {
+                crate::println!("IFR 0x340 patched");
+            }
+            bao1x_hal::cache_flush();
+        } else if ifr_0x340
+            == [
+                0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                0x00, 0x3A,
+            ]
+        {
+            // everything is OK, don't print anything
+        } else {
+            crate::println!("IFR 0x340 has an unexpected value, skipping patch");
+        }
     }
 }

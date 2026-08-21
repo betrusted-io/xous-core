@@ -78,7 +78,7 @@ pub unsafe extern "C" fn rust_entry() -> ! {
         IS_BAOSEC.store(true, Ordering::SeqCst);
     }
     #[cfg(feature = "oem-baosec-lite")]
-    {
+    if board_type == BoardTypeCoding::Oem {
         IS_BAOSEC.store(true, Ordering::SeqCst);
     }
 
@@ -109,12 +109,16 @@ pub unsafe extern "C" fn rust_entry() -> ! {
     let mut udma_global = GlobalConfig::new();
     let mut oled_iox = iox.clone();
     #[cfg(feature = "oem-baosec-lite")]
-    let mut oled = Some(bao1x_hal::sh1107::Oled128x128::new(
-        bao1x_hal::sh1107::MainThreadToken::new(),
-        perclk,
-        &mut oled_iox,
-        &mut udma_global,
-    ));
+    let mut oled = if board_type == BoardTypeCoding::Oem {
+        Some(bao1x_hal::sh1107::Oled128x128::new(
+            bao1x_hal::sh1107::MainThreadToken::new(),
+            perclk,
+            &mut oled_iox,
+            &mut udma_global,
+        ))
+    } else {
+        None
+    };
     #[cfg(not(feature = "oem-baosec-lite"))]
     let mut oled = if board_type == BoardTypeCoding::Baosec {
         Some(bao1x_hal::sh1107::Oled128x128::new(

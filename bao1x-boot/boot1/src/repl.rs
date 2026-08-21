@@ -656,6 +656,9 @@ impl Repl {
                 crate::println!("Board type set to {:?} after {} increments", new_type, count);
                 crate::platform::slots::check_slots();
                 crate::println!("Key & data slots checked according to the new type");
+                // improve scripted recognition of confirmation message in noisy/flakey serial environments
+                use bao1x_hal::board::{BOOKEND_END, BOOKEND_START};
+                crate::println!("{}BOOT1.BOARDTYPE,{},{}", BOOKEND_START, args[0].as_str(), BOOKEND_END);
             }
             "altboot" => {
                 let owc = OneWayCounter::new();
@@ -735,6 +738,10 @@ impl Repl {
                 }
             }
             "baosec-init" => {
+                // NOTE: boardtype setting is removed from this routine. Test routine needs to be reworked to
+                // set this using a separate boardtype command.
+                // completion type is also BAOSEC-INIT now.
+
                 let full = match args.as_slice() {
                     [s] if s == "confirm" => false,
                     [s, f] if s == "confirm" && f == "full" => true,
@@ -810,25 +817,7 @@ impl Repl {
                     flash_spim.flash_erase_block(addr, SPINOR_BULK_ERASE_SIZE as usize);
                 }
                 crate::println!("...done!");
-                let one_way = bao1x_hal::acram::OneWayCounter::new();
-                let board_type =
-                    one_way.get_decoded::<bao1x_api::BoardTypeCoding>().expect("Board type coding error");
-                #[cfg(not(feature = "oem-baosec-lite"))]
-                if board_type != bao1x_api::BoardTypeCoding::Baosec {
-                    while one_way.get_decoded::<bao1x_api::BoardTypeCoding>().expect("owc coding error")
-                        != bao1x_api::BoardTypeCoding::Baosec
-                    {
-                        one_way.inc_coded::<bao1x_api::BoardTypeCoding>().expect("increment error");
-                    }
-                }
-                #[cfg(feature = "oem-baosec-lite")]
-                if board_type != bao1x_api::BoardTypeCoding::Oem {
-                    while one_way.get_decoded::<bao1x_api::BoardTypeCoding>().expect("owc coding error")
-                        != bao1x_api::BoardTypeCoding::Oem
-                    {
-                        one_way.inc_coded::<bao1x_api::BoardTypeCoding>().expect("increment error");
-                    }
-                }
+
                 // reset the USB stack so that we'll re-enumerate correctly after this reboot.
                 // This also has the side-effect of redirecting the console output back to the serial port.
                 crate::platform::usb::glue::shutdown();
@@ -840,16 +829,8 @@ impl Repl {
                 // CI note: this appears on the "hard UART", not on USB serial. If we want this on USB
                 // serial, we would want to add some wait time to ensure the USB packets get sent before
                 // issuing the reboot command.
-                #[cfg(not(feature = "oem-baosec-lite"))]
-                {
-                    crate::println!("{}BOOT1.SETBOARD,{}", BOOKEND_START, BOOKEND_END);
-                    crate::println!("Board type set to baosec");
-                }
-                #[cfg(feature = "oem-baosec-lite")]
-                {
-                    crate::println!("Board type set to baosec-lite");
-                    crate::println!("{}BOOT1.SETBOARD-LITE,{}", BOOKEND_START, BOOKEND_END);
-                }
+                crate::println!("{}BOOT1.BAOSEC-INIT,{}", BOOKEND_START, BOOKEND_END);
+                crate::println!("Board type set to baosec");
             }
             "ifr" => {
                 // safety: the IFR region is aligned and exists here. It is sealed by hardware in USER mode,
