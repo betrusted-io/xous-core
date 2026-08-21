@@ -32,8 +32,10 @@ fn detect_stepping() -> &'static str {
 }
 
 pub fn run(mut csprng: &mut Csprng) -> bool {
+    let mut passing = true;
     bollard!(die, 4);
     // double-check boot0 signatures on uploaded artifacts
+    // hardened because this could be a vector to upload arbitrary images with a glitch attack
     #[cfg(feature = "boot0")]
     {
         let boot0_check = SecurityConfiguration {
@@ -85,66 +87,34 @@ pub fn run(mut csprng: &mut Csprng) -> bool {
         die();
     }
 
-    crate::println!("sigchecks passed!");
+    crate::println!("All signature checks passed!");
 
+    bollard!(die, 4);
     let mut rram = crate::rram::Reram::new();
 
-    // this code is unsuccessful because in baremetal we don't have access to IFR. This means that
-    // without the A0 bug there isn't an easy way to update boot0 from a baremetal context.
-    /*
-    crate::println!("entering keystore context");
-    unsafe { enter_supervisor_asid3() };
-    crate::println!("leaving keystore context");
-
-    let ifr = unsafe { core::slice::from_raw_parts(0x6040_0000 as *const u8, 0x400) };
-    for (i, chunk) in ifr.chunks(32).enumerate() {
-        // these "redundant" asserts make it harder to abuse this print as a memory dumping
-        // primitive, e.g. by glitching or other similar attack
-        assert!(core::hint::black_box(ifr.as_ptr()) as usize == 0x6040_0000);
-        crate::println!("  {:03x}: {:02x?}", i * 32, chunk);
-        assert!(i < 32);
-    }
-
-    // confirm that we can't touch the end of boot0
-    let test = [0x4u8; 32];
-    crate::println!("should fail: {:?}", unsafe { rram.crazy_unsafe_write_slice(0x0002_0000 - 32, &test) });
-    let mut old_ac = [0u8; 32];
-    old_ac.copy_from_slice(unsafe { core::slice::from_raw_parts((0x6040_0000 + 0x280) as *const u8, 32) });
-    crate::println!("ifr 0x280: {:x?}", &old_ac);
-    let new_ac = [0u8; 32];
-    unsafe { rram.crazy_unsafe_write_slice(0x0040_0000 + 0x280, &new_ac) };
-    bao1x_hal::cache_flush();
-    crate::println!("ifr 0x280: {:x?}", unsafe {
-        core::slice::from_raw_parts((0x6040_0000 + 0x280) as *const u8, 32)
-    });
-    crate::println!("should pass: {:?}", unsafe { rram.crazy_unsafe_write_slice(0x0002_0000 - 32, &test) });
-    crate::println!("restore state");
-    unsafe { rram.crazy_unsafe_write_slice(0x0002_0000 - 32, &[0u8; 32]) };
-    // restore ifr
-    unsafe { rram.crazy_unsafe_write_slice(0x0040_0000 + 0x280, &old_ac) };
-
-    loop {}
-    */
-
-    crate::println!("writing boot1");
+    crate::println!("Writing boot1...");
     // strip off the absolute address prefix so we have the relative offset
     match unsafe { rram.crazy_unsafe_write_slice(BOOT1_START & 0x0FFF_FFFF, &BOOT1.0) } {
         Err(e) => {
+            passing = false;
             crate::println!("{:?}: hardware error in RRAM write, device likely bricked", e);
         }
         _ => (),
     }
 
-    crate::println!("checking boot1");
+    crate::println!("  Checking boot1");
     let boot1_verify = bao1x_hal::sigcheck::validate_image(BOOT0_TO_BOOT1, None, Some(&mut csprng));
     match &boot1_verify {
         Ok(_) => {
-            crate::println!("boot1 update passed")
+            crate::println!("  boot1 update passed!")
         }
-        Err(e) => crate::println!(
-            "{:?}: boot1 update failed. This error is unrecoverable, board is now a brick.",
-            e
-        ),
+        Err(e) => {
+            passing = false;
+            crate::println!(
+                "  {:?}: boot1 update failed. This error is unrecoverable, board is now a brick.",
+                e
+            );
+        }
     }
 
     // implement the boot0 update iff version is A0
@@ -156,30 +126,32 @@ pub fn run(mut csprng: &mut Csprng) -> bool {
         if stepping == "A0" {
             // Note: the A0 security bypass is in the RRAM implementation
 
-            crate::println!("writing boot0");
+            crate::println!("Writing boot0...");
             // strip off the absolute address prefix so we have the relative offset
             match unsafe { rram.crazy_unsafe_write_slice(BOOT0_START & 0x0FFF_FFFF, &BOOT0.0) } {
                 Err(e) => {
-                    crate::println!("{:?}: hardware error in RRAM write, device likely bricked", e);
+                    passing = false;
+                    crate::println!("  {:?}: hardware error in RRAM write, device likely bricked", e);
                 }
                 _ => {}
             }
 
-            crate::println!("checking boot0");
+            crate::println!("  Checking boot0");
             let boot0_verify = bao1x_hal::sigcheck::validate_image(BOOT0_SELF_CHECK, None, Some(&mut csprng));
             match &boot0_verify {
                 Ok(_) => {
-                    crate::println!("boot0 update passed")
+                    crate::println!("  boot0 update passed!")
                 }
                 Err(e) => match &boot1_verify {
                     Ok((_key, _key_inv, tag, target, _pq_tag)) => {
                         crate::println!(
-                            "{:?}, boot0 update failed. Dropping to boot1, there is a chance to upload a new image there and retry. Roll a d20 while you're at it.",
+                            "  {:?}, boot0 update failed. Dropping to boot1, there is a chance to upload a new image there and retry. Roll a d20 while you're at it.",
                             e
                         );
                         jump_to(*target as usize, u32::from_le_bytes(*tag) as usize);
                     }
                     Err(e) => {
+                        passing = false;
                         crate::println!(
                             "{:?}, boot0 & boot1 failed update, unrecoverable error. Device is now a brick.",
                             e
@@ -188,12 +160,12 @@ pub fn run(mut csprng: &mut Csprng) -> bool {
                 },
             }
         } else {
-            crate::println!("can't patch boot0 on A1 silicon");
+            crate::println!("Can't patch boot0 on A1 silicon, skipping boot0 update!");
         }
     }
 
-    crate::println!("updater finished");
-    true
+    crate::println!("Updater finished");
+    passing
 }
 
 pub fn jump_to(target: usize, mask: usize) -> ! {
