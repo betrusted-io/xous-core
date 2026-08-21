@@ -26,12 +26,12 @@ impl AlignedBuffer {
 
 /// This disables the security. Only works on A0 silicon. Required to bypass security, which then
 /// allows for updates of boot0
-// #[cfg(feature = "boot0")]
-// pub const SECURITY_MODE: u32 = 0x0;
+#[cfg(feature = "boot0")]
+pub const SECURITY_MODE: u32 = 0x0;
 /// This is the code that enables the security modes. Must be written into
 /// RRCR on every update - kind of dangerous design, because it is too easy
 /// to overlook setting this in a compound register.
-// #[cfg(not(feature = "boot0"))]
+#[cfg(not(feature = "boot0"))]
 pub const SECURITY_MODE: u32 = 0b1111_1100_0000_0000;
 
 const RRC_LOAD_BUFFER: u32 = 0x5200;
@@ -203,8 +203,10 @@ impl<'a> Reram {
         offset: usize,
         data: &[u8],
     ) -> Result<usize, xous::Error> {
-        crate::println!("writing to: {:x}", offset);
-        crate::println!("data {:x?}..{:x?}", &data[..16], &data[data.len() - 16..]);
+        // leave these debug snippets, I think this will help with field diagnostics
+        // even though they are unsightly.
+        crate::println!("  Writing to: {:x}", offset);
+        crate::println!("  Data {:x?}..{:x?}", &data[..16], &data[data.len() - 16..]);
         self.write_slice_retry(offset, data)
     }
 }
