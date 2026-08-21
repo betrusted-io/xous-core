@@ -64,8 +64,6 @@ impl<'a> Reram {
         }
     }
 
-    pub fn read_slice(&self) -> &[u32] { self.array }
-
     /// Safety: the write destination address must be aligned to a 256-bit boundary, and the data
     /// must be exactly 256 bits long.
     ///

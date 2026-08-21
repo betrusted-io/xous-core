@@ -49,5 +49,6 @@ boot0 = []
 
 oem = []
 oem-baosec-lite = ["oem", "bao1x-hal/oem-baosec-lite"]
+force-stage = []
 
 default = ["oem-baosec-lite", "boot0"]

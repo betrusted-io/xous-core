@@ -103,7 +103,7 @@ pub fn setup_rx(perclk: u32) -> bao1x_hal::udma::Uart {
     udma_global.map_event(uart_id, PeriphEventType::Uart(EventUartOffset::Rx), EventChannel::Channel0);
     udma_global.map_event(uart_id, PeriphEventType::Uart(EventUartOffset::Tx), EventChannel::Channel1);
 
-    let baudrate: u32 = crate::UART_BAUD;
+    let baudrate: u32 = bao1x_api::UART_BAUD;
     let freq: u32 = perclk;
 
     // the address of the UART buffer is "hard-allocated" at an offset one page from the top of

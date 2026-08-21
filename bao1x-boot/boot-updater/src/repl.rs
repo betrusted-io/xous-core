@@ -14,6 +14,7 @@ pub struct Error {
 impl Error {
     pub fn none() -> Self { Self { message: None } }
 
+    #[allow(dead_code)]
     pub fn help(message: &'static str) -> Self { Self { message: Some(message) } }
 }
 
@@ -22,7 +23,6 @@ pub struct Repl {
     do_cmd: bool,
 }
 
-const COLUMNS: usize = 4;
 impl Repl {
     pub fn new() -> Self { Self { cmdline: String::new(), do_cmd: false } }
 
@@ -68,6 +68,37 @@ impl Repl {
         let cmd = parts.next().unwrap_or("").to_string();
         let args: Vec<String> = parts.map(|s| s.to_string()).collect();
         match cmd.as_str() {
+            // used by developers to indicate the next boot requires a full test pass, otherwise
+            // we return to updater program
+            "stage" => {
+                let one_way = bao1x_hal::acram::OneWayCounter::new();
+                crate::println!("Moving Boot1DeveloperState into Staged");
+                loop {
+                    let boot1_state = one_way.get_decoded::<bao1x_api::Boot1DeveloperState>().unwrap();
+                    if boot1_state == bao1x_api::Boot1DeveloperState::Staged {
+                        break;
+                    } else {
+                        crate::println!(
+                            "Incrementing Boot1UpdateState from {:?}",
+                            one_way.get_decoded::<bao1x_api::Boot1DeveloperState>().unwrap()
+                        );
+                    }
+                    one_way.inc_coded::<bao1x_api::Boot1DeveloperState>().ok();
+                    crate::println!(
+                        "Boot1UpdateState is {:?}",
+                        one_way.get_decoded::<bao1x_api::Boot1DeveloperState>().unwrap()
+                    );
+                }
+                crate::println!(
+                    "Boot1 testing is staged. Load and boot a good image using boot1 to clear staging."
+                );
+                crate::println!(
+                    "Failure to sequence boot1 all the way through boot will return you to the ALTBOOT shell."
+                );
+                crate::println!(
+                    "Note that just copying an image is insufficient, you must ALSO boot it successfully."
+                );
+            }
             "echo" => {
                 for word in args {
                     crate::print!("{} ", word);
@@ -76,7 +107,7 @@ impl Repl {
             }
             _ => {
                 crate::println!("Command not recognized: {}", cmd);
-                crate::print!("Commands include: echo");
+                crate::print!("Commands include: echo, stage");
                 crate::println!("");
             }
         }

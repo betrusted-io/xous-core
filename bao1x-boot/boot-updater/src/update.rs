@@ -31,7 +31,7 @@ fn detect_stepping() -> &'static str {
     ret
 }
 
-pub fn run(mut csprng: &mut Csprng) {
+pub fn run(mut csprng: &mut Csprng) -> bool {
     bollard!(die, 4);
     // double-check boot0 signatures on uploaded artifacts
     #[cfg(feature = "boot0")]
@@ -193,6 +193,7 @@ pub fn run(mut csprng: &mut Csprng) {
     }
 
     crate::println!("updater finished");
+    true
 }
 
 pub fn jump_to(target: usize, mask: usize) -> ! {

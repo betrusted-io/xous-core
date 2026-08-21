@@ -1,6 +1,9 @@
+use bao1x_hal::board::DEFAULT_FCLK_FREQUENCY;
+use bao1x_hal::usb::utra::*;
 use riscv::register::{mcause, mie, mstatus};
 use vexriscv::register::vexriscv::{mim, mip};
 
+use crate::usb::USB;
 use crate::*;
 
 pub fn irq_setup() {
@@ -29,6 +32,27 @@ pub fn enable_irq(irq_no: usize) {
     mim::write(mim::read() | (1 << irq_no));
     // must enable external interrupts on the CPU for any of the above to matter
     unsafe { mie::set_mext() };
+}
+
+#[allow(dead_code)]
+pub fn disable_all_irqs() {
+    // Note that the vexriscv "IRQ Mask" register is inverse-logic --
+    // that is, setting a bit in the "mask" register unmasks (i.e. enables) it.
+    mim::write(0);
+    unsafe { mie::clear_mext() };
+    unsafe { mstatus::clear_mie() };
+    // redo delegations
+    unsafe {
+        #[rustfmt::skip]
+        core::arch::asm!(
+            "li          t0, 0xffffffff",
+            "csrw        mideleg, t0",
+            "csrw        medeleg, t0",
+            // Re-install the machine mode trap handler
+            "la          t0, abort",
+            "csrw        mtvec, t0",
+        );
+    }
 }
 
 #[unsafe(export_name = "_start_trap")]
@@ -168,16 +192,6 @@ pub extern "C" fn trap_handler(
     // crate::println!("cause {:x}", cause.bits());
     // 2 is illegal instruction
     if cause.bits() == 2 {
-        // skip past the illegal instruction, in case that's what we want to do...
-        unsafe {
-            #[rustfmt::skip]
-            core::arch::asm!(
-                "csrr        t0, mepc",
-                "addi        t0, t0, 4",
-                "csrw        mepc, t0",
-            );
-        }
-        // ...but also panic.
         panic!("Illegal Instruction");
     } else if cause.bits() == 4 {
         let epc = riscv::register::mepc::read();
@@ -193,15 +207,62 @@ pub extern "C" fn trap_handler(
             let ms = bao1x_api::SYSTEM_TICK_INTERVAL_MS;
             let mut timer0 = CSR::new(utra::timer0::HW_TIMER0_BASE as *mut u32);
             timer0.wfo(utra::timer0::EV_PENDING_ZERO, 1);
-            timer0.wfo(utra::timer0::RELOAD_RELOAD, (SYSTEM_CLOCK_FREQUENCY / 1_000) * ms);
+            // TODO: link this to dabao targets. Right now this value is correct for baosec only.
+            timer0.wfo(utra::timer0::RELOAD_RELOAD, (DEFAULT_FCLK_FREQUENCY / 1_000) * ms);
         } else if (irqs_pending & (1 << utra::irqarray5::IRQARRAY5_IRQ)) != 0 {
             crate::uart_irq_handler();
-        } else if (irqs_pending & (1 << utra::irqarray2::IRQARRAY2_IRQ)) != 0 {
-            // just clear it for now
-            let mut irqarray2 = CSR::new(utralib::HW_IRQARRAY2_BASE as *mut u32);
-            let pending = irqarray2.r(utra::irqarray2::EV_PENDING);
-            crate::println!("keypress interrupt {:x}", pending);
-            irqarray2.wo(utra::irqarray2::EV_PENDING, pending);
+        } else if (irqs_pending & (1 << utra::irqarray15::IRQARRAY15_IRQ)) != 0 {
+            // irq15 -> {meshirq, sensorcirq, glcirq}
+            // those one is kind of redundant with irq13 in this scenario, because secirq is the OR
+            // of all three IRQs going into this array. So, we handle this simply in irqarray13.
+        }
+        if (irqs_pending & (1 << utralib::utra::irqarray1::IRQARRAY1_IRQ)) != 0 {
+            // handle USB interrupt
+            unsafe {
+                if let Some(ref mut usb_ref) = USB {
+                    let usb = &mut *core::ptr::addr_of_mut!(*usb_ref);
+
+                    // immediately clear the interrupt and re-enable it so we can catch an interrupt
+                    // that is generated while we are handling the interrupt.
+                    let pending = usb.irq_csr.r(utralib::utra::irqarray1::EV_PENDING);
+                    // clear pending
+                    usb.irq_csr.wo(utralib::utra::irqarray1::EV_PENDING, pending);
+                    // re-enable interrupts
+                    usb.irq_csr.wfo(utralib::utra::irqarray1::EV_ENABLE_USBC_DUPE, 1);
+
+                    let status = usb.csr.r(USBSTS);
+                    // usb.print_status(status);
+                    if (status & usb.csr.ms(USBSTS_SYSTEM_ERR, 1)) != 0 {
+                        crate::println!("System error");
+                        usb.csr.wfo(USBSTS_SYSTEM_ERR, 1);
+                        crate::println!("USBCMD: {:x}", usb.csr.r(USBCMD));
+                    } else {
+                        if (status & usb.csr.ms(USBSTS_EINT, 1)) != 0 {
+                            // from udc_handle_interrupt
+                            let mut ret = bao1x_hal::usb::driver::CrgEvent::None;
+                            let status = usb.csr.r(USBSTS);
+                            // self.print_status(status);
+                            let _result = if (status & usb.csr.ms(USBSTS_SYSTEM_ERR, 1)) != 0 {
+                                crate::println!("System error");
+                                usb.csr.wfo(USBSTS_SYSTEM_ERR, 1);
+                                crate::println!("USBCMD: {:x}", usb.csr.r(USBCMD));
+                                bao1x_hal::usb::driver::CrgEvent::Error
+                            } else {
+                                if (status & usb.csr.ms(USBSTS_EINT, 1)) != 0 {
+                                    usb.csr.wfo(USBSTS_EINT, 1);
+                                    // divert to the loader-based event ring handler
+                                    ret = usb.process_event_ring(); // there is only one event ring
+                                }
+                                ret
+                            };
+                            // crate::println!("Result: {:?}", _result);
+                        }
+                        if usb.csr.rf(IMAN_IE) != 0 {
+                            usb.csr.wo(IMAN, usb.csr.ms(IMAN_IE, 1) | usb.csr.ms(IMAN_IP, 1));
+                        }
+                    }
+                }
+            }
         }
     }
 

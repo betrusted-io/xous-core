@@ -1,6 +1,5 @@
 use bao1x_api::*;
-use bao1x_hal::hardening::*;
-use bao1x_hal::iox::Iox;
+use bao1x_hal::{board::KeyPress, iox::Iox};
 use utralib::CSR;
 use utralib::utra;
 
@@ -26,14 +25,47 @@ pub const HEAP_LEN: usize = 1024 * 256;
 // total occupied area is [HEAP_START + HEAP_LEN..HEAP_START + HEAP_LEN + 8192]
 pub const SCRATCH_PAGE: usize = HEAP_START + HEAP_LEN + 4096;
 
+pub const FREE_MEM_START: usize = SCRATCH_PAGE + 16384;
+pub const STACK_LEN: usize = 128 * 1024; // 128k for stack is more than enough (usually <16k)
+pub const FREE_MEM_LEN: usize = (RAM_BASE + RAM_SIZE) - FREE_MEM_START - STACK_LEN;
+
 pub const UART_IFRAM_ADDR: usize = bao1x_hal::board::UART_DMA_TX_BUF_PHYS;
 
 pub const SYSTEM_CLOCK_FREQUENCY: u32 = 700_000_000;
 
-pub fn early_init() -> Csprng {
-    let mut csprng = Csprng::new();
-    csprng.random_delay();
+// Dabao port/pin constants have to be vendored in because this crate is compiled with baosec as the target.
+const DABAO_SE0_PIN: u8 = 13;
+const DABAO_SE0_PORT: IoxPort = IoxPort::PC;
 
+pub fn setup_dabao_se0_pin<T: IoSetup + IoGpio>(iox: &T) -> (IoxPort, u8) {
+    iox.setup_pin(
+        DABAO_SE0_PORT,
+        DABAO_SE0_PIN,
+        Some(IoxDir::Output),
+        Some(IoxFunction::Gpio),
+        None,
+        Some(IoxEnable::Enable),
+        Some(IoxEnable::Enable),
+        Some(IoxDriveStrength::Drive2mA),
+    );
+    (DABAO_SE0_PORT, DABAO_SE0_PIN)
+}
+
+pub fn setup_dabao_boot_pin<T: IoSetup + IoGpio>(iox: &T) -> (IoxPort, u8) {
+    iox.setup_pin(
+        DABAO_SE0_PORT,
+        DABAO_SE0_PIN,
+        Some(IoxDir::Input),
+        Some(IoxFunction::Gpio),
+        Some(IoxEnable::Enable), // enable the schmitt trigger on this pad
+        Some(IoxEnable::Enable), // enable the pullup
+        None,
+        None,
+    );
+    (DABAO_SE0_PORT, DABAO_SE0_PIN)
+}
+
+pub fn early_init() -> u32 {
     // Ensure SRAM timings are set for 900mV operation before setting fast clock frequency. We will
     // be running at full tilt on baosec.
     let trim_table =
@@ -53,8 +85,6 @@ pub fn early_init() -> Csprng {
     let statics_in_rom: &bao1x_api::StaticsInRom =
         unsafe { (STATICS_LOC as *const bao1x_api::StaticsInRom).as_ref().unwrap() };
     assert!(statics_in_rom.version == bao1x_api::STATICS_IN_ROM_VERSION, "Can't find valid statics table");
-
-    csprng.random_delay();
 
     // Clear .data, .bss, .stack, .heap regions & setup .data values
     // Safety: only safe if the values computed by the loader are correct.
@@ -82,8 +112,6 @@ pub fn early_init() -> Csprng {
             true,
         )
     };
-
-    csprng.random_delay();
 
     // setup heap alloc
     setup_alloc();
@@ -124,15 +152,14 @@ pub fn early_init() -> Csprng {
     iox.set_gpio_pin_value(oled_on_port, oled_on_pin, IoxValue::High);
 
     // Rx setup
-    let mut udma_uart = setup_rx(perclk);
+    setup_rx(perclk);
     enable_irq(utra::irqarray5::IRQARRAY5_IRQ);
     crate::debug::USE_CONSOLE.store(true, core::sync::atomic::Ordering::SeqCst);
 
     crate::println!("scratch page: {:x}, heap start: {:x}", SCRATCH_PAGE, HEAP_START);
     crate::println!("CPU freq: {} MHz", SYSTEM_CLOCK_FREQUENCY / 2);
-    csprng.random_delay();
 
-    csprng
+    perclk
 }
 
 pub fn setup_timer() {
@@ -195,55 +222,42 @@ mod panic_handler {
     }
 }
 
-/// used to generate some test vectors
-#[allow(dead_code)]
-pub fn lfsr_next_u32(state: u32) -> u32 {
-    let bit = ((state >> 31) ^ (state >> 21) ^ (state >> 1) ^ (state >> 0)) & 1;
-
-    (state << 1) + bit
-}
-
-#[allow(dead_code)]
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub enum KeyPress {
-    Up,
-    Down,
-    Left,
-    Right,
-    Select,
-    Home,
-    Invalid,
-    None,
-}
-#[allow(dead_code)]
-pub fn scan_keyboard<T: IoSetup + IoGpio>(
-    iox: &T,
-    rows: &[(IoxPort, u8)],
-    cols: &[(IoxPort, u8)],
-) -> [KeyPress; 4] {
-    let mut key_presses: [KeyPress; 4] = [KeyPress::None; 4];
-    let mut key_press_index = 0; // no Vec in no_std, so we have to manually track it
-
-    for (row, (port, pin)) in rows.iter().enumerate() {
-        iox.set_gpio_pin_value(*port, *pin, IoxValue::Low);
-        for (col, (col_port, col_pin)) in cols.iter().enumerate() {
-            if iox.get_gpio_pin_value(*col_port, *col_pin) == IoxValue::Low {
-                crate::println!("Key press at ({}, {})", row, col);
-                if key_press_index < key_presses.len() {
-                    key_presses[key_press_index] = match (row, col) {
-                        (1, 3) => KeyPress::Left,
-                        (1, 2) => KeyPress::Home,
-                        (1, 0) => KeyPress::Right,
-                        (0, 0) => KeyPress::Down,
-                        (0, 2) => KeyPress::Up,
-                        (0, 1) => KeyPress::Select,
-                        _ => KeyPress::Invalid,
-                    };
-                    key_press_index += 1;
-                }
+pub fn get_key<T: IoSetup + IoGpio>(board_type: &BoardTypeCoding, iox: &T) -> Option<KeyPress> {
+    // check key press state. Depends on the board type
+    match board_type {
+        BoardTypeCoding::Baosec => {
+            let (rows, cols) = bao1x_hal::board::setup_kb_pins(iox);
+            let kps = bao1x_hal::board::scan_keyboard(iox, &rows, &cols);
+            // record which key is pressed
+            if kps[0] != KeyPress::None { Some(kps[0]) } else { None }
+        }
+        BoardTypeCoding::Dabao => {
+            let (port, pin) = crate::platform::setup_dabao_boot_pin(iox);
+            // sample the pin
+            if iox.get_gpio_pin_value(port, pin) == IoxValue::Low {
+                // "borrow" the dabao keypress meaning for this pin
+                Some(KeyPress::Select)
+            } else {
+                None
             }
         }
-        iox.set_gpio_pin_value(*port, *pin, IoxValue::High);
+        #[cfg(feature = "oem-baosec-lite")]
+        BoardTypeCoding::Oem => {
+            let (rows, cols) = bao1x_hal::board::setup_kb_pins(iox);
+            let kps = bao1x_hal::board::scan_keyboard(iox, &rows, &cols);
+            // record which key is pressed
+            if kps[0] != KeyPress::None { Some(kps[0]) } else { None }
+        }
+        #[cfg(not(feature = "oem-baosec-lite"))]
+        BoardTypeCoding::Oem => {
+            let (port, pin) = crate::platform::setup_dabao_boot_pin(iox);
+            // sample the pin
+            if iox.get_gpio_pin_value(port, pin) == IoxValue::Low {
+                // "borrow" the dabao keypress meaning for this pin
+                Some(KeyPress::Select)
+            } else {
+                None
+            }
+        }
     }
-    key_presses
 }
