@@ -121,6 +121,28 @@ pub const fn classic_to_pq_revocation(classic: usize) -> Option<usize> {
 // slots 0-17 are currently unallocated
 
 encode_oneway! {
+    #[offset = 17]
+    /// Used for boot1 developers. This flag is activated by running a command in the REPL
+    /// in the boot1 updater to trigger the staging sequence. However, it is incumbent on
+    /// the developer to *always* load a known good image into boot1, otherwise you can
+    /// end up in a trapped state where the altboot is corrupted state.
+    pub enum Boot1DeveloperState {
+        // boot1 is in a good state, no action to take
+        Good,
+        // boot1 is staged for update, but not yet tested
+        Staged,
+        // boot1 boot is about to be attempted. The next state is either Bad or Good. The
+        // transition to Good state happens when the signature check passes
+        // for the next stage and we're about to jump to it. Note this leaves an edge case of
+        // if you load a crap image in the next stage that can't pass signature check. Thus
+        // when doing development it's important to test the boot1 with a known good image.
+        Attempted,
+        // boot1 boot failed - this state is used by the updater to go into the fail-safe mode
+        Bad,
+    }
+}
+
+encode_oneway! {
     #[offset = 18]
     pub enum UsbDefaultSpeed {
         High,
