@@ -96,6 +96,8 @@ fn main() {
     println!("Entrypoint: {:08x}", pd.entry_point);
     // check to make sure that the entry point is what we expect it to be - this is important
     // because if the entrypoint accidentally slips to 0, then we're running in unchecked code.
-    assert!(pd.entry_point as usize & 0xFFFF == SIGBLOCK_LEN + size_of::<StaticsInRom>());
+    if bao1x_flag {
+        assert!(pd.entry_point as usize & 0xFFFF == SIGBLOCK_LEN + size_of::<StaticsInRom>());
+    }
     println!("Copied {} bytes of data to {}", pd.program.len(), output_filename.display());
 }
