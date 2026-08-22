@@ -377,7 +377,10 @@ pub fn process_minielf(b: &[u8]) -> Result<MiniElf, ElfReadError> {
     let elf = ElfFile::new(&b).map_err(|x| ElfReadError::ParseElfError(x))?;
     let entry_point = elf.header.pt2.entry_point() as u32;
     let mut program_data = Cursor::new(Vec::new());
-    let mut alignment_offset = 0;
+    // `None` until the first loadable section fixes the page phase. A phase of 0 is
+    // legal (it happens when the first section is page-aligned), so it can't double
+    // as the "not yet determined" marker.
+    let mut alignment_offset: Option<u64> = None;
 
     let mut sections = vec![];
 
@@ -407,9 +410,6 @@ pub fn process_minielf(b: &[u8]) -> Result<MiniElf, ElfReadError> {
             }
             continue;
         }
-        if alignment_offset == 0 {
-            alignment_offset = s.address() & 0xFFF;
-        }
 
         debug!("Section {}:", name);
         debug!("{} official header: {:x?}", name, s);
@@ -427,6 +427,14 @@ pub fn process_minielf(b: &[u8]) -> Result<MiniElf, ElfReadError> {
         if s.flags() & SHF_ALLOC == 0 {
             debug!("section has no allocations -- skipping");
             continue;
+        }
+        // The first section that actually contributes to the image sets the page phase
+        // for the whole process: an XIP process is mapped straight out of FLASH, so
+        // every section's `virt & 0xFFF` has to match its offset within a FLASH page.
+        // Sections skipped above never make it into `sections`, so they can't be the
+        // ones to define it.
+        if alignment_offset.is_none() {
+            alignment_offset = Some(s.address() & 0xFFF);
         }
         if no_copy {
             flags |= MiniElfFlags::NOCOPY;
@@ -509,6 +517,6 @@ pub fn process_minielf(b: &[u8]) -> Result<MiniElf, ElfReadError> {
         entry_point,
         sections,
         program: program_data.into_inner(),
-        alignment_offset: alignment_offset as usize,
+        alignment_offset: alignment_offset.unwrap_or(0) as usize,
     })
 }
