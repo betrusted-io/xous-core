@@ -2,7 +2,7 @@ use alloc::boxed::Box;
 use alloc::collections::BTreeMap;
 use core::mem;
 
-const PAGE_SIZE: usize = bao1x_api::baosec::SPINOR_PAGE_LEN as usize;
+pub const PAGE_SIZE: usize = bao1x_api::baosec::SPINOR_PAGE_LEN as usize;
 const SECTOR_SIZE: usize = bao1x_api::baosec::SPINOR_ERASE_SIZE as usize;
 const PAGES_PER_SECTOR: usize = PAGE_SIZE / SECTOR_SIZE;
 

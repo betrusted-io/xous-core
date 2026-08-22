@@ -172,7 +172,9 @@ pub fn validate_image(
             // ASSUME: the SPIM driver has allocated a read buffer that is actually PAGE_SIZE. If the SPIM
             // driver has a smaller buffer, reads get less efficient.
             let end = img_offset as usize + UNSIGNED_LEN + signed_len as usize;
-            assert!(end <= bao1x_api::offsets::baosec::SPI_FLASH_LEN);
+            if end > bao1x_api::offsets::baosec::SPI_FLASH_LEN {
+                return Err(String::from("SPIM image length out of range"));
+            }
             for offset in ((img_offset as usize + UNSIGNED_LEN)..end).step_by(PAGE_SIZE) {
                 let mut buf = [0u8; PAGE_SIZE];
                 spim.mem_read(offset as u32, &mut buf, false);
@@ -182,11 +184,11 @@ pub fn validate_image(
         } else {
             // sanity check the purported length of the image. It can't be any bigger than the available
             // storage in RRAM.
-            assert!(
-                (signed_len as usize)
-                    <= bao1x_api::RRAM_STORAGE_LEN
-                        - ((img_offset as usize - utralib::HW_RERAM_MEM) + UNSIGNED_LEN)
-            );
+            if (signed_len as usize)
+                > bao1x_api::RRAM_STORAGE_LEN - ((img_offset as usize - utralib::HW_RERAM_MEM) + UNSIGNED_LEN)
+            {
+                return Err(String::from("Image length out of range"));
+            }
             let image: &[u8] = unsafe {
                 core::slice::from_raw_parts(
                     (img_offset as usize + UNSIGNED_LEN) as *const u8,
@@ -233,7 +235,9 @@ pub fn validate_image(
             // crate::println!("hashed hash: {:x?}", hashed_hash.as_slice());
 
             let mut msg: Vec<u8> = Vec::new();
-            assert!((sig.aad_len as usize) <= sig.aad.len());
+            if sig.aad_len as usize > sig.aad.len() {
+                return Err(String::from("aad_len out of range"));
+            }
             msg.extend_from_slice(&sig.aad[..sig.aad_len as usize]);
             msg.extend_from_slice(hashed_hash.as_slice());
             // crate::println!("assembled msg({}): {:x?}", msg.len(), msg);
@@ -436,19 +440,19 @@ pub fn validate_image(
             // by code structure sizes but de facto fixed to 0x400. This computation ensures these
             // two are consistent, so if in the future I tweak one value I should hit the assert and
             // remind myself to fix the others.
-            let header_len = SIGBLOCK_LEN + size_of::<StaticsInRom>();
-            assert!(header_len == 0x400, "header size is inconsistent");
+            const HEADER_LEN: usize = SIGBLOCK_LEN + size_of::<StaticsInRom>();
+            const _: () = assert!(HEADER_LEN == 0x400, "header size is inconsistent");
             Ok((
                 valid_key,
                 valid_key2,
                 pk_src.sealed_data.pubkeys[valid_key].tag,
-                // add header_len to the jump offset - so that the jump target is inside the signed
+                // add HEADER_LEN to the jump offset - so that the jump target is inside the signed
                 // region. This addition does not affect boot0 because the jump target is fixed to always
                 // be at the unsigned trampoline instruction. Boot0's first instruction is OK to be
                 // unsigned because it is assumed that boot0 is trusted code. Mutability of boot0 is
                 // fatal to the security assumptions of the chip. `img_offset` is a compile-time constant
                 // and therefore not attacker controlled.
-                ((img_offset as usize + header_len) as u32)
+                ((img_offset as usize + HEADER_LEN) as u32)
                     ^ u32::from_le_bytes(pk_src.sealed_data.pubkeys[valid_key].tag),
                 if verdict == PQ_MATCH { Some(pq_tag) } else { None },
             ))
