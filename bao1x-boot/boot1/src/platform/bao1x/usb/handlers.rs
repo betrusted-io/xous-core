@@ -246,7 +246,7 @@ pub fn usb_ep1_bulk_out_complete(
                     bollard!(die, 4);
                     // This range check prevents UF2 from being an arbitrary-write primitive to e.g. RAM
                     // or sensitive bootloader code.
-                    if matches!(record.address() as usize, START_RANGE..=STORAGE_END_ADDR)
+                    if matches!(record.address() as usize, START_RANGE..STORAGE_END_ADDR)
                         && record.family() == bao1x_api::BAOCHIP_1X_UF2_FAMILY
                     {
                         let mut rram = bao1x_hal::rram::Reram::new();
@@ -280,7 +280,11 @@ pub fn usb_ep1_bulk_out_complete(
                         match critical_section::with(|cs| {
                             if let Some(assembler) = &mut *super::glue::SECTOR_TRACKER.borrow(cs).borrow_mut()
                             {
-                                assembler.add_page(spim_addr as usize, record.data().try_into().unwrap())
+                                if record.data().len() == crate::platform::usb::page_defrag::PAGE_SIZE {
+                                    assembler.add_page(spim_addr as usize, record.data().try_into().unwrap())
+                                } else {
+                                    Err("Truncated UF2 packet received, skipping the packet")
+                                }
                             } else {
                                 Err(
                                     "Write to swap received but no swap is available on this board. Ignoring!",
@@ -295,24 +299,24 @@ pub fn usb_ep1_bulk_out_complete(
                     }
                     // do some bookkeeping for the UI
                     let (partition, status) = if !IS_BAOSEC.load(Ordering::SeqCst) {
-                        if matches!(record.address() as usize, START_RANGE..=APP_RAM_ADDR) {
+                        if matches!(record.address() as usize, START_RANGE..APP_RAM_ADDR) {
                             ("core", BAREMETAL_BYTES.fetch_add(record.data().len() as u32, Ordering::SeqCst))
-                        } else if matches!(record.address() as usize, APP_RAM_ADDR..=STORAGE_END_ADDR) {
+                        } else if matches!(record.address() as usize, APP_RAM_ADDR..STORAGE_END_ADDR) {
                             ("app", APP_BYTES.fetch_add(record.data().len() as u32, Ordering::SeqCst))
                         } else {
                             ("none", 0)
                         }
                     } else {
-                        if matches!(record.address() as usize, START_RANGE..=KERNEL_START) {
+                        if matches!(record.address() as usize, START_RANGE..KERNEL_START) {
                             (
                                 "loader",
                                 BAREMETAL_BYTES.fetch_add(record.data().len() as u32, Ordering::SeqCst),
                             )
-                        } else if matches!(record.address() as usize, KERNEL_START..=STORAGE_END_ADDR) {
+                        } else if matches!(record.address() as usize, KERNEL_START..STORAGE_END_ADDR) {
                             ("kernel", KERNEL_BYTES.fetch_add(record.data().len() as u32, Ordering::SeqCst))
                         } else if matches!(
                             record.address() as usize,
-                            bao1x_api::offsets::SWAP_START_UF2..=SWAP_END_ADDR
+                            bao1x_api::offsets::SWAP_START_UF2..SWAP_END_ADDR
                         ) {
                             ("swap", SWAP_BYTES.fetch_add(record.data().len() as u32, Ordering::SeqCst))
                         } else {
