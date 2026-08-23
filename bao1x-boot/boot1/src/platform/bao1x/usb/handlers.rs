@@ -239,14 +239,18 @@ pub fn usb_ep1_bulk_out_complete(
 
                 #[cfg(not(feature = "alt-boot1"))]
                 const START_RANGE: usize = bao1x_api::BAREMETAL_START;
+                #[cfg(not(feature = "alt-boot1"))]
+                const END_RANGE: usize = STORAGE_END_ADDR;
                 #[cfg(feature = "alt-boot1")]
                 const START_RANGE: usize = bao1x_api::BOOT1_START;
+                #[cfg(feature = "alt-boot1")]
+                const END_RANGE: usize = bao1x_api::BAREMETAL_START;
                 // program the flash if a valid u2f block was found
                 if let Some(record) = uf2_data {
                     bollard!(die, 4);
                     // This range check prevents UF2 from being an arbitrary-write primitive to e.g. RAM
                     // or sensitive bootloader code.
-                    if matches!(record.address() as usize, START_RANGE..STORAGE_END_ADDR)
+                    if matches!(record.address() as usize, START_RANGE..END_RANGE)
                         && record.family() == bao1x_api::BAOCHIP_1X_UF2_FAMILY
                     {
                         let mut rram = bao1x_hal::rram::Reram::new();
