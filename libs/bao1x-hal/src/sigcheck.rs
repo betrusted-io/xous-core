@@ -239,6 +239,10 @@ pub fn validate_image(
                 return Err(String::from("aad_len out of range"));
             }
             msg.extend_from_slice(&sig.aad[..sig.aad_len as usize]);
+            // reduce hiding places for incorrect data
+            if sig.aad[sig.aad_len as usize..].iter().any(|&x| x != 0) {
+                return Err(String::from("aad padding not zero"));
+            }
             msg.extend_from_slice(hashed_hash.as_slice());
             // crate::println!("assembled msg({}): {:x?}", msg.len(), msg);
 
