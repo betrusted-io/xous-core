@@ -187,6 +187,9 @@ pub fn jump_to(target: usize, mask: usize) -> ! {
     }
 }
 
+/*
+// this was used just for security testing. Maybe useful in the future for audits.
+
 use core::arch::naked_asm;
 
 #[unsafe(naked)]
@@ -210,3 +213,4 @@ pub unsafe extern "C" fn enter_supervisor_asid3() {
         "mret",
     );
 }
+*/
