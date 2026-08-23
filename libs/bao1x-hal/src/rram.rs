@@ -391,11 +391,9 @@ impl<'a> Reram {
     pub fn write_slice(&mut self, offset: usize, data: &[u8]) -> Result<usize, xous::Error> {
         // This needs to be disabled for CI tests that check if boot0 is actually hardware
         // write-protected (because otherwise software would just fail at this check).
-        #[cfg(not(feature = "redteam"))]
         let end = offset.checked_add(data.len()).ok_or(xous::Error::AccessDenied)?;
-        #[cfg(not(feature = "redteam"))]
         if offset < bao1x_api::offsets::BOOT1_START - utralib::HW_RERAM_MEM
-            || end >= bao1x_api::RRAM_STORAGE_LEN
+            || end > bao1x_api::RRAM_STORAGE_LEN
         {
             return Err(xous::Error::AccessDenied);
         }
@@ -408,7 +406,7 @@ impl<'a> Reram {
     /// processes, but they only come into effect after the OS is booted.
     pub fn protected_write_slice(&mut self, offset: usize, data: &[u8]) -> Result<usize, xous::Error> {
         let end = offset.checked_add(data.len()).ok_or(xous::Error::AccessDenied)?;
-        if offset < bao1x_api::RRAM_STORAGE_LEN || end >= utralib::HW_RERAM_MEM_LEN {
+        if offset < bao1x_api::RRAM_STORAGE_LEN || end > utralib::HW_RERAM_MEM_LEN {
             // crate::println!("offset {:x} access denied", offset);
             return Err(xous::Error::AccessDenied);
         }
