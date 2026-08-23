@@ -138,7 +138,7 @@ pub fn audit() {
     let tag_owned;
     match bao1x_hal::sigcheck::validate_image(BOOT0_TO_BOOT1, None, None) {
         Ok((k, k2, tag, target, pq_tag)) => crate::println!(
-            "Boot1: arb {}, key {}/{}, ({}) pq {:?} -> {:x}",
+            "Boot1: arb {}, key {}/{} ({}), pq {:?} -> {:x}",
             owc.get(BOOT1_ANTI_ROLLBACK).unwrap(),
             k,
             !k2,
