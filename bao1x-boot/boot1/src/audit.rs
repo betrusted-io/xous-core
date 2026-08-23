@@ -120,7 +120,8 @@ pub fn audit() {
     let tag_owned;
     match bao1x_hal::sigcheck::validate_image(BOOT0_SELF_CHECK, None, None) {
         Ok((k, k2, tag, target, pq_tag)) => crate::println!(
-            "Boot0: key {}/{} ({}) pq {:?} -> {:x}",
+            "Boot0: arb {}, key {}/{} ({}), pq {:?} -> {:x}",
+            owc.get(BOOT0_ANTI_ROLLBACK).unwrap(),
             k,
             !k2,
             core::str::from_utf8(&tag).unwrap_or("invalid tag"),
@@ -137,7 +138,8 @@ pub fn audit() {
     let tag_owned;
     match bao1x_hal::sigcheck::validate_image(BOOT0_TO_BOOT1, None, None) {
         Ok((k, k2, tag, target, pq_tag)) => crate::println!(
-            "Boot1: key {}/{} ({}) pq {:?} -> {:x}",
+            "Boot1: arb {}, key {}/{} ({}) pq {:?} -> {:x}",
+            owc.get(BOOT1_ANTI_ROLLBACK).unwrap(),
             k,
             !k2,
             core::str::from_utf8(&tag).unwrap_or("invalid tag"),
@@ -153,8 +155,12 @@ pub fn audit() {
     }
     let tag_owned;
     match bao1x_hal::sigcheck::validate_image(BOOT1_TO_LOADER_OR_BAREMETAL, None, None) {
+        // anti-rollbacks for next stage are either loader or baremetal: print both as loader|baremetal in the
+        // audit
         Ok((k, k2, tag, target, pq_tag)) => crate::println!(
-            "Next stage: key {}/{} ({}) pq {:?} -> {:x}",
+            "Next stage: arb {}|{}, key {}/{} ({}), pq {:?} -> {:x}",
+            owc.get(LOADER_ANTI_ROLLBACK).unwrap(),
+            owc.get(BAREMETAL_ANTI_ROLLBACK).unwrap(),
             k,
             !k2,
             core::str::from_utf8(&tag).unwrap_or("invalid tag"),
