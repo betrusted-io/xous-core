@@ -121,7 +121,7 @@ pub fn audit() {
     match bao1x_hal::sigcheck::validate_image(BOOT0_SELF_CHECK, None, None) {
         Ok((k, k2, tag, target, pq_tag)) => crate::println!(
             "Boot0: arb {}, key {}/{} ({}), pq {:?} -> {:x}",
-            owc.get(BOOT0_ANTI_ROLLBACK),
+            owc.get(BOOT0_ANTI_ROLLBACK).unwrap(),
             k,
             !k2,
             core::str::from_utf8(&tag).unwrap_or("invalid tag"),
@@ -139,7 +139,7 @@ pub fn audit() {
     match bao1x_hal::sigcheck::validate_image(BOOT0_TO_BOOT1, None, None) {
         Ok((k, k2, tag, target, pq_tag)) => crate::println!(
             "Boot1: arb {}, key {}/{} ({}) pq {:?} -> {:x}",
-            owc.get(BOOT1_ANTI_ROLLBACK),
+            owc.get(BOOT1_ANTI_ROLLBACK).unwrap(),
             k,
             !k2,
             core::str::from_utf8(&tag).unwrap_or("invalid tag"),
@@ -159,8 +159,8 @@ pub fn audit() {
         // audit
         Ok((k, k2, tag, target, pq_tag)) => crate::println!(
             "Next stage: arb {}|{}, key {}/{} ({}), pq {:?} -> {:x}",
-            owc.get(LOADER_ANTI_ROLLBACK),
-            owc.get(BAREMETAL_ANTI_ROLLBACK),
+            owc.get(LOADER_ANTI_ROLLBACK).unwrap(),
+            owc.get(BAREMETAL_ANTI_ROLLBACK).unwrap(),
             k,
             !k2,
             core::str::from_utf8(&tag).unwrap_or("invalid tag"),
