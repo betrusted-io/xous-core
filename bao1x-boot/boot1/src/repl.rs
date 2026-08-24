@@ -1036,7 +1036,7 @@ impl Repl {
                 use bao1x_api::{IoGpio, IoSetup};
                 use bao1x_hal::iox::Iox;
                 let iox = Iox::new(utralib::utra::iox::HW_IOX_BASE as *mut u32);
-                // setup PF1 as an "index" pin
+                // setup PF5 as the test active pin
                 iox.setup_pin(
                     bao1x_api::IoxPort::PF,
                     5,
@@ -1055,10 +1055,205 @@ impl Repl {
                 let slot_mgr = bao1x_hal::acram::SlotManager::new();
                 let mut rram = bao1x_hal::rram::Reram::new();
                 let slot = &bao1x_api::offsets::ATE_RESERVED;
-                let ate = crate::platform::ate::Ate::new(self.perclk);
+
                 let mut data = [0u8; 32];
-                ate.serialize_into(&mut data);
-                slot_mgr.write(&mut rram, slot, &data).ok();
+                if args.len() == 0 {
+                    let ate = crate::platform::ate::Ate::new(self.perclk);
+                    ate.serialize_into(&mut data);
+                    slot_mgr.write(&mut rram, slot, &data).ok();
+                } else {
+                    match args[0].as_str() {
+                        "0" => {
+                            // clears the slot
+                            let mut rram = bao1x_hal::rram::Reram::new();
+                            let slot = &bao1x_api::offsets::ATE_RESERVED;
+                            slot_mgr.write(&mut rram, slot, &[0x0; 32]).ok();
+                        }
+                        "1" => {
+                            // writes a known pattern into the data slot
+                            let mut rram = bao1x_hal::rram::Reram::new();
+                            let slot = &bao1x_api::offsets::ATE_RESERVED;
+                            slot_mgr.write(&mut rram, slot, &[0x5a; 32]).ok();
+                        }
+                        "2" => {
+                            // slow down clocks before calling to save power
+                            let perclk = unsafe {
+                                bao1x_hal::clocks::init_clock_asic(
+                                    350_000_000,
+                                    utra::sysctrl::HW_SYSCTRL_BASE,
+                                    utralib::HW_AO_SYSCTRL_BASE,
+                                    Some(utra::duart::HW_DUART_BASE),
+                                    crate::delay_at_sysfreq,
+                                    false,
+                                )
+                            };
+                            let ate = crate::platform::ate::Ate::new(perclk);
+                            let mut data = [0u8; 32];
+                            ate.serialize_into(&mut data);
+                            slot_mgr.write(&mut rram, slot, &data).ok();
+                        }
+                        _ => {
+                            // non-RRAM testing path - dynamically sample triggers from the ATE
+                            use bao1x_api::{IoGpio, IoSetup};
+                            use bao1x_hal::iox::Iox;
+                            let iox = Iox::new(utralib::utra::iox::HW_IOX_BASE as *mut u32);
+                            let udma_global = GlobalConfig::new();
+                            udma_global.clock_on(bao1x_api::PeriphId::Adc);
+                            // safety: clocks have been turned on. The ADC buffer is located at the base of
+                            // IFRAM0 which should be empty, as IFRAM reserved
+                            // addresses allocate from top-down.
+                            let mut adc = unsafe {
+                                bao1x_hal::udma::Adc::new_baremetal(self.perclk, utralib::HW_IFRAM0_MEM)
+                            };
+                            // PF1 indicates that a sample is ready by going high
+                            iox.setup_pin(
+                                bao1x_api::IoxPort::PF,
+                                1,
+                                Some(bao1x_api::IoxDir::Output),
+                                Some(bao1x_api::IoxFunction::Gpio),
+                                None,
+                                Some(bao1x_api::IoxEnable::Disable),
+                                None,
+                                None,
+                            );
+                            iox.set_gpio_pin_value(bao1x_api::IoxPort::PF, 1, bao1x_api::IoxValue::Low);
+
+                            // setup PA4..=PA7 as inputs - just to make sure we aren't accidentally driving
+                            // them. disable the pull-up, too.
+                            for pin in 4..=7 {
+                                iox.setup_pin(
+                                    bao1x_api::IoxPort::PA,
+                                    pin,
+                                    Some(bao1x_api::IoxDir::Input),
+                                    Some(bao1x_api::IoxFunction::Gpio),
+                                    Some(bao1x_api::IoxEnable::Disable),
+                                    Some(bao1x_api::IoxEnable::Disable),
+                                    None,
+                                    None,
+                                );
+                            }
+
+                            // setup relay I/O. PB[15:0] is the DAC data output
+                            iox.set_gpio_bank(IoxPort::PB, 0, 0xFFFF);
+                            for pin in 0..16 {
+                                iox.setup_pin(
+                                    bao1x_api::IoxPort::PB,
+                                    pin,
+                                    Some(bao1x_api::IoxDir::Output),
+                                    Some(bao1x_api::IoxFunction::Gpio),
+                                    Some(bao1x_api::IoxEnable::Disable),
+                                    Some(bao1x_api::IoxEnable::Disable),
+                                    Some(IoxEnable::Enable),
+                                    Some(IoxDriveStrength::Drive4mA),
+                                );
+                            }
+                            // PC[4:0] selects the ADC, lowest bit that is 0 is the selected ADC
+                            // PC[5] triggers a sample when it rises; put a pullup on this to avoid false
+                            // PC[6] low stops the test
+                            // triggering on floating input
+                            for pin in 0..7 {
+                                iox.setup_pin(
+                                    bao1x_api::IoxPort::PC,
+                                    pin,
+                                    Some(bao1x_api::IoxDir::Input),
+                                    Some(bao1x_api::IoxFunction::Gpio),
+                                    Some(bao1x_api::IoxEnable::Enable),
+                                    Some(bao1x_api::IoxEnable::Enable),
+                                    None,
+                                    None,
+                                );
+                            }
+
+                            // pipe-clear any stale ADC values
+                            let _dummy = adc.read_raw_averaged(AdcSource::Ext(AdcExtChannel::Adc0), 8);
+
+                            use bao1x_hal::udma::{AdcExtChannel, AdcSource, GlobalConfig};
+                            enum State {
+                                Armed,
+                                Triggered,
+                            }
+                            let sources = [
+                                AdcSource::Temperature,
+                                AdcSource::Ext(AdcExtChannel::Adc0),
+                                AdcSource::Ext(AdcExtChannel::Adc1),
+                                AdcSource::Ext(AdcExtChannel::Adc2),
+                                AdcSource::Ext(AdcExtChannel::Adc3),
+                            ];
+
+                            while iox.get_gpio_pin(IoxPort::PC, 5) != IoxValue::Low {
+                                // wait for PC5 to go low before arming the system
+                                // if test abort, break
+                                if iox.get_gpio_pin(IoxPort::PC, 6) == IoxValue::Low {
+                                    break;
+                                }
+                            }
+                            let mut state = State::Armed;
+
+                            while iox.get_gpio_pin(IoxPort::PC, 6) == IoxValue::High {
+                                match state {
+                                    State::Armed => {
+                                        if iox.get_gpio_pin(IoxPort::PC, 5) == IoxValue::High {
+                                            state = State::Triggered;
+                                        }
+                                    }
+                                    State::Triggered => {
+                                        let adc_code = iox.get_gpio_bank(IoxPort::PC) & 0x1F;
+                                        let mut got_channel = false;
+                                        for channel in 0..5 {
+                                            if ((adc_code >> channel as u16) & 1) == 0 {
+                                                let source = sources[channel];
+                                                let _dummy = adc.read_raw_averaged(source, 8); // dummy reading still required every source change, some bug in ADC driver?
+                                                let raw = adc.read_raw_averaged(source, 8);
+                                                iox.set_gpio_bank(IoxPort::PB, raw, 0xFFFF);
+                                                got_channel = true;
+                                                break;
+                                            }
+                                        }
+                                        if !got_channel {
+                                            // apply a test pattern to confirm port configuration
+                                            iox.set_gpio_bank(IoxPort::PB, 0xa5a5, 0xFFFF);
+                                        }
+                                        // indicate that the sample is done
+                                        iox.set_gpio_pin_value(
+                                            bao1x_api::IoxPort::PF,
+                                            1,
+                                            bao1x_api::IoxValue::High,
+                                        );
+
+                                        // wait for PC5 to drop
+                                        while iox.get_gpio_pin(IoxPort::PC, 5) == IoxValue::High {
+                                            // if test abort, break
+                                            if iox.get_gpio_pin(IoxPort::PC, 6) == IoxValue::Low {
+                                                break;
+                                            }
+                                        }
+                                        // acknowledge the drop before next iteration
+                                        iox.set_gpio_pin_value(
+                                            bao1x_api::IoxPort::PF,
+                                            1,
+                                            bao1x_api::IoxValue::Low,
+                                        );
+                                        iox.set_gpio_bank(IoxPort::PB, 0, 0xFFFF);
+                                        state = State::Armed;
+                                    }
+                                }
+                            }
+                            // revert PB to inputs
+                            for pin in 0..16 {
+                                iox.setup_pin(
+                                    bao1x_api::IoxPort::PB,
+                                    pin,
+                                    Some(bao1x_api::IoxDir::Input),
+                                    Some(bao1x_api::IoxFunction::Gpio),
+                                    Some(bao1x_api::IoxEnable::Enable),
+                                    Some(bao1x_api::IoxEnable::Enable),
+                                    None,
+                                    None,
+                                );
+                            }
+                        }
+                    }
+                }
 
                 // indicates test finish
                 iox.set_gpio_pin_value(bao1x_api::IoxPort::PF, 5, bao1x_api::IoxValue::High);
