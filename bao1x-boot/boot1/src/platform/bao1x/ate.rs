@@ -57,6 +57,7 @@ impl Ate {
             iox.set_gpio_pin_value(bao1x_api::IoxPort::PF, 1, bao1x_api::IoxValue::High);
             crate::platform::delay(5);
             iox.set_gpio_pin_value(bao1x_api::IoxPort::PF, 1, bao1x_api::IoxValue::Low);
+            crate::platform::delay(5);
             // 1->0 on PF1 indicates sampling values
             for (channel, source) in sources.iter().enumerate() {
                 let _dummy = adc.read_raw_averaged(*source, 8); // dummy reading still required every source change, some bug in ADC driver?
@@ -73,7 +74,6 @@ impl Ate {
                 );
                 */
             }
-            crate::platform::delay(5);
         }
         ate
     }
