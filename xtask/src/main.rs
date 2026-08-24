@@ -764,7 +764,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .target_baremetal_bao1x("bao1x-boot1")
                 .add_loader_feature("oem-baosec-lite")
                 // todo: remove this after the update is published
-                .add_loader_feature("fix-ifr")
+                // .add_loader_feature("fix-ifr")
                 .set_sigblock_size(sigblock_size);
         }
 
