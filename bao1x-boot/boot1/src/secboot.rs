@@ -17,6 +17,9 @@ fn seal_boot1_keys() {
     // locks out future modifications to the Coreuser setting. Also inverts mm sense, which means you must
     // enter a virtual memory user state to access sealed keys.
     cu.protect();
+    // call twice, in case someone tries to glitch past this. The second call should essentially be
+    // a no-op if the protection is active.
+    cu.protect();
 }
 
 pub fn try_boot(or_die: bool, csprng: &mut Csprng) {
