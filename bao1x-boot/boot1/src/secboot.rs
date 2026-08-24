@@ -17,9 +17,11 @@ fn seal_boot1_keys() {
     // locks out future modifications to the Coreuser setting. Also inverts mm sense, which means you must
     // enter a virtual memory user state to access sealed keys.
     cu.protect();
+    bollard!(bao1x_hal::sigcheck::die_no_std, 4);
     // call twice, in case someone tries to glitch past this. The second call should essentially be
     // a no-op if the protection is active.
     cu.protect();
+    bollard!(bao1x_hal::sigcheck::die_no_std, 4);
 }
 
 pub fn try_boot(or_die: bool, csprng: &mut Csprng) {
@@ -118,12 +120,11 @@ pub fn try_boot(or_die: bool, csprng: &mut Csprng) {
                     .unwrap_or_else(|_| bao1x_hal::hardening::die());
             }
 
-            csprng.random_delay();
-
             // this must be called before secrets are sealed
-            #[cfg(feature = "fix-ifr")]
-            fix_ifr();
+            // #[cfg(feature = "fix-ifr")]
+            // fix_ifr();
 
+            csprng.random_delay();
             bollard!(bao1x_hal::sigcheck::die_no_std, 4);
             // this has to be called *after* erase_secrets, because we can't erase the secrets
             // once the mappings have been sealed off. This is why we can't use the auto-jump method
@@ -163,6 +164,7 @@ pub fn try_boot(or_die: bool, csprng: &mut Csprng) {
     }
 }
 
+/*
 #[cfg(feature = "fix-ifr")]
 pub fn fix_ifr() {
     let mut rram = bao1x_hal::rram::Reram::new();
@@ -229,3 +231,4 @@ pub fn fix_ifr() {
         }
     }
 }
+*/
