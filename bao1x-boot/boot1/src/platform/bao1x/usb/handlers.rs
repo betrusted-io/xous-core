@@ -252,6 +252,7 @@ pub fn usb_ep1_bulk_out_complete(
                     // or sensitive bootloader code.
                     if matches!(record.address() as usize, START_RANGE..END_RANGE)
                         && record.family() == bao1x_api::BAOCHIP_1X_UF2_FAMILY
+                        && record.address() as usize + record.data().len() <= END_RANGE
                     {
                         let mut rram = bao1x_hal::rram::Reram::new();
                         let offset = record.address() as usize - utralib::HW_RERAM_MEM;
