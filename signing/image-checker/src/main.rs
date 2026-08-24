@@ -443,7 +443,7 @@ fn verify_classical(sig: &SignatureInFlash, signed_hash: &[u8; 64]) -> (Outcome,
             let mut msg = Vec::new();
             msg.extend_from_slice(&sig.aad[..sig.aad_len as usize]);
             msg.extend_from_slice(&hashed_hash);
-            vk.verify(&msg, &ed25519_signature)
+            vk.verify_strict(&msg, &ed25519_signature)
         } else {
             // Ed25519ph: verify_prehashed with SHA-512 of the signed region
             let prehash = PrecomputedHash { hash: *signed_hash };
