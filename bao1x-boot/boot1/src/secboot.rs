@@ -1,5 +1,5 @@
 use bao1x_api::{
-    Boot1DeveloperState, DEVELOPER_MODE, PARANOID_MODE, PARANOID_MODE_DUPE, bollard,
+    Boot1DeveloperState, DEVELOPER_MODE, HardenedBool, PARANOID_MODE, PARANOID_MODE_DUPE, bollard,
     pubkeys::BOOT1_TO_LOADER_OR_BAREMETAL,
 };
 use bao1x_hal::hardening::{Csprng, disable_clock_skipping, reseed_skipping, setup_clock_skipping};
@@ -66,7 +66,12 @@ pub fn try_boot(or_die: bool, csprng: &mut Csprng) {
 
     // loader is at the same offset as baremetal. Accept either as valid boot.
     // This diverges if the signature check is successful
-    match bao1x_hal::sigcheck::validate_image(BOOT1_TO_LOADER_OR_BAREMETAL, None, Some(csprng)) {
+    match bao1x_hal::sigcheck::validate_image(
+        BOOT1_TO_LOADER_OR_BAREMETAL,
+        None,
+        Some(csprng),
+        HardenedBool::FALSE,
+    ) {
         Ok((key, key_inv, tag, target, pq_tag)) => {
             if paranoid1 == 0 && paranoid2 == 0 {
                 let tag_owned;
@@ -116,13 +121,18 @@ pub fn try_boot(or_die: bool, csprng: &mut Csprng) {
                     reseed_skipping(csprng.get_u32());
                 }
                 bollard!(bao1x_hal::sigcheck::die_no_std, 4);
-                bao1x_hal::sigcheck::validate_image(BOOT1_TO_LOADER_OR_BAREMETAL, None, Some(csprng))
-                    .unwrap_or_else(|_| bao1x_hal::hardening::die());
+                bao1x_hal::sigcheck::validate_image(
+                    BOOT1_TO_LOADER_OR_BAREMETAL,
+                    None,
+                    Some(csprng),
+                    HardenedBool::FALSE,
+                )
+                .unwrap_or_else(|_| bao1x_hal::hardening::die());
             }
 
             // this must be called before secrets are sealed
-            // #[cfg(feature = "fix-ifr")]
-            // fix_ifr();
+            #[cfg(feature = "fix-ifr")]
+            fix_ifr();
 
             csprng.random_delay();
             bollard!(bao1x_hal::sigcheck::die_no_std, 4);
@@ -164,9 +174,9 @@ pub fn try_boot(or_die: bool, csprng: &mut Csprng) {
     }
 }
 
-/*
 #[cfg(feature = "fix-ifr")]
 pub fn fix_ifr() {
+    crate::println!("fix-ifr present");
     let mut rram = bao1x_hal::rram::Reram::new();
     {
         let mut ifr_0x280 = [0u8; 32];
@@ -231,4 +241,3 @@ pub fn fix_ifr() {
         }
     }
 }
-*/
