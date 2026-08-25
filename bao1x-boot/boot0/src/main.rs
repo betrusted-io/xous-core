@@ -282,8 +282,9 @@ pub unsafe extern "C" fn rust_entry() -> ! {
     let (paranoid1, paranoid2) = owc.hardened_get2(PARANOID_MODE, PARANOID_MODE_DUPE).unwrap();
 
     // == self-validate the image with the keys we put in, just to make sure our code wasn't tampered with ==
-    let boot0_check1 = bao1x_hal::sigcheck::validate_image(BOOT0_SELF_CHECK, None, Some(&mut csprng))
-        .unwrap_or_else(|_| die());
+    let boot0_check1 =
+        bao1x_hal::sigcheck::validate_image(BOOT0_SELF_CHECK, None, Some(&mut csprng), HardenedBool::FALSE)
+            .unwrap_or_else(|_| die());
     csprng.random_delay();
     if paranoid1 != paranoid2 || boot0_check1.0 != !boot0_check1.1 {
         die();
@@ -292,8 +293,13 @@ pub unsafe extern "C" fn rust_entry() -> ! {
     csprng.random_delay();
     if paranoid1 != 0 || paranoid2 != 0 {
         // do a redundant boot0 check if paranoid mode.
-        let boot0_check2 = bao1x_hal::sigcheck::validate_image(BOOT0_SELF_CHECK, None, Some(&mut csprng))
-            .unwrap_or_else(|_| die());
+        let boot0_check2 = bao1x_hal::sigcheck::validate_image(
+            BOOT0_SELF_CHECK,
+            None,
+            Some(&mut csprng),
+            HardenedBool::FALSE,
+        )
+        .unwrap_or_else(|_| die());
         csprng.random_delay();
         if boot0_check2.0 != !boot0_check2.1 {
             die();
@@ -366,7 +372,8 @@ pub unsafe extern "C" fn rust_entry() -> ! {
         if use_skipping {
             reseed_skipping(csprng.get_u32());
         }
-        match bao1x_hal::sigcheck::validate_image(configuration, None, Some(&mut csprng)) {
+        match bao1x_hal::sigcheck::validate_image(configuration, None, Some(&mut csprng), HardenedBool::FALSE)
+        {
             Ok((key, key_inv, tag, target, pq_tag)) => {
                 if key != !key_inv {
                     die();
@@ -381,8 +388,13 @@ pub unsafe extern "C" fn rust_entry() -> ! {
                 csprng.random_delay();
                 if paranoid1 != 0 || paranoid2 != 0 {
                     // re-check the image: it *should* pass. If not, die.
-                    bao1x_hal::sigcheck::validate_image(configuration, None, Some(&mut csprng))
-                        .unwrap_or_else(|_| die());
+                    bao1x_hal::sigcheck::validate_image(
+                        configuration,
+                        None,
+                        Some(&mut csprng),
+                        HardenedBool::FALSE,
+                    )
+                    .unwrap_or_else(|_| die());
                 }
                 csprng.random_delay();
                 bollard!(die, 4);

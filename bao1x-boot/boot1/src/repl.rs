@@ -695,22 +695,26 @@ impl Repl {
             "audit" => {
                 crate::audit::audit();
             }
-            "lockdown" => match bao1x_hal::sigcheck::validate_image(BOOT0_TO_BOOT1, None, None) {
-                Ok((k, _k2, _tag, _target, _pq)) => {
-                    if k != bao1x_api::pubkeys::DEVELOPER_KEY_SLOT {
-                        crate::println!("This will permanently disable developer mode. It cannot be undone!");
-                        crate::println!("Proceed? (type 'YES' in all caps to proceed)");
-                        self.lockdown_armed = true;
-                    } else {
-                        crate::println!(
-                            "Boot1 is signed with the developer key. Refusing to lockdown, as that would brick the chip."
-                        )
+            "lockdown" => {
+                match bao1x_hal::sigcheck::validate_image(BOOT0_TO_BOOT1, None, None, HardenedBool::TRUE) {
+                    Ok((k, _k2, _tag, _target, _pq)) => {
+                        if k != bao1x_api::pubkeys::DEVELOPER_KEY_SLOT {
+                            crate::println!(
+                                "This will permanently disable developer mode. It cannot be undone!"
+                            );
+                            crate::println!("Proceed? (type 'YES' in all caps to proceed)");
+                            self.lockdown_armed = true;
+                        } else {
+                            crate::println!(
+                                "Boot1 is signed with the developer key. Refusing to lockdown, as that would brick the chip."
+                            )
+                        }
+                    }
+                    Err(_e) => {
+                        crate::println!("Boot1 has no valid signature, lockdown would brick the chip.")
                     }
                 }
-                Err(_e) => {
-                    crate::println!("Boot1 has no valid signature, lockdown would brick the chip.")
-                }
-            },
+            }
             "self_destruct" => {
                 if !matches!(args.as_slice(), [s] if s == "void_my_warrantee") {
                     return Err(Error::help(

@@ -118,7 +118,7 @@ pub fn audit() {
     }
 
     let tag_owned;
-    match bao1x_hal::sigcheck::validate_image(BOOT0_SELF_CHECK, None, None) {
+    match bao1x_hal::sigcheck::validate_image(BOOT0_SELF_CHECK, None, None, HardenedBool::TRUE) {
         Ok((k, k2, tag, target, pq_tag)) => crate::println!(
             "Boot0: arb {}, key {}/{} ({}), pq {:?} -> {:x}",
             owc.get(BOOT0_ANTI_ROLLBACK).unwrap(),
@@ -136,7 +136,7 @@ pub fn audit() {
         Err(e) => crate::println!("Boot0 did not validate: {:?}", e),
     }
     let tag_owned;
-    match bao1x_hal::sigcheck::validate_image(BOOT0_TO_BOOT1, None, None) {
+    match bao1x_hal::sigcheck::validate_image(BOOT0_TO_BOOT1, None, None, HardenedBool::TRUE) {
         Ok((k, k2, tag, target, pq_tag)) => crate::println!(
             "Boot1: arb {}, key {}/{} ({}), pq {:?} -> {:x}",
             owc.get(BOOT1_ANTI_ROLLBACK).unwrap(),
@@ -154,7 +154,7 @@ pub fn audit() {
         Err(e) => crate::println!("Boot1 did not validate: {:?}", e),
     }
     let tag_owned;
-    match bao1x_hal::sigcheck::validate_image(BOOT1_TO_LOADER_OR_BAREMETAL, None, None) {
+    match bao1x_hal::sigcheck::validate_image(BOOT1_TO_LOADER_OR_BAREMETAL, None, None, HardenedBool::TRUE) {
         // anti-rollbacks for next stage are either loader or baremetal: print both as loader|baremetal in the
         // audit
         Ok((k, k2, tag, target, pq_tag)) => crate::println!(
