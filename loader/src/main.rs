@@ -267,7 +267,9 @@ pub unsafe extern "C" fn rust_entry(signed_buffer: *const usize, signature: u32)
     // Run kernel image validation now that the heap is set up.
     #[cfg(feature = "bao1x")]
     let detached_app = {
-        use bao1x_api::{PARANOID_MODE, PARANOID_MODE_DUPE, bollard, pubkeys::LOADER_TO_KERNEL};
+        use bao1x_api::{
+            HardenedBool, PARANOID_MODE, PARANOID_MODE_DUPE, bollard, pubkeys::LOADER_TO_KERNEL,
+        };
         use bao1x_hal::{ERASE_VALUE, buram::ERASURE_PROOF_RANGE_BYTES};
 
         let owc = bao1x_hal::acram::OneWayCounter::new();
@@ -278,7 +280,12 @@ pub unsafe extern "C" fn rust_entry(signed_buffer: *const usize, signature: u32)
         csprng.random_delay();
         bollard!(bao1x_hal::sigcheck::die_no_std, 4);
         // validate using the bao1x signature scheme
-        match bao1x_hal::sigcheck::validate_image(LOADER_TO_KERNEL, None, Some(&mut csprng)) {
+        match bao1x_hal::sigcheck::validate_image(
+            LOADER_TO_KERNEL,
+            None,
+            Some(&mut csprng),
+            HardenedBool::FALSE,
+        ) {
             Ok((key, key_inv, tag, _target, pq_tag)) => {
                 if paranoid1 == 0 && paranoid2 == 0 {
                     let tag_owned;
@@ -370,7 +377,12 @@ pub unsafe extern "C" fn rust_entry(signed_buffer: *const usize, signature: u32)
             use bao1x_api::pubkeys::LOADER_TO_DETACHED_APP;
 
             csprng.random_delay();
-            match bao1x_hal::sigcheck::validate_image(LOADER_TO_DETACHED_APP, None, Some(&mut csprng)) {
+            match bao1x_hal::sigcheck::validate_image(
+                LOADER_TO_DETACHED_APP,
+                None,
+                Some(&mut csprng),
+                HardenedBool::FALSE,
+            ) {
                 Ok((key, key_inv, tag, _target, pq_tag)) => {
                     if paranoid1 == 0 && paranoid2 == 0 {
                         let tag_owned;

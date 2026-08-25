@@ -2,6 +2,7 @@ extern crate alloc;
 use alloc::string::String;
 use alloc::vec::Vec;
 
+use bao1x_api::HardenedBool;
 use bao1x_api::PQ_REVOCATION_DUPE_DISTANCE;
 use bao1x_api::REQUIRE_PQ;
 use bao1x_api::REQUIRE_PQ_DUPE;
@@ -56,6 +57,12 @@ use crate::udma::Spim;
 ///
 /// `csprng`, when Some, allows the image validator to insert random delays to harden against glitch attacks
 ///
+/// `audit`, when TRUE, skips modifying the anti-rollback counter. This is because the validate_image()
+///     routine can also be used to check an image in an update before it is applied, and the ARB should
+///     not be incremented before application. This does introduce a possible ARB-increment bypass vector,
+///     however as a glitch target I think it's relatively inherently hardened because missing the glitch
+///     even once still causes the ARB counter to be advanced during the normal boot path.
+///
 /// Returns either Ok(key_index, !key_index, tag, jump_target, pq_advisory) or Err
 ///   - `key_index` is returned twice, once as the compliment of itself, to harden the return value and to
 ///     facilitate hardened logic based on the return values.
@@ -74,6 +81,7 @@ pub fn validate_image(
     configuration: SecurityConfiguration,
     mut spim: Option<&mut Spim>,
     mut csprng: Option<&mut Csprng>,
+    audit: HardenedBool,
 ) -> Result<(usize, usize, [u8; 4], u32, Option<[u8; 4]>), String> {
     // Unpack the arguments
     let img_offset: *const u32 = configuration.image_ptr;
@@ -414,20 +422,40 @@ pub fn validate_image(
                         return Err(err_msg);
                     }
                     bollard!(die_no_std, 4);
-                    if arb_value < sig.sealed_data.anti_rollback {
-                        csprng.as_deref_mut().map(|rng| rng.random_delay());
-                        if sig.sealed_data.anti_rollback >= crate::acram::ONEWAY_MAX_VALUE {
-                            return Err(String::from("Proposed anti-rollback value out of range"));
-                        }
-                        // enforce a maximum "reasonable" increment - just as belt-and-suspenders
-                        assert!(sig.sealed_data.anti_rollback - arb_value < crate::acram::ONEWAY_MAX_DELTA);
-                        // increment anti-rollback counter to match the current value of the signed image
-                        bollard!(die_no_std, 4);
-                        while one_way_counters.get(arb).unwrap() < sig.sealed_data.anti_rollback {
+
+                    // only side-effect the ARB if we are *not* doing an audit of a staged image.
+                    csprng.as_deref_mut().map(|rng| rng.random_delay());
+                    match audit.is_true() {
+                        None => die_no_std(),
+                        Some(false) => {
                             bollard!(die_no_std, 4);
-                            // safety: anti-rollback counter argument is from a set of constants in bao1x_api
-                            // that are pre-validated.
-                            unsafe { one_way_counters.inc(arb).ok() };
+                            if arb_value < sig.sealed_data.anti_rollback {
+                                csprng.as_deref_mut().map(|rng| rng.random_delay());
+                                if sig.sealed_data.anti_rollback >= crate::acram::ONEWAY_MAX_VALUE {
+                                    return Err(String::from("Proposed anti-rollback value out of range"));
+                                }
+                                // enforce a maximum "reasonable" increment - just as belt-and-suspenders
+                                assert!(
+                                    sig.sealed_data.anti_rollback - arb_value
+                                        < crate::acram::ONEWAY_MAX_DELTA
+                                );
+                                // increment anti-rollback counter to match the current value of the signed
+                                // image
+                                bollard!(die_no_std, 4);
+                                while one_way_counters.get(arb).unwrap() < sig.sealed_data.anti_rollback {
+                                    bollard!(die_no_std, 4);
+                                    // safety: anti-rollback counter argument is from a set of constants in
+                                    // bao1x_api that are pre-validated.
+                                    unsafe { one_way_counters.inc(arb).ok() };
+                                }
+                            }
+                        }
+                        Some(true) => {
+                            bollard!(die_no_std, 4);
+                            // doing an audit - do not advance the ARB. An attacker could glitch into this
+                            // state and skip the ARB increment, but they'd have to be able to repeatedly do
+                            // this reliably to totally avoid the ARB increment
+                            // over the life of the attack.
                         }
                     }
                 }

@@ -45,15 +45,17 @@ pub fn run(mut csprng: &mut Csprng) -> bool {
             function_codes: BOOT0_SELF_CHECK.function_codes,
         };
         csprng.random_delay();
-        let boot0_check1 = bao1x_hal::sigcheck::validate_image(boot0_check, None, Some(&mut csprng))
-            .unwrap_or_else(|_| die());
+        let boot0_check1 =
+            bao1x_hal::sigcheck::validate_image(boot0_check, None, Some(&mut csprng), HardenedBool::TRUE)
+                .unwrap_or_else(|_| die());
         if boot0_check1.0 != !boot0_check1.1 {
             crate::println!("boot0 failed check");
             die();
         }
         csprng.random_delay();
-        let boot0_check2 = bao1x_hal::sigcheck::validate_image(boot0_check, None, Some(&mut csprng))
-            .unwrap_or_else(|_| die());
+        let boot0_check2 =
+            bao1x_hal::sigcheck::validate_image(boot0_check, None, Some(&mut csprng), HardenedBool::TRUE)
+                .unwrap_or_else(|_| die());
         bollard!(die, 4);
         if boot0_check2.0 != !boot0_check2.1 {
             bollard!(die, 4);
@@ -72,14 +74,16 @@ pub fn run(mut csprng: &mut Csprng) -> bool {
     };
     csprng.random_delay();
     let boot1_check1 =
-        bao1x_hal::sigcheck::validate_image(boot1_check, None, Some(&mut csprng)).unwrap_or_else(|_| die());
+        bao1x_hal::sigcheck::validate_image(boot1_check, None, Some(&mut csprng), HardenedBool::TRUE)
+            .unwrap_or_else(|_| die());
     if boot1_check1.0 != !boot1_check1.1 {
         crate::println!("boot1 failed check");
         die();
     }
     csprng.random_delay();
     let boot1_check2 =
-        bao1x_hal::sigcheck::validate_image(boot1_check, None, Some(&mut csprng)).unwrap_or_else(|_| die());
+        bao1x_hal::sigcheck::validate_image(boot1_check, None, Some(&mut csprng), HardenedBool::TRUE)
+            .unwrap_or_else(|_| die());
     bollard!(die, 4);
     if boot1_check2.0 != !boot1_check2.1 {
         bollard!(die, 4);
@@ -103,7 +107,9 @@ pub fn run(mut csprng: &mut Csprng) -> bool {
     }
 
     crate::println!("  Checking boot1");
-    let boot1_verify = bao1x_hal::sigcheck::validate_image(BOOT0_TO_BOOT1, None, Some(&mut csprng));
+    // we trigger boot1 ARB increment here because the only option is pass or brick
+    let boot1_verify =
+        bao1x_hal::sigcheck::validate_image(BOOT0_TO_BOOT1, None, Some(&mut csprng), HardenedBool::FALSE);
     match &boot1_verify {
         Ok(_) => {
             crate::println!("  boot1 update passed!")
@@ -137,7 +143,13 @@ pub fn run(mut csprng: &mut Csprng) -> bool {
             }
 
             crate::println!("  Checking boot0");
-            let boot0_verify = bao1x_hal::sigcheck::validate_image(BOOT0_SELF_CHECK, None, Some(&mut csprng));
+            // we do not increment the ARB here because there is a saving throw still
+            let boot0_verify = bao1x_hal::sigcheck::validate_image(
+                BOOT0_SELF_CHECK,
+                None,
+                Some(&mut csprng),
+                HardenedBool::TRUE,
+            );
             match &boot0_verify {
                 Ok(_) => {
                     crate::println!("  boot0 update passed!")
