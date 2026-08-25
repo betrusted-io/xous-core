@@ -27,15 +27,11 @@ impl Trng {
         // has already been conditioned and whitened, so we can use it directly.
         let seed_l = xous::create_server_id().unwrap().to_array();
         let seed_h = xous::create_server_id().unwrap().to_array();
-        for chunk in seed[..16].chunks_mut(4) {
-            for s in seed_l {
-                chunk.copy_from_slice(&s.to_le_bytes())
-            }
+        for (chunk, s) in seed[..16].chunks_mut(4).zip(seed_l.iter()) {
+            chunk.copy_from_slice(&s.to_le_bytes());
         }
-        for chunk in seed[16..].chunks_mut(4) {
-            for s in seed_h {
-                chunk.copy_from_slice(&s.to_le_bytes())
-            }
+        for (chunk, s) in seed[16..].chunks_mut(4).zip(seed_h.iter()) {
+            chunk.copy_from_slice(&s.to_le_bytes());
         }
         Ok(Trng { csprng: RefCell::new(ChaCha8Rng::from_seed(seed)), mode: api::TrngTestMode::Raw })
     }
