@@ -258,10 +258,15 @@ fn handle_event(this: &mut CorigineUsb, event_trb: &mut EventTrbS) -> CrgEvent {
                         this.set_addr(w_value as u8, CRG_INT_TARGET);
                     }
                     USB_REQ_SET_SEL => {
+                        // SET_SEL (USB 3.x, U1/U2 System Exit Latency) is not valid on this device:
+                        // bcdUSB is 0x0200 and SS is disabled (U3PORTPMSC/U2PORTPMSC zeroed in init).
+                        // USB 2.0 sec 9.2.7 requires stalling unsupported standard requests.
+                        // Never queue a host-controlled wLength into ep0_buf: the EP0 request buffer
+                        // is CRG_UDC_EP0_REQBUFSIZE bytes and CRG_UDC_APP_BUFOFFSET starts immediately
+                        // after it, so an over-long request walks forward into the EP1 app buffer.
                         crate::println_d!("USB_REQ_SET_SEL");
-                        this.ep0_receive(this.ep0_buf.load(Ordering::SeqCst) as usize, w_length as usize, 0);
-                        delay(100);
-                        crate::println_d!("SEL_VALUE NOT HANDLED");
+                        crate::println_d!("*** UNSUPPORTED (stall) ***");
+                        this.ep_halt(0, USB_RECV);
                     }
                     USB_REQ_SET_ISOCH_DELAY => {
                         crate::println_d!("USB_REQ_SET_ISOCH_DELAY");
@@ -397,9 +402,7 @@ fn handle_event(this: &mut CorigineUsb, event_trb: &mut EventTrbS) -> CrgEvent {
                         // SET_LINE_CODING (host -> device, 7 bytes)
                         // crate::println_d!("CDC SET_LINE_CODING");
                         let length = w_length as usize;
-                        if length == 7 {
-                            // queue EP0 OUT to receive the line coding structure
-                            this.ep0_receive(this.ep0_buf.load(Ordering::SeqCst) as usize, length, 0);
+                        if length == 7 && this.ep0_receive_bounded(length, 0).is_ok() {
                             // when complete, just ignore or store it
                         } else {
                             this.ep_halt(0, USB_RECV);
