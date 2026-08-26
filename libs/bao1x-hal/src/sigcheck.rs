@@ -576,7 +576,7 @@ pub fn pq_checks(
         spim.mem_read(end as u32, &mut sig_data, false);
         // manifest appendix is never used in checking swap signatures - it is only needed to check
         // binding of boot1 to its new signature, so we just "fake it" with 0-data here.
-        &SignatureAppendixInFlash { pq_signature: sig_data, manifest_sig: [0u8; SIGNATURE_LENGTH] }
+        &SignaturePqInFlash { signature: sig_data }
     } else {
         // sanity check the purported length of the image. It can't be any bigger than the available
         // storage in RRAM.
@@ -628,7 +628,7 @@ pub fn pq_checks(
             continue;
         }
         let Ok(vk) = VerifyingKey::<Sha2_128_24>::try_from(key.pk.as_slice()) else { continue };
-        let Ok(pq_sig) = Signature::<Sha2_128_24>::try_from(&pq_sig.pq_signature[..]) else { continue };
+        let Ok(pq_sig) = Signature::<Sha2_128_24>::try_from(&pq_sig.signature[..]) else { continue };
         csprng.as_deref_mut().map(|rng| rng.random_delay());
         bollard!(die_no_std, 4);
         out = Some((vk.slh_verify_hardened(&[digest], &pq_sig, mask), key.tag.clone()));
@@ -1074,4 +1074,63 @@ pub fn die_no_std() -> ! {
             options(noreturn)
         );
     }
+}
+
+#[cfg(not(feature = "std"))]
+pub fn check_manifest_sig(block_start: usize, mut csprng: &mut Option<&mut Csprng>) -> HardenedBool {
+    use bao1x_api::signatures::*;
+    use digest::Digest;
+    use ed25519_dalek::{Signature, VerifyingKey};
+
+    use crate::hardening::die;
+
+    // safety: caller passes a validated image base
+    let sig_block = unsafe { &*(block_start as *const SignatureInFlash) };
+    let pq_block = unsafe { sig_block.manifest_appendix() };
+
+    let aad_len = pq_block.manifest_aad_len as usize;
+    if aad_len > AAD_LENGTH {
+        return HardenedBool::FALSE;
+    }
+    // same discipline as validate_image: no hiding places in the padding
+    if pq_block.manifest_aad[aad_len..].iter().any(|&b| b != 0) {
+        return HardenedBool::FALSE;
+    }
+
+    // message = aad || sha256(classic signature)
+    for (i, pk) in sig_block.sealed_data.pubkeys[..].iter().enumerate() {
+        csprng.as_deref_mut().map(|rng| rng.random_delay());
+        let ed_sig = Signature::from_bytes(&pq_block.manifest_sig);
+        let vk = VerifyingKey::from_bytes(&pk.pk).unwrap();
+        bollard!(die, 4);
+        if sig_block.aad_len == 0 {
+            let mut h = Sha512::new();
+            h.update(&sig_block.signature);
+            if vk.verify_prehashed(h, None, &ed_sig).is_ok() {
+                if i == DEVELOPER_KEY_SLOT {
+                    // allow boot, but erase collateral
+                    erase_collateral(&mut csprng).ok();
+                }
+                return HardenedBool::TRUE;
+            }
+        } else {
+            let mut h = Sha256::new();
+            h.update(&sig_block.signature);
+            let digest = h.finalize();
+
+            let mut msg = [0u8; AAD_LENGTH + 32];
+            msg[..aad_len].copy_from_slice(&pq_block.manifest_aad[..aad_len]);
+            msg[aad_len..aad_len + 32].copy_from_slice(digest.as_slice());
+            let msg = &msg[..aad_len + 32];
+
+            if vk.verify_strict(msg, &ed_sig).is_ok() {
+                if i == DEVELOPER_KEY_SLOT {
+                    // allow boot, but erase collateral
+                    erase_collateral(&mut csprng).ok();
+                }
+                return HardenedBool::TRUE;
+            }
+        }
+    }
+    HardenedBool::FALSE
 }
