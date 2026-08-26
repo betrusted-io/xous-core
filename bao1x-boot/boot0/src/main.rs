@@ -392,7 +392,26 @@ fn mutual_distrust(
     csprng.random_delay();
     match any_matches.is_true() {
         Some(false) => {
-            // crate::println!("Preserve collateral!");
+            // Third-party manifest. Require it to be countersigned by one of its own keys,
+            // otherwise a compromised Baochip key could staple a victim's manifest onto
+            // hostile code and inherit their collateral.
+            if Some(true)
+                != bao1x_hal::sigcheck::check_manifest_sig(block_start, &mut Some(&mut csprng)).is_true()
+            {
+                bao1x_hal::sigcheck::erase_collateral(&mut Some(&mut csprng))
+                    .inspect_err(|e| crate::println!("{}", e))
+                    .ok();
+            }
+            // mild hardening: do it twice. This is a relatively fast check because the hash is short.
+            csprng.random_delay();
+            bollard!(die, 4);
+            if Some(true)
+                != bao1x_hal::sigcheck::check_manifest_sig(block_start, &mut Some(&mut csprng)).is_true()
+            {
+                bao1x_hal::sigcheck::erase_collateral(&mut Some(&mut csprng))
+                    .inspect_err(|e| crate::println!("{}", e))
+                    .ok();
+            }
         }
         _ => {
             // crate::println!("Collateral erase check!");
