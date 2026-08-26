@@ -574,7 +574,9 @@ pub fn pq_checks(
         // extract sig_data which should be appended directly to the end of the image in FLASH.
         let mut sig_data = [0u8; <Sha2_128_24 as SignatureLen>::SigLen::USIZE];
         spim.mem_read(end as u32, &mut sig_data, false);
-        &SignaturePqInFlash { signature: sig_data }
+        // manifest appendix is never used in checking swap signatures - it is only needed to check
+        // binding of boot1 to its new signature, so we just "fake it" with 0-data here.
+        &SignatureAppendixInFlash { pq_signature: sig_data, manifest_sig: [0u8; SIGNATURE_LENGTH] }
     } else {
         // sanity check the purported length of the image. It can't be any bigger than the available
         // storage in RRAM.
@@ -626,7 +628,7 @@ pub fn pq_checks(
             continue;
         }
         let Ok(vk) = VerifyingKey::<Sha2_128_24>::try_from(key.pk.as_slice()) else { continue };
-        let Ok(pq_sig) = Signature::<Sha2_128_24>::try_from(&pq_sig.signature[..]) else { continue };
+        let Ok(pq_sig) = Signature::<Sha2_128_24>::try_from(&pq_sig.pq_signature[..]) else { continue };
         csprng.as_deref_mut().map(|rng| rng.random_delay());
         bollard!(die_no_std, 4);
         out = Some((vk.slh_verify_hardened(&[digest], &pq_sig, mask), key.tag.clone()));
@@ -683,23 +685,27 @@ pub fn erase_collateral(csprng: &mut Option<&mut Csprng>) -> Result<(), String> 
     let slot = &bao1x_api::offsets::COLLATERAL;
     bollard!(die_no_std, 4);
     csprng.as_deref_mut().map(|rng| rng.random_delay());
-    // only clear ACL if it isn't already cleared
-    if slot_mgr
-        .get_acl(slot)
-        .unwrap_or(AccessSettings::Data(DataSlotAccess::new_with_raw_value(0xFFFF_FFFF)))
-        .raw_u32()
-        != 0
-    {
-        // clear the ACL so we can operate on the data
-        // Don't panic on failure: the panic can be used as a primitive to prevent
-        // further erasure.
-        slot_mgr.set_acl(&mut rram, slot, &AccessSettings::Data(DataSlotAccess::new_with_raw_value(0))).ok();
-    }
+
     let bytes = unsafe { slot_mgr.read_unchecked(slot) };
     // only erase if the key hasn't already been erased, to avoid stressing the RRAM array
     // erase_secrets() may be called on every boot in some modes.
     bollard!(die_no_std, 4);
     if !bytes.iter().all(|&b| b == ERASE_VALUE) {
+        // only clear ACL if it isn't already cleared
+        if slot_mgr
+            .get_acl(slot)
+            .unwrap_or(AccessSettings::Data(DataSlotAccess::new_with_raw_value(0xFFFF_FFFF)))
+            .raw_u32()
+            != 0
+        {
+            // clear the ACL so we can operate on the data
+            // Don't panic on failure: the panic can be used as a primitive to prevent
+            // further erasure.
+            slot_mgr
+                .set_acl(&mut rram, slot, &AccessSettings::Data(DataSlotAccess::new_with_raw_value(0)))
+                .ok();
+        }
+
         let mut eraser = alloc::vec::Vec::with_capacity(slot.len() * SLOT_ELEMENT_LEN_BYTES);
         eraser.resize(slot.len() * SLOT_ELEMENT_LEN_BYTES, ERASE_VALUE);
 
