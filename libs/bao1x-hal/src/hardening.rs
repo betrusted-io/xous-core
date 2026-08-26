@@ -64,6 +64,7 @@ pub struct Csprng {
     _ro_trng: crate::sce::trng::Trng,
     csprng: ChaCha8Rng,
     entropy_bank: u64,
+    last_word: u64,
 }
 
 impl Csprng {
@@ -116,14 +117,26 @@ impl Csprng {
 
         let entropy_bank = csprng.next_u64();
 
-        Self { _ro_trng: ro_trng, csprng, entropy_bank }
+        Self { _ro_trng: ro_trng, csprng, entropy_bank, last_word: entropy_bank }
     }
+
+    /// Not inlined: keeps the ChaCha block function monomorphized in this crate only.
+    /// The Chacha function is about 4.5k in size, we can't afford to duplicate it. It does
+    /// mean the ChaCha generator is a patch target for removing delays, but what can you do...
+    #[inline(never)]
+    fn next_word(&mut self) -> u64 { self.csprng.next_u64() }
 
     /// In-lining means there isn't just one spot to patch to remove random delays from the bootloader
     #[inline(always)]
     pub fn random_delay(&mut self) {
-        if self.entropy_bank == 0 {
-            self.entropy_bank = self.csprng.next_u64();
+        let mut same_rand = false;
+        // while 0 catches glitches that force entropy bank back to 0
+        while self.entropy_bank == 0 || same_rand {
+            let w = self.next_word();
+            // catches stuck csprng due to patching, attack, etc.
+            same_rand = w == self.last_word;
+            self.last_word = w;
+            self.entropy_bank = w;
         }
         let delay = (self.entropy_bank & ((1 << DELAY_MARGIN_BITS) - 1)) as u32;
         self.entropy_bank >>= DELAY_MARGIN_BITS;
