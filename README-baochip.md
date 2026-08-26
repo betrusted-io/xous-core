@@ -107,7 +107,7 @@ Baochip's keyslots, but by the time it runs, those keyslots have been erased.
 
 #### Preventing Baochip Access to Third Party Secrets
 
-An bank of 4x 256-bit keys known as `collateral` keys are provided. These keys are always erased by
+A bank of 4x 256-bit keys known as `collateral` keys are provided. These keys are always erased by
 the boot0 / boot1 firmware whenever the public key block embedded in the header of the next stage matches Baochip's
 expected public keys. The only condition when they are not erased is when all the key slots are different
 from Baochip's public keys.
@@ -144,24 +144,27 @@ This is because there is logic that will trigger developer mode if the key slot 
 
 `erase value`: A non-zero, fixed pattern that is used to differentiate an erased key from a `0` key. The subtlety being a `0` key is the factory-new state, so to ensure erasure, a well-known non-`0` fixed value is written into keys (it happens to be the number `3` repeated for every byte).
 
+`nextboot1`: Refers to the next stage to be run, be it `altboot1` or `boot1` based on other policy decisions.
+
 Based on the above definitions, here are the mutual-distrust policies. Inside `boot0`:
 
+0. If developer mode is set, always erase collateral keys.
 1. Verify that `boot0` `key manifest` is a 100% match against the `IFR keys` and `reference keys`. If not, `Baochip secrets` are erased.
-2. Verify that `boot1` `key manifest` is a 100% match against the `IFR keys` and `reference keys`. If not, `Baochip secrets` are erased.
+2. Verify that `nextboot1` `key manifest` is a 100% match against the `IFR keys` and `reference keys`. If not, `Baochip secrets` are erased.
 3. If any Baochip key is found in the `boot1` `key manifest`, erase `collateral`.
-4. Check that the `boot1` `key manifest` matches `receipt keys`. On the first non-matching key, erase `collateral`, and copy the new `boot1` `key manifest` into `receipt keys`.
+4. Check that the `nextboot1` `key manifest` matches `receipt keys`. On the first non-matching key, erase `collateral`, and copy the new `nextboot1` `key manifest` into `receipt keys`.
 
 Let's observe what properties are guaranteed by this arrangement:
 
-- If `boot0` and `boot1`'s `key manifest`s match the `reference keys`, then `Baochip secrets` are intact.
-- If any of `boot1`'s `key manifest` entries match any of the `reference keys`, `collateral` is erased. Thus, any attempt to "downgrade" the firmware by loading a Baochip-signed image would not lead to third-party secret disclosure, because the `collateral` keys are part of the third party firmware's key derivation mechanism.
-- If any of `boot1`'s `key manifest` does not match the `reference keys` or `IFR keys`, most of Baochip's secrets are erased. Thus the process of loading third party firmware would also cause any Baochip secrets to be lost.
+- If `boot0` and `nextboot1`'s `key manifest`s match the `reference keys`, then `Baochip secrets` are intact.
+- If any of `nextboot1`'s `key manifest` entries match any of the `reference keys`, `collateral` is erased. Thus, any attempt to "downgrade" the firmware by loading a Baochip-signed image would not lead to third-party secret disclosure, because the `collateral` keys are part of the third party firmware's key derivation mechanism.
+- If any of `nextboot1`'s `key manifest` does not match the `reference keys` or `IFR keys`, most of Baochip's secrets are erased. Thus the process of loading third party firmware would also cause any Baochip secrets to be lost.
 
 Here's how the flow works from a first-boot, factory new situation.
 
 1. Chip boots with no `collateral` keys or `Baochip secets`
 2. `collateral` is erased since Baochip keys are found in the  `boot1` manifest
-3. `receipt keys` are 0 on boot, thus on first-boot, the `collateral` is re-checked for erasure, and the `receipt keys` now match the `boot1` `key manifest`.
+3. `receipt keys` are 0 on boot, thus on first-boot, the `collateral` is re-checked for erasure, and the `receipt keys` now match the `nextboot1` `key manifest`.
 4. Chips are shipped. No secret keys exist in the chip as the chips exit chip fab.
 
 Here's how the flow works after assembly. This is Baochip's version of the story - other users can do different things.
@@ -183,7 +186,7 @@ Baochip will *only* sign third-party `boot1` images after the proposed firmware 
 3. The proposed firmware demonstrates permanent loss of access to encrypted data if a Baochip-signed `boot1` is swapped in, and then reverted back to the third-party-signed `boot1`.
 4. The same introspection command used in step 2 is run again. The resulting value must be different from the value reported in the original run of step 2.
 5. The `boot1` code ensures the `OEM_MODE` counter is not 0
-6. Third party code should not expose `PK_RECEIPT` slots to re-write/modification
+6. Third party code should not tamper with `PK_RECEIPT` slots
 
 The above tests are written such that the test can be run without inspection of the details of the third party firmware, but ideally, Baochip can inspect the firmware to ensure the intended policies are in place.
 
