@@ -1077,7 +1077,7 @@ pub fn die_no_std() -> ! {
 }
 
 #[cfg(not(feature = "std"))]
-pub fn check_manifest_sig(block_start: usize, mut csprng: &mut Option<&mut Csprng>) -> HardenedBool {
+pub fn check_counter_sig(block_start: usize, mut csprng: &mut Option<&mut Csprng>) -> HardenedBool {
     use bao1x_api::signatures::*;
     use digest::Digest;
     use ed25519_dalek::{Signature, VerifyingKey};

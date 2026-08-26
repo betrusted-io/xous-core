@@ -392,11 +392,11 @@ fn mutual_distrust(
     csprng.random_delay();
     match any_matches.is_true() {
         Some(false) => {
-            // Third-party manifest. Require it to be countersigned by one of its own keys,
+            // Third-party manifest counter-signature. Require it to be countersigned by one of its own keys,
             // otherwise a compromised Baochip key could staple a victim's manifest onto
             // hostile code and inherit their collateral.
             if Some(true)
-                != bao1x_hal::sigcheck::check_manifest_sig(block_start, &mut Some(&mut csprng)).is_true()
+                != bao1x_hal::sigcheck::check_counter_sig(block_start, &mut Some(&mut csprng)).is_true()
             {
                 bao1x_hal::sigcheck::erase_collateral(&mut Some(&mut csprng))
                     .inspect_err(|e| crate::println!("{}", e))
@@ -406,11 +406,15 @@ fn mutual_distrust(
             csprng.random_delay();
             bollard!(die, 4);
             if Some(true)
-                != bao1x_hal::sigcheck::check_manifest_sig(block_start, &mut Some(&mut csprng)).is_true()
+                != bao1x_hal::sigcheck::check_counter_sig(block_start, &mut Some(&mut csprng)).is_true()
             {
                 bao1x_hal::sigcheck::erase_collateral(&mut Some(&mut csprng))
                     .inspect_err(|e| crate::println!("{}", e))
                     .ok();
+                // this is printed after the second instance check, to avoid this being a glitch trigger
+                // but this gives useful diagnostics in case the third party forgot to apply their
+                // counter-signature
+                crate::println!("Invalid counter-signature, erasing collateral.");
             }
         }
         _ => {
