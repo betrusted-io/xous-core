@@ -146,23 +146,30 @@ This is because there is logic that will trigger developer mode if the key slot 
 
 `nextboot1`: Refers to the next stage to be run, be it `altboot1` or `boot1` based on other policy decisions.
 
+`counter-signature`: The third party key holder must sign the Baochip signature applied to the `boot1`/`altboot1` code. This counter-signature is stored in an appendix, after the PQ signature. The counter-signature prevents Baochip from using the third party manifest without the third party's blessing (the attack scenario is as follows: Baochip puts the third party manifest on its own code, and signs it. Without the counter-signature, the collateral keys will be preserved, even though it's not code sanctioned by the third party). The counter-signature is done on the Baochip digital signature, so the full signing process consists of the third party releasing the firmware to Baochip to sign; Baochip signs the firmware; and the third party confirms the signature matches the code they provided, and counter-signs the signature.
+
 Post quantum policy: in all cases, the decisions here are made based on the classical signature outcome, with post quantum
 providing supplemental or re-enforcement of the policy. Wherever PQ does not exist or contradicts the classical, the classical
 outcome should be the decider.
 
 Based on the above definitions, here are the mutual-distrust policies. Inside `boot0`:
 
-0. If developer mode is set, always erase collateral keys.
-1. Verify that `boot0` `key manifest` is a 100% match against the `IFR keys` and `reference keys`. If not, `Baochip secrets` are erased.
-2. Verify that `nextboot1` `key manifest` is a 100% match against the `IFR keys` and `reference keys`. If not, `Baochip secrets` are erased.
-3. If any Baochip key is found in the `boot1` `key manifest`, erase `collateral`.
-4. Check that the `nextboot1` `key manifest` matches `receipt keys`. On the first non-matching key, erase `collateral`, and copy the new `nextboot1` `key manifest` into `receipt keys`.
+1. If developer mode is set, always erase collateral keys.
+2. Verify that `boot0` `key manifest` is a 100% match against the `IFR keys` and `reference keys`. If not, `Baochip secrets` are erased.
+3. Verify that `nextboot1` `key manifest` is a 100% match against the `IFR keys` and `reference keys`. If not, `Baochip secrets` are erased.
+4. If any Baochip key is found in the `boot1` `key manifest`, erase `collateral`.
+5. If no Baochip keys are found, check that a valid `counter-signature` exists on `nextboot1`
+   1. The `counter-signature` should use a key from key slots 0-2.
+   2. A self-sig from slot 3 will trigger erasure of `collateral` under presumption that slot 3 is the third party dev key.
+   3. If no `counter-signature` is found, `collateral` is erased.
+6. Check that the `nextboot1` `key manifest` matches `receipt keys`. On the first non-matching key, erase `collateral`, and copy the new `nextboot1` `key manifest` into `receipt keys`.
 
 Let's observe what properties are guaranteed by this arrangement:
 
 - If `boot0` and `nextboot1`'s `key manifest`s match the `reference keys`, then `Baochip secrets` are intact.
 - If any of `nextboot1`'s `key manifest` entries match any of the `reference keys`, `collateral` is erased. Thus, any attempt to "downgrade" the firmware by loading a Baochip-signed image would not lead to third-party secret disclosure, because the `collateral` keys are part of the third party firmware's key derivation mechanism.
 - If any of `nextboot1`'s `key manifest` does not match the `reference keys` or `IFR keys`, most of Baochip's secrets are erased. Thus the process of loading third party firmware would also cause any Baochip secrets to be lost.
+- Baochip cannot, on its own, sign any firmware that also preserves `collateral` keys.
 
 Here's how the flow works from a first-boot, factory new situation.
 
