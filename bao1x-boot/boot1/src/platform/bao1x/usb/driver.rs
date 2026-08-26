@@ -74,6 +74,7 @@ pub unsafe fn init_usb() {
     }
 }
 
+/* // not currently used, comment it out to lighten the code base - but leave around just in case we need a delay again in the future
 fn delay(quantum: usize) {
     use utralib::{CSR, utra};
     // abuse the d11ctime timer to create some time-out like thing
@@ -89,6 +90,7 @@ fn delay(quantum: usize) {
         while polarity == d11c.rf(utra::d11ctime::HEARTBEAT_BEAT) {}
     }
 }
+*/
 
 fn get_status_request(this: &mut CorigineUsb, request_type: u8, index: u16) {
     let ep0_buf = unsafe {
