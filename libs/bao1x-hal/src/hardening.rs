@@ -568,7 +568,9 @@ pub fn compare_refkeys(
     ];
     let ifr_msb = unsafe { core::slice::from_raw_parts(0x6040_0240 as *const u8, 4) };
     for (i, (boot0_key, ref_key)) in pk_src.sealed_data.pubkeys.iter().zip(ifr_keys).enumerate() {
+        bollard!(die, 4);
         if ref_key != &boot0_key.pk[..31] || ifr_msb[i] != boot0_key.pk[31] {
+            bollard!(die, 4);
             good_compare = HardenedBool::FALSE;
         }
     }
