@@ -364,8 +364,8 @@ pub fn sign_image<P: AsRef<Path>>(
 
                 // fake keys also always includes fake PQ keys
                 header.sealed_data.pq_enabled = 0xA0A0_5555; // any non-0 value works, but more distance from 0 is stronger
-                // create fake PQ's for the 3 non-dev keys
-                for dst in header.sealed_data.pubkeys_pq[..3].iter_mut() {
+                // create fake PQ's for keys 1, 2, and 3
+                for dst in header.sealed_data.pubkeys_pq[1..].iter_mut() {
                     let mut fake_pk = PubkeyPq::default();
                     // n (in bytes) for SHA2-128-24. The secret key seed material is 3*n bytes
                     // (sk_seed || sk_prf || pk_seed); the serialized key is 4*n (adds pk_root).
@@ -385,8 +385,9 @@ pub fn sign_image<P: AsRef<Path>>(
                     rand::rngs::OsRng.fill_bytes(&mut fake_pk.tag);
                     dst.populate_from(&fake_pk);
                 }
-                rand::rngs::OsRng.fill_bytes(&mut header.sealed_data.pubkeys_pq[3].tag); // tag may be random
-                header.sealed_data.pubkeys_pq[3].pk.copy_from_slice(&TEST_KEY_PQ_PUB); // however we need to have a correct pub key so we can sign it
+                // fill in a "real" key for key 0
+                rand::rngs::OsRng.fill_bytes(&mut header.sealed_data.pubkeys_pq[0].tag); // tag may be random
+                header.sealed_data.pubkeys_pq[0].pk.copy_from_slice(&TEST_KEY_PQ_PUB); // however we need to have a correct pub key so we can sign it
             }
 
             header._jal_instruction = generate_jal_x0(SIGBLOCK_LEN as isize)?;
