@@ -271,6 +271,14 @@ pub fn audit() {
         crate::println!("== IN DEVELOPER MODE ==");
         secure = false;
     }
+    if owc.get(OEM_MODE).unwrap() != 0 {
+        crate::println!("== THIRD PARTY MODE ACTIVE ==");
+        // print out the discloseable collateral key
+        crate::println!(
+            "Collateral evidence: {:x?}",
+            slot_mgr.read(&SlotIndex::Data(264, PartitionAccess::Fw0, RwPerms::ReadWrite))
+        );
+    }
     if owc.get(BOOT0_PUBKEY_FAIL).unwrap() != 0 {
         crate::println!("== BOOT0 REPORTED PUBKEY CHECK FAILURE ==");
         secure = false;
