@@ -377,7 +377,7 @@ pub const DEV_PUBKEY: SlotIndex = SlotIndex::Data(7, PartitionAccess::All, RwPer
 ///   from low slot to high slot, and thus one can infer the erasure state of the collateral by inspecting the
 ///   value of the high key slot. `audit` when OEM_MODE is set will disclose this.
 ///
-/// <slot-map targets="all" registered="primary" in-data-slots="no" in-key-slots="no"/>
+/// <slot-map targets="all" registered="primary" in-data-slots="yes" in-key-slots="no"/>
 pub const COLLATERAL: SlotIndex = SlotIndex::DataRange(261..265, PartitionAccess::Fw0, RwPerms::ReadWrite);
 
 /// Boot1 pubkey `receipt` fields record the last accepted public key used when running boot1.
