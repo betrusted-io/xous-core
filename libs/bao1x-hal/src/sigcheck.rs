@@ -1101,7 +1101,7 @@ pub fn check_counter_sig(block_start: usize, mut csprng: &mut Option<&mut Csprng
     for (i, pk) in sig_block.sealed_data.pubkeys[..].iter().enumerate() {
         csprng.as_deref_mut().map(|rng| rng.random_delay());
         let ed_sig = Signature::from_bytes(&pq_block.manifest_sig);
-        let vk = VerifyingKey::from_bytes(&pk.pk) else { continue };
+        let Ok(vk) = VerifyingKey::from_bytes(&pk.pk) else { continue };
         bollard!(die, 4);
         if aad_len == 0 {
             let mut h = Sha512::new();
