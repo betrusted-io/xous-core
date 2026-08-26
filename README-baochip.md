@@ -146,6 +146,10 @@ This is because there is logic that will trigger developer mode if the key slot 
 
 `nextboot1`: Refers to the next stage to be run, be it `altboot1` or `boot1` based on other policy decisions.
 
+Post quantum policy: in all cases, the decisions here are made based on the classical signature outcome, with post quantum
+providing supplemental or re-enforcement of the policy. Wherever PQ does not exist or contradicts the classical, the classical
+outcome should be the decider.
+
 Based on the above definitions, here are the mutual-distrust policies. Inside `boot0`:
 
 0. If developer mode is set, always erase collateral keys.
