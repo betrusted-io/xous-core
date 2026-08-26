@@ -108,7 +108,7 @@ Baochip's keyslots, but by the time it runs, those keyslots have been erased.
 #### Preventing Baochip Access to Third Party Secrets
 
 A bank of 4x 256-bit keys known as `collateral` keys are provided. These keys are always erased by
-the boot0 / boot1 firmware whenever the public key block embedded in the header of the next stage matches Baochip's
+the boot0 firmware whenever the public key block embedded in the header of the next stage matches Baochip's
 expected public keys. The only condition when they are not erased is when all the key slots are different
 from Baochip's public keys.
 
