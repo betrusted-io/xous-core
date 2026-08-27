@@ -378,7 +378,14 @@ pub const DEV_PUBKEY: SlotIndex = SlotIndex::Data(7, PartitionAccess::All, RwPer
 ///   value of the high key slot. `audit` when OEM_MODE is set will disclose this.
 ///
 /// <slot-map targets="all" registered="primary" in-data-slots="yes" in-key-slots="no"/>
-pub const COLLATERAL: SlotIndex = SlotIndex::DataRange(261..265, PartitionAccess::Fw0, RwPerms::ReadWrite);
+pub const COLLATERAL_SECRET: SlotIndex =
+    SlotIndex::DataRange(261..264, PartitionAccess::Fw0, RwPerms::ReadWrite);
+/// <slot-map targets="all" registered="primary" in-data-slots="yes" in-key-slots="no"/>
+pub const COLLATERAL_PUBLIC: SlotIndex = SlotIndex::Data(264, PartitionAccess::Open, RwPerms::ReadWrite);
+/// This is an alias - it's not tracked in the checker. It's meant to encompass the entire 4-slot range
+/// and is used to ensure that the whole range is one-shot handled for erasure
+pub const COLLATERAL_ERASURE_ALIAS: SlotIndex =
+    SlotIndex::DataRange(261..265, PartitionAccess::Fw0, RwPerms::ReadWrite);
 
 /// Boot1 pubkey `receipt` fields record the last accepted public key used when running boot1.
 /// If this changes, the collateral keys need to be erased. This prevents one third-party signed firmware

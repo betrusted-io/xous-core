@@ -135,7 +135,8 @@ pub const COMMON_DATA_CLAIMS: &[DataClaim] = &[
     primary("BAO2_PUBKEY", &crate::offsets::BAO2_PUBKEY),
     primary("BETA_PUBKEY", &crate::offsets::BETA_PUBKEY),
     primary("DEV_PUBKEY", &crate::offsets::DEV_PUBKEY),
-    primary("COLLATERAL", &crate::offsets::COLLATERAL),
+    primary("COLLATERAL_SECRET", &crate::offsets::COLLATERAL_SECRET),
+    primary("COLLATERAL_PUBLIC", &crate::offsets::COLLATERAL_PUBLIC),
     primary("BOOT1_PK_RECEIPT_SLOT0", &crate::offsets::BOOT1_PK_RECEIPT_SLOT0),
     primary("BOOT1_PK_RECEIPT_SLOT1", &crate::offsets::BOOT1_PK_RECEIPT_SLOT1),
     primary("BOOT1_PK_RECEIPT_SLOT2", &crate::offsets::BOOT1_PK_RECEIPT_SLOT2),
@@ -143,6 +144,7 @@ pub const COMMON_DATA_CLAIMS: &[DataClaim] = &[
     primary("CLOCK_SCRAMBLE_PARAMS", &crate::offsets::CLOCK_SCRAMBLE_PARAMS),
     primary("ATE_RESERVED", &crate::offsets::ATE_RESERVED),
     primary("APPLICATION", &crate::offsets::APPLICATION),
+    alias("COLLATERAL_ERASURE_ALIAS", &crate::offsets::COLLATERAL_ERASURE_ALIAS),
 ];
 
 // ---- baosec-specific claims ----
