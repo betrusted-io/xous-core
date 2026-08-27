@@ -177,7 +177,10 @@ impl Repl {
                             let high_limit = bao1x_api::BAREMETAL_START;
 
                             if record.address() as usize >= low_limit
-                                && (record.address() as usize) < high_limit
+                                && (record.address() as usize)
+                                    .checked_add(record.data().len())
+                                    .expect("record address overflow")
+                                    < high_limit
                                 && record.family() == bao1x_api::BAOCHIP_1X_UF2_FAMILY
                             {
                                 let mut rram = bao1x_hal::rram::Reram::new();

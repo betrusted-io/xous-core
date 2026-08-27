@@ -48,6 +48,11 @@ static USB_TX: Mutex<RefCell<VecDeque<u8>>> = Mutex::new(RefCell::new(VecDeque::
 static USB_CONNECTED: AtomicBool = AtomicBool::new(false);
 static DISK_BUSY: AtomicBool = AtomicBool::new(false);
 
+// limit incoming characters to 16k unhandled input queue. This should be large enough
+// to handle e.g. uf2 packets and other serial transfers, but small enough not to exhaust
+// the 256k heap allocated to the loader.
+const RX_BUFFER_LIMIT: usize = 16384;
+
 // telemetry for updates. Has to be accessible in an interrupt context, hence the Atomics
 static BAREMETAL_BYTES: AtomicU32 = AtomicU32::new(0);
 static KERNEL_BYTES: AtomicU32 = AtomicU32::new(0);
@@ -63,7 +68,13 @@ pub fn uart_irq_handler() {
         match uart.getc() {
             Some(c) => {
                 critical_section::with(|cs| {
-                    UART_RX.borrow(cs).borrow_mut().push_back(c);
+                    let mut queue = UART_RX.borrow(cs).borrow_mut();
+
+                    // Check length before pushing
+                    if queue.len() < RX_BUFFER_LIMIT {
+                        queue.push_back(c);
+                    }
+                    // If over limit, we simply drop 'c' (discard it)
                 });
             }
             _ => break,
