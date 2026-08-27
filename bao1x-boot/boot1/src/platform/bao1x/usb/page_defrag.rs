@@ -71,7 +71,19 @@ where
 
         let page_offset = byte_offset / PAGE_SIZE;
 
-        // Get or create page state
+        // Get or create page state. If too many pages are requested, the device will panic. This is actually
+        // the desired behavior - silently skipping or printing a message to console does not distinguish this
+        // case from other potential failures. The user experience on a highly fragmented copy would be seeing
+        // the copy stall because the USB device has hung - in this case, I want the bug report. A more
+        // graceful recovery would make this indistinguishable from a corrupted file, truncated copy
+        // without memory exhaustion, or failure to flush all of the pending pages.
+        //
+        // That being said, it's pretty unlikely we encounter this problem. Most OSes don't deliberately try
+        // to fragment the page copies because it's bad for the receiving media. This most likely trigger for
+        // this is an active attack by someone trying to stage data into the heap for a future exploit.
+        // However, simply limiting this to some arbitrary limit is no different from allowing the
+        // heap to exhaust, I think, an the panic forces a reboot which also clears the heap. So I
+        // think again this is the right policy.
         let page = self.pages.entry(page_addr).or_insert_with(SectorState::new);
 
         // Warn if page double-receive
