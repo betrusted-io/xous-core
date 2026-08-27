@@ -859,7 +859,7 @@ fn pq_preflight(
 
     let pq_offset = offset + header.pq_signature_offset();
     let reserved = file_len.saturating_sub(pq_offset);
-    if reserved != SIGNATURE_PQ_LENGTH {
+    if reserved != SIGNATURE_PQ_LENGTH && reserved != SIGNATURE_PQ_LENGTH + 128 {
         return Err(format!(
             "Image reserves {} bytes for the PQ signature at offset {}, expected {}. \
              This tool replaces a signature in place and will not change the image layout.",
