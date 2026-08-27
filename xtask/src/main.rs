@@ -155,6 +155,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     if env::args().filter(|x| x == "--no-pq").count() != 0 {
         builder.skip_pq(true);
     }
+    let arb_testing = get_flag("--arb-override")?;
+    if !arb_testing.is_empty() {
+        builder.set_antirollback_override(
+            usize::from_str_radix(&arb_testing[0], 10).expect("malformed arb-override"),
+        );
+    }
 
     let swap_key = get_flag("--swap")?;
     if swap_key.len() != 0 {
@@ -1037,6 +1043,7 @@ fn print_help() {
     [--boot0 <path-to-boot0>]
     [--boot1 <path-to-boot1>]
     [--thirdparty-test]
+    [--arb-override [value]]
 
 [cratespecs] is a list of 0 or more items of the following syntax:
    [name]                crate 'name' to be built from local source
@@ -1072,6 +1079,7 @@ be merged in with explicit app/service treatment with the following flags:
 [--boot0 <path>]         Updater builds: path to the boot0 binary image (defaults to a built-in path if omitted)
 [--boot1 <path>]         Updater builds: path to the boot1 binary image (defaults to a built-in path if omitted)
 [--thirdparty-test]      Populate the key block with 'fake' third party keys. Only valid with bao1x-boot1/alt-boot1/barmetal targets.
+[--arb-override [value]] Furnishes an anti-rollback counter override to a boot-series image being generated. Used for CI testing. Ignored for non-boot images.
 
 - An 'app' must be enumerated in apps/manifest.json.
    A pre-processor configures the launch menu based on the list of specified apps.
