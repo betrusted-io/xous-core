@@ -68,7 +68,7 @@ pub fn audit() {
     let boardtype = owc.get_decoded::<BoardTypeCoding>().unwrap();
     crate::println!("Board type reads as: {:?}", boardtype);
     crate::println!("First-try boot partition is: {:?}", owc.get_decoded::<AltBootCoding>());
-    crate::println!("Program counter in: {:?}", current_pc_loc());
+    crate::println!("Program counter is in: {:?}", current_pc_loc());
     crate::println!("Semver is: {}", crate::version::SEMVER);
     crate::println!("Description is: {}", crate::RELEASE_DESCRIPTION);
     crate::println!("Stepping is: {}", detect_stepping());
@@ -275,10 +275,7 @@ pub fn audit() {
     if owc.get(OEM_MODE).unwrap() != 0 {
         crate::println!("== THIRD PARTY MODE ACTIVE ==");
         // print out the discloseable collateral key
-        crate::println!(
-            "Collateral evidence: {:x?}",
-            slot_mgr.read(&SlotIndex::Data(264, PartitionAccess::Fw0, RwPerms::ReadWrite))
-        );
+        crate::println!("Collateral evidence: {:x?}", slot_mgr.read(&bao1x_api::COLLATERAL_PUBLIC));
     }
     if owc.get(BOOT0_PUBKEY_FAIL).unwrap() != 0 {
         crate::println!("== BOOT0 REPORTED PUBKEY CHECK FAILURE ==");
@@ -307,9 +304,10 @@ pub fn audit() {
         crate::println!("Factory configuration error - CM7 or debug is enabled!");
         secure = false;
     }
-    let collateral = slot_mgr.read(&COLLATERAL).unwrap();
-    let check_val = alloc::vec![bao1x_hal::ERASE_VALUE; COLLATERAL.len() * SLOT_ELEMENT_LEN_BYTES];
-    let uninit_val = alloc::vec![0; COLLATERAL.len() * SLOT_ELEMENT_LEN_BYTES];
+    // we can only check the public value revealed for sampling
+    let collateral = slot_mgr.read(&COLLATERAL_PUBLIC).unwrap();
+    let check_val = alloc::vec![bao1x_hal::ERASE_VALUE; COLLATERAL_PUBLIC.len() * SLOT_ELEMENT_LEN_BYTES];
+    let uninit_val = alloc::vec![0; COLLATERAL_PUBLIC.len() * SLOT_ELEMENT_LEN_BYTES];
     // these strings below are used in CI. If they are changed, CI needs to be updated
     if collateral == &check_val {
         crate::println!("Collateral erased");
