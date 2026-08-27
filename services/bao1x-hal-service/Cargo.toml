@@ -6,6 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+early_settings = { path = "../early_settings" }
 utralib = { version = "0.1.27", optional = true, default-features = false, features = [
     "bao1x",
 ] }
