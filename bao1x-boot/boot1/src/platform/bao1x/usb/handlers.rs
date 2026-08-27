@@ -12,7 +12,9 @@ use bao1x_hal::usb::driver::*;
 use utralib::*;
 
 use super::*;
-use crate::{APP_BYTES, BAREMETAL_BYTES, IS_BAOSEC, KERNEL_BYTES, SWAP_BYTES, udc_pointer_check};
+use crate::{
+    APP_BYTES, BAREMETAL_BYTES, IS_BAOSEC, KERNEL_BYTES, RX_BUFFER_LIMIT, SWAP_BYTES, udc_pointer_check,
+};
 
 pub static TX_IDLE: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicBool::new(true);
 
@@ -46,10 +48,16 @@ fn fill_sparse_data(dest: &mut [u8], offset: usize) {
 
         dest[write_start_in_dest..write_start_in_dest + copy_len].copy_from_slice(&block[..copy_len]);
         #[cfg(feature = "alt-boot1")]
-        // patch the volume name so we can tell alt-boot apart
-        if addr == 0x410000 {
-            // patch ALT over BAO. Assumes that the block is aligned.
-            dest[write_start_in_dest..write_start_in_dest + 3].copy_from_slice(&[0x41, 0x4c, 0x54])
+        // Patch volume name "BAO" -> "ALT", tolerating short/partial reads
+        if (0x410000..=0x410002).contains(&addr) {
+            const ALT: [u8; 3] = [0x41, 0x4c, 0x54];
+            let skip = addr - 0x410000; // 0, 1, or 2
+            for i in 0..(3 - skip) {
+                let pos = write_start_in_dest + i;
+                if pos < dest.len() {
+                    dest[pos] = ALT[skip + i];
+                }
+            }
         }
     }
 }
@@ -472,7 +480,9 @@ pub fn usb_ep3_bulk_out_complete(
     critical_section::with(|cs| {
         let mut queue = crate::USB_RX.borrow(cs).borrow_mut();
         for &d in buf {
-            queue.push_back(d);
+            if queue.len() < RX_BUFFER_LIMIT {
+                queue.push_back(d);
+            }
         }
     });
 
