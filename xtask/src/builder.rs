@@ -193,6 +193,7 @@ pub(crate) struct Builder {
     uses_boot0_path: bool,
     uses_boot1_path: bool,
     thirdparty_test: bool,
+    arb_override: Option<usize>,
 }
 
 impl Builder {
@@ -237,6 +238,7 @@ impl Builder {
             uses_boot0_path: false,
             uses_boot1_path: false,
             thirdparty_test: false,
+            arb_override: None,
         }
     }
 
@@ -302,6 +304,11 @@ impl Builder {
     }
 
     pub fn thirdparty_test(&self) -> bool { self.thirdparty_test }
+
+    pub fn set_antirollback_override(&mut self, value: usize) -> &mut Builder {
+        self.arb_override = Some(value);
+        self
+    }
 
     pub fn set_swap<'a>(&'a mut self, offset: u32, size: u32) -> &'a mut Builder {
         self.swap = Some(SwapSpec { offchip_ram_offset: offset, offchip_ram_len: size });
@@ -1156,6 +1163,9 @@ impl Builder {
                     }
                     if self.thirdparty_test {
                         cmd.arg("--fake-pubkeys");
+                    }
+                    if let Some(arb_override) = self.arb_override {
+                        cmd.args(["--antirollback-override", &arb_override.to_string()]);
                     }
                     cmd.status()?;
                     return Ok(());
