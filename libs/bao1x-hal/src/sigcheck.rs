@@ -682,18 +682,19 @@ pub fn erase_collateral(csprng: &mut Option<&mut Csprng>) -> Result<(), String> 
     let slot_mgr = SlotManager::new();
     let mut rram = crate::rram::Reram::new();
 
-    let slot = &bao1x_api::offsets::COLLATERAL_ERASURE_ALIAS;
+    let full_slot = &bao1x_api::offsets::COLLATERAL_ERASURE_ALIAS;
+    let check_slot = &bao1x_api::offsets::COLLATERAL_PUBLIC;
     bollard!(die_no_std, 4);
     csprng.as_deref_mut().map(|rng| rng.random_delay());
 
-    let bytes = unsafe { slot_mgr.read_unchecked(slot) };
+    let bytes = unsafe { slot_mgr.read_unchecked(check_slot) };
     // only erase if the key hasn't already been erased, to avoid stressing the RRAM array
     // erase_secrets() may be called on every boot in some modes.
     bollard!(die_no_std, 4);
     if !bytes.iter().all(|&b| b == ERASE_VALUE) {
         // only clear ACL if it isn't already cleared
         if slot_mgr
-            .get_acl(slot)
+            .get_acl(full_slot)
             .unwrap_or(AccessSettings::Data(DataSlotAccess::new_with_raw_value(0xFFFF_FFFF)))
             .raw_u32()
             != 0
@@ -702,18 +703,18 @@ pub fn erase_collateral(csprng: &mut Option<&mut Csprng>) -> Result<(), String> 
             // Don't panic on failure: the panic can be used as a primitive to prevent
             // further erasure.
             slot_mgr
-                .set_acl(&mut rram, slot, &AccessSettings::Data(DataSlotAccess::new_with_raw_value(0)))
+                .set_acl(&mut rram, full_slot, &AccessSettings::Data(DataSlotAccess::new_with_raw_value(0)))
                 .ok();
         }
 
-        let mut eraser = alloc::vec::Vec::with_capacity(slot.len() * SLOT_ELEMENT_LEN_BYTES);
-        eraser.resize(slot.len() * SLOT_ELEMENT_LEN_BYTES, ERASE_VALUE);
+        let mut eraser = alloc::vec::Vec::with_capacity(full_slot.len() * SLOT_ELEMENT_LEN_BYTES);
+        eraser.resize(full_slot.len() * SLOT_ELEMENT_LEN_BYTES, ERASE_VALUE);
 
-        slot_mgr.write(&mut rram, slot, &eraser).ok();
+        slot_mgr.write(&mut rram, full_slot, &eraser).ok();
     }
-    let check = unsafe { slot_mgr.read_unchecked(slot) };
+    let check = unsafe { slot_mgr.read_unchecked(check_slot) };
     if !check.iter().all(|&b| b == ERASE_VALUE) {
-        crate::println!("Failed to erase key at {:?}: {:x?}", slot, check);
+        crate::println!("Failed to erase key at {:?}: {:x?}", check_slot, check);
     }
     bollard!(die_no_std, 4);
     Ok(())
