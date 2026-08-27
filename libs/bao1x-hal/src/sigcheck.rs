@@ -682,7 +682,7 @@ pub fn erase_collateral(csprng: &mut Option<&mut Csprng>) -> Result<(), String> 
     let slot_mgr = SlotManager::new();
     let mut rram = crate::rram::Reram::new();
 
-    let slot = &bao1x_api::offsets::COLLATERAL;
+    let slot = &bao1x_api::offsets::COLLATERAL_ERASURE_ALIAS;
     bollard!(die_no_std, 4);
     csprng.as_deref_mut().map(|rng| rng.random_delay());
 
