@@ -857,7 +857,7 @@ impl Repl {
                 // put random data in collateral - to simulate a third party keying
                 let slot_mgr = bao1x_hal::acram::SlotManager::new();
                 let mut rram = bao1x_hal::rram::Reram::new();
-                let slot = &bao1x_api::offsets::COLLATERAL;
+                let slot = &bao1x_api::offsets::COLLATERAL_ERASURE_ALIAS;
                 let mut trng = super::trng::ManagedTrng::new();
                 // only clear ACL if it isn't already cleared
                 if slot_mgr
