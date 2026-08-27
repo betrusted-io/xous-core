@@ -173,6 +173,8 @@ use slh_dsa::{
     XmssTreeCache,
 };
 
+mod countersign;
+
 /// The SLH-DSA parameter set. Must match the boot verifier and the size of the
 /// `pubkeys_pq` / `SignaturePqInFlash` fields in `bao1x_api`.
 type PqParams = Sha2_128_24;
@@ -251,6 +253,24 @@ struct Args {
     /// exists only for bring-up.
     #[arg(long = "pq-force", requires = "pq_key")]
     pq_force: bool,
+
+    /// Counter-sign a boot1 image: sign the image's existing ed25519 signature and
+    /// write the result into the manifest appendix. Needs either --countersign-pem
+    /// or -c for the key. Touches only the appendix, which no signature covers, so
+    /// it neither needs nor runs any other pass.
+    #[arg(
+        long = "countersign",
+        requires = "file",
+        conflicts_with_all = [
+            "message", "pq_key", "pq_cache", "pq_force", "strip_pq", "baobit_hash", "function_code"
+        ]
+    )]
+    countersign: bool,
+
+    /// Ed25519 private key in PKCS#8 PEM form to counter-sign with, instead of a
+    /// FIDO token. Requires --countersign.
+    #[arg(long = "countersign-pem", value_name = "FILE", requires = "countersign")]
+    countersign_pem: Option<PathBuf>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -327,6 +347,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Parse command line arguments
     let args = Args::parse();
+
+    // Counter-signing is self-contained: it writes only the manifest appendix, which
+    // sits outside every signed region, so it must not be entangled with the passes
+    // below. Dispatched before them and returns.
+    if args.countersign {
+        return countersign::run(
+            args.file.as_ref().expect("clap requires --file with --countersign"),
+            args.credential_file.as_deref(),
+            args.countersign_pem.as_deref(),
+            args.no_uf2,
+        );
+    }
 
     // Each of the three passes is optional, but doing none of them is always a
     // mistake rather than a no-op worth honouring silently.
