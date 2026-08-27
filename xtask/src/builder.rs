@@ -192,6 +192,7 @@ pub(crate) struct Builder {
     boot1: Option<String>,
     uses_boot0_path: bool,
     uses_boot1_path: bool,
+    thirdparty_test: bool,
 }
 
 impl Builder {
@@ -235,6 +236,7 @@ impl Builder {
             boot1: None,
             uses_boot0_path: false,
             uses_boot1_path: false,
+            thirdparty_test: false,
         }
     }
 
@@ -293,6 +295,13 @@ impl Builder {
         self.no_pq = skip;
         self
     }
+
+    pub fn set_thirdparty_test(&mut self, fake_keys: bool) -> &mut Builder {
+        self.thirdparty_test = fake_keys;
+        self
+    }
+
+    pub fn thirdparty_test(&self) -> bool { self.thirdparty_test }
 
     pub fn set_swap<'a>(&'a mut self, offset: u32, size: u32) -> &'a mut Builder {
         self.swap = Some(SwapSpec { offchip_ram_offset: offset, offchip_ram_len: size });
@@ -1144,6 +1153,9 @@ impl Builder {
                     // flags
                     if cfg!(target_arch = "x86_64") {
                         cmd.env("RUSTFLAGS", r#"--cfg sha2_256_backend="x86_sha""#);
+                    }
+                    if self.thirdparty_test {
+                        cmd.arg("--fake-pubkeys");
                     }
                     cmd.status()?;
                     return Ok(());
