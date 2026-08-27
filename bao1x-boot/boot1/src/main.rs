@@ -157,6 +157,10 @@ pub unsafe extern "C" fn rust_entry() -> ! {
     // has a chance to be updated.
     bao1x_hal::hardening::apply_attack_policy(&mut csprng, &one_way);
 
+    // this triggers template code that handles third party code: at a minimum, collateral keys.
+    #[cfg(feature = "thirdparty")]
+    thirdparty_init();
+
     // This causes the chip to automatically emit an audit log on the first few boots. The main
     // purpose of this is to get a reading out of the chip probe station if the chip was programmed
     // correctly or not. Apparently it is "impossible" to send serial data to the chip, and it's
@@ -455,4 +459,80 @@ pub fn marquee(sh1107: &mut Oled128x128, msg: &str) {
         bao1x_hal::sh1107::Mono::Black.into(),
     );
     sh1107.draw().ok();
+}
+
+/// This is a *demonstration* of how one might handle collateral keys. It's fine to use, but third parties may
+/// also want to layer in other initializations or tricks in this stub. If this feature is active while the
+/// image is signed with any Baochip keys, the RRAM will churn on collateral, ping-ponging between erase and
+/// provisioned states.
+#[cfg(feature = "thirdparty")]
+fn thirdparty_init() {
+    use alloc::vec::Vec;
+
+    use bao1x_api::{
+        COLLATERAL_ERASURE_ALIAS, COLLATERAL_PUBLIC, OEM_MODE, SLOT_ELEMENT_LEN_BYTES,
+        offsets::DataSlotAccess,
+    };
+    use bao1x_hal::{ERASE_VALUE, acram::AccessSettings, rram::Reram};
+
+    let slot_mgr = bao1x_hal::acram::SlotManager::new();
+    let owc = bao1x_hal::acram::OneWayCounter::new();
+
+    if owc.get(OEM_MODE).expect("couldn't check OEM mode") == 0 {
+        // safety: OEM_MODE is checked to be in-range
+        unsafe { owc.inc(OEM_MODE).expect("couldn't set OEM mode") };
+    }
+
+    // we can only check the public slot - the private slots always read as 0
+    if slot_mgr.read(&COLLATERAL_PUBLIC).unwrap().iter().all(|&b| b == 0 || b == ERASE_VALUE) {
+        let mut rram = Reram::new();
+        crate::println!("Generating collateral keys...");
+        // collateral keys are erased - provision them. Only invoke the TRNG here because it is "expensive" to
+        // build
+        let mut trng = crate::trng::ManagedTrng::new();
+        if slot_mgr
+            .get_acl(&COLLATERAL_ERASURE_ALIAS)
+            .unwrap_or(AccessSettings::Data(DataSlotAccess::new_with_raw_value(0xFFFF_FFFF)))
+            .raw_u32()
+            != 0
+        {
+            // clear the ACL so we can operate on the data
+            // Don't panic on failure: the panic can be used as a primitive to prevent
+            // further erasure.
+            slot_mgr
+                .set_acl(
+                    &mut rram,
+                    &COLLATERAL_ERASURE_ALIAS,
+                    &AccessSettings::Data(DataSlotAccess::new_with_raw_value(0)),
+                )
+                .ok();
+        }
+        let mut keys: Vec<u8> = alloc::vec![0u8; COLLATERAL_ERASURE_ALIAS.len() * SLOT_ELEMENT_LEN_BYTES];
+        for key in keys.chunks_exact_mut(SLOT_ELEMENT_LEN_BYTES) {
+            key.copy_from_slice(&trng.generate_key());
+        }
+        slot_mgr
+            .write(&mut rram, &COLLATERAL_ERASURE_ALIAS, &keys)
+            .expect("couldn't commit fresh collateral");
+
+        #[cfg(feature = "unsafe-debug")]
+        crate::println!("bef acl {:x?}", slot_mgr.read(&COLLATERAL_ERASURE_ALIAS));
+
+        // restores ACLs after write operation
+        crate::platform::slots::check_slots();
+
+        // the below is not actually unsafe anymore, but it is the comparison point against the unsafe
+        // print operation above
+        #[cfg(feature = "unsafe-debug")]
+        crate::println!("aft acl sec {:x?}", slot_mgr.read(&bao1x_api::COLLATERAL_SECRET));
+        #[cfg(feature = "unsafe-debug")]
+        crate::println!("aft acl pub {:x?}", slot_mgr.read(&COLLATERAL_PUBLIC));
+    }
+
+    if slot_mgr.read(&COLLATERAL_PUBLIC).unwrap().iter().all(|&b| b == 0 || b == ERASE_VALUE) {
+        crate::println!("Collateral is not correct")
+    } else {
+        crate::println!("Collateral public value is all non-zero, non-erase");
+    }
+    // NB: run `audit` to examine the collateral audit key in slot 3
 }

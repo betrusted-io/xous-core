@@ -74,6 +74,7 @@ pub unsafe fn init_usb() {
     }
 }
 
+#[allow(dead_code)]
 fn delay(quantum: usize) {
     use utralib::{CSR, utra};
     // abuse the d11ctime timer to create some time-out like thing

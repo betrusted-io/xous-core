@@ -1,8 +1,8 @@
 /* bottom 256k reserved for copying code into RAM for JTAG-booting targets */
 MEMORY
 {
-  /* Note: ORIGIN is updated by xtask for baremetal targets */
-  FLASH : ORIGIN = 0x60020400, LENGTH = 255k - 3856
+  /* slh-dsa-sig + ed25519-sig + aad + add-len */
+  FLASH : ORIGIN = 0x60020400, LENGTH = 255k - 3856 - 64 - 60 - 4
   RAM : ORIGIN = 0x61000000, LENGTH = 2048k
 }
 

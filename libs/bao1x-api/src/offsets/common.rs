@@ -371,14 +371,21 @@ pub const DEV_PUBKEY: SlotIndex = SlotIndex::Data(7, PartitionAccess::All, RwPer
 /// - The third-party firmware must generate and populate all the COLLATERAL data slots.
 /// - The third-party firmware must incorporate at least one of the keys in slots 261, 262, or 263 into their
 ///   root key mechanism.
-/// - Collateral key in slot 264 must be made disclosable through a public inspection mechanism. The purpose
-///   of the inspection is to verify that in fact the collateral keys have been populated with non-zero value
-///   by the third-party firmware, and to verify erase of the key range when necessary. Erasure always
-///   progresses from low slot to high slot, and thus one can infer the erasure state of the collateral by
-///   inspecting the value of the high key slot.
+/// - Collateral key in slot 264 is made disclosable through a public inspection mechanism. The purpose of the
+///   inspection is to verify that in fact the collateral keys have been populated with non-zero value by the
+///   third-party firmware, and to verify erase of the key range when necessary. Erasure always progresses
+///   from low slot to high slot, and thus one can infer the erasure state of the collateral by inspecting the
+///   value of the high key slot. `audit` when OEM_MODE is set will disclose this.
 ///
-/// <slot-map targets="all" registered="primary" in-data-slots="no" in-key-slots="no"/>
-pub const COLLATERAL: SlotIndex = SlotIndex::DataRange(261..265, PartitionAccess::Fw0, RwPerms::ReadWrite);
+/// <slot-map targets="all" registered="primary" in-data-slots="yes" in-key-slots="no"/>
+pub const COLLATERAL_SECRET: SlotIndex =
+    SlotIndex::DataRange(261..264, PartitionAccess::Fw0, RwPerms::ReadWrite);
+/// <slot-map targets="all" registered="primary" in-data-slots="yes" in-key-slots="no"/>
+pub const COLLATERAL_PUBLIC: SlotIndex = SlotIndex::Data(264, PartitionAccess::Open, RwPerms::ReadWrite);
+/// This is an alias - it's not tracked in the checker. It's meant to encompass the entire 4-slot range
+/// and is used to ensure that the whole range is one-shot handled for erasure
+pub const COLLATERAL_ERASURE_ALIAS: SlotIndex =
+    SlotIndex::DataRange(261..265, PartitionAccess::Fw0, RwPerms::ReadWrite);
 
 /// Boot1 pubkey `receipt` fields record the last accepted public key used when running boot1.
 /// If this changes, the collateral keys need to be erased. This prevents one third-party signed firmware

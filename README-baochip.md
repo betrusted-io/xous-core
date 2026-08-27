@@ -100,18 +100,17 @@ on Baochip must also manage their own signing keys. To this end, a policy of "mu
 
 #### Preventing Third Party Access to Baochip Secrets
 
-Boot0 and Boot1 check the public key block presented by the next stage against a set of expected public
+Boot0 checks the public key block presented by the next stage against a set of expected public
 keys that should match the Baochip OEM keys. If any of these do not match, most of the Baochip secret
 keys are erased before running the next stage. Thus any third party firmware may be free to inspect
 Baochip's keyslots, but by the time it runs, those keyslots have been erased.
 
 #### Preventing Baochip Access to Third Party Secrets
 
-An bank of 4x 256-bit keys known as `collateral` keys are provided. These keys are always erased by
-the boot0 / boot1 firmware whenever the public key block embedded in the header of the next stage matches Baochip's
-expected public keys. The only condition when they are not erased is when key slots 0, 1, and 2 are all
-different from Baochip's public keys (key slot 3 is a devkey slot, and anyone can sign an image for
-that key slot, so it is not erased).
+A bank of 4x 256-bit keys known as `collateral` keys are provided. These keys are always erased by
+the boot0 firmware whenever the public key block embedded in the header of the next stage matches Baochip's
+expected public keys. The only condition when they are not erased is when all the key slots are different
+from Baochip's public keys.
 
 #### Details of the Mutual-Distrust Mechanism
 
@@ -127,43 +126,97 @@ Before we get into how the above is implemented, some definitions:
 `key manifest`: Each stage contains an embedded header which contains a signature for the code in that stage.
 Immediately after the signature and within the signed region, there is a `key manifest` that
 consists of four ED25519 public keys. The `key manifest` declares what public keys the current
-stage intends to use for verifying the next stage's code.
+stage intends to use for verifying the next stage's code. Post-quantum keys also exist in this manifest,
+but they are not explicitly checked as part of the mutual distrust mechanism (this is due to a lack of
+IFR space to store copies of the PQ keys). However, it is also assumed that the PQ keys are also rotated.
+Finally, note that in all cases, key slot 3 is interpreted as a developer key slot, even if the tag is renamed.
+This is because there is logic that will trigger developer mode if the key slot number is 3, regardless of the tag.
 
-`reference keys`: Baochip's expected signing keys. These are burned into multiple redundant indelible locations. Collectively they are referred to as `reference keys`.
+`IFR keys`: Baochip's expected signing keys. These are burned into a region of memory referred to as the `IFR`, and these are indelible.
+
+`reference keys`: Baochip's expected signing keys. These are burned into a set of data slots. These are changeable, but meant to be always equal to IFR. They are included as defense in depth.
+
+`Receipt keys`: A copy of the most recently validated boot1 `key manifest`.
 
 `Baochip secrets`: Baochip stores its secret keys in a block of key slots expressly reserved for Baochip's use. These are erased anytime trust is transferred to a new entity, or if trust is lost (e.g. going into developer mode).
 
-`collateral`: A set of keys used to effect key destruction when crossing trust domains. To accomplish this, third party firmware *must* use at least 256 bits of the `collateral` key set in its master key derivation scheme.
+`collateral`: A set of keys used to effect key destruction when crossing trust domains. To accomplish this, third party firmware *must* use at least 256 bits of the `collateral` private key set in its master key derivation scheme (it shall not use slot 3 as that is disclosed for inspection).
 
-`developer key`: A public key stored in slot 3 of the `key manifest` that corresponds to a well-known private key. Anyone can sign an image with a `developer key`.
+`erase value`: A non-zero, fixed pattern that is used to differentiate an erased key from a `0` key. The subtlety being a `0` key is the factory-new state, so to ensure erasure, a well-known non-`0` fixed value is written into keys (it happens to be the number `3` repeated for every byte).
 
-Based on the above definitions, here are the mutual-distrust policies enforced by the Baochip bootloader:
+`nextboot1`: Refers to the next stage to be run, be it `altboot1` or `boot1` based on other policy decisions.
 
-1. `boot0` verifies that its `key manifest` matches the `reference keys`. If not, `Baochip secrets` are erased.
-2. `boot0` verifies that `boot1`'s `key manifest` matches the `reference keys`. If any keys do not match, `Baochip secrets` are erased.
-3. `boot0` checks if any non-`developer key` keys in `key manifest` match the `reference keys`. If any matching keys are found, the `collateral` is erased. Otherwise, `collateral` is preserved.
+`counter-signature`: The third party key holder must sign the Baochip signature applied to the `boot1`/`altboot1` code. This counter-signature is stored in an appendix, after the PQ signature. The counter-signature prevents Baochip from using the third party manifest without the third party's blessing (the attack scenario is as follows: Baochip puts the third party manifest on its own code, and signs it. Without the counter-signature, the collateral keys will be preserved, even though it's not code sanctioned by the third party). The counter-signature is done on the Baochip digital signature, so the full signing process consists of the third party releasing the firmware to Baochip to sign; Baochip signs the firmware; and the third party confirms the signature matches the code they provided, and counter-signs the signature.
+
+Post quantum policy: in all cases, the decisions here are made based on the classical signature outcome, with post quantum
+providing supplemental or re-enforcement of the policy. Wherever PQ does not exist or contradicts the classical, the classical
+outcome should be the decider.
+
+Based on the above definitions, here are the mutual-distrust policies. Inside `boot0`:
+
+1. Developer mode is not treated specially. Collateral survives only if the image's manifest is countersigned by one of its own keys (policy 5a), so a third party may grant collateral access to their own developer builds by countersigning them. Baochip cannot do so on their behalf.
+2. Verify that `boot0` `key manifest` is a 100% match against the `IFR keys` and `reference keys`. If not, `Baochip secrets` are erased.
+3. Verify that `nextboot1` `key manifest` is a 100% match against the `IFR keys` and `reference keys`. If not, `Baochip secrets` are erased.
+4. If any Baochip key is found in the `boot1` `key manifest`, erase `collateral`.
+5. If no Baochip keys are found, check that a valid `counter-signature` exists on `nextboot1`
+   a. The `counter-signature` should use a key from key slots 0-2.
+   b. A self-sig from slot 3 will trigger erasure of `collateral` under presumption that slot 3 is the third party dev key.
+   c. If no `counter-signature` is found, `collateral` is erased.
+6. Check that the `nextboot1` `key manifest` matches `receipt keys`. On the first non-matching key, erase `collateral`, and copy the new `nextboot1` `key manifest` into `receipt keys`.
 
 Let's observe what properties are guaranteed by this arrangement:
 
-- If `boot0` and `boot1`'s `key manifest`s match the `reference keys`, then `Baochip secrets` are intact.
-- If any of `boot1`'s `key manifest` non-developer entries match any of the `reference keys`, `collateral` is erased. Thus, any attempt to "downgrade" the firmware by loading a Baochip-signed image would not lead to third-party secret disclosure, because the `collateral` keys are part of the third party firmware's key derivation mechanism.
-- If any of `boot1`'s `key manifest` does not match the `reference keys` or if `boot1` is signed by the `developer key`, most of Baochip's secrets are erased. Thus the process of loading third party firmware would also cause any Baochip secrets to be lost.
+- If `boot0` and `nextboot1`'s `key manifest`s match the `reference keys`, then `Baochip secrets` are intact.
+- If any of `nextboot1`'s `key manifest` entries match any of the `reference keys`, `collateral` is erased. Thus, any attempt to "downgrade" the firmware by loading a Baochip-signed image would not lead to third-party secret disclosure, because the `collateral` keys are part of the third party firmware's key derivation mechanism.
+- If any of `nextboot1`'s `key manifest` does not match the `reference keys` or `IFR keys`, most of Baochip's secrets are erased. Thus the process of loading third party firmware would also cause any Baochip secrets to be lost.
+- Baochip cannot, on its own, sign any firmware that also preserves `collateral` keys.
+
+Here's how the flow works from a first-boot, factory new situation.
+
+1. Chip boots with no `collateral` keys or `Baochip secets`
+2. `collateral` is erased since Baochip keys are found in the  `boot1` manifest
+3. `receipt keys` are 0 on boot, thus on first-boot, the `collateral` is re-checked for erasure, and the `receipt keys` now match the `nextboot1` `key manifest`.
+4. Chips are shipped. No secret keys exist in the chip as the chips exit chip fab.
+
+Here's how the flow works after assembly. This is Baochip's version of the story - other users can do different things.
+
+1. Chip is in a erased `collateral`, `receipt keys` matching state
+2. Chip boots into the provisioned application the first time
+3. A blank keystore is detected, and entropy is collected from on-chip and optionally off-chip sources. Keys are generated and stored.
+
+The point of this story is that key generation is not done by the chip fab. It's meant to be the system integrator's responsibility.
 
 #### Conditions for Getting Signed Third-Party `boot1`
 
 Baochip will *only* sign third-party `boot1` images after the proposed firmware meets the following tests:
 
-1. The `boot1` `key manifest` block is entirely different (except for optionally the developer key) from Baochip's `reference keys`
-2. The proposed firmware can demonstrate that it has initialized the `collateral` key slots by revealing the contents of `collateral` slot 3 via an introspection command (slots 0, 1, and 2 are private; each slot is 256 bits in length).
+1. The `boot1` `key manifest` block is entirely different from Baochip's `reference keys`
+2. The proposed firmware can demonstrate that it has initialized the `collateral` key slots by:
+   - Revealing the contents of `collateral` slot 3 via an introspection command (slots 0, 1, and 2 are private; each slot is 256 bits in length)
+   - Reveal that slots 0, 1, and 2 are neither all-`0` or all-`erase-value` (confirms slots actually got written with *something*)
 3. The proposed firmware demonstrates permanent loss of access to encrypted data if a Baochip-signed `boot1` is swapped in, and then reverted back to the third-party-signed `boot1`.
 4. The same introspection command used in step 2 is run again. The resulting value must be different from the value reported in the original run of step 2.
+5. The `boot1` code ensures the `OEM_MODE` counter is not 0
+6. Third party code should not tamper with `PK_RECEIPT` slots
 
-The above four tests are written such that the test can be run without inspection of the details of the third party firmware, but ideally, Baochip can inspect the firmware to ensure the intended policies are in place.
+After Baochip has signed `boot1`, the developer must counter-sign it with their key. Here is an example of how to do it (replace `testing.key` with your private key; the routine should also accept signing keys in a FIDO2 key as well):
+`xous-core/signing/fido-signer$ cargo run --release --bin fido-signer -- -f ../../target/riscv32imac-unknown-none-elf/release/bao1x-boot1.img --countersign --countersign-pem ../../devkey/testing.key`
+
+Note that a third party developer can counter-sign a Baochip developer key image, allowing them to use the collateral key mechanism without direct intervention from Baochip staff.
+
+The above tests are written such that the test can be run without inspection of the details of the third party firmware, but ideally, Baochip can inspect the firmware to ensure the intended policies are in place.
 
 Note that if the third party firmware developer fails to use the `collateral` keys correctly to derive its master key, it can be subject to exploitation by a Baochip-signed image. Baochip takes no responsibility for any damages that may occur in that event.
 
 Baochip would also entertain giving third parties self-signed `boot0`s with indelible `reference keys` linked to their own keys, *but* this requires a minimum order of around 50,000 chips plus a per-lot engineering fee to retool the wafer probe infrastructure used to burn the keys into the chip (these numbers are just ballpark estimates; contact Baochip to finalize details). Thus for high-volume applications this is a viable option, while the third-party firmware mechanism is an economical option to bootstrap self-managed secure ecosystems.
 
+#### Observations
+
+Some observations:
+
+- Baochip-signed secure boot does not incorporate `collateral` keys into its key derivation, because from its perspective, it always has a known value: it should be in the erased state. Baochip hardening against third party signed images comes from the wipe of its secret keys when the `key manifest` is changed.
+- Third party secure boot chains should incorporate their self-generated `collateral` because it is the mechanism that prevents Baochip from signing an image that allows for extraction of third party secrets. Baochip can't know `collateral`, and it is always erased when any Baochip key is found.
+- A "run anything" option for third party firmwares where the public keys are self-trusted but `collateral` and `Baochip secrets` are wiped any time the firmware's keys are rotated can be implemented as a boot1->baremetal/loader policy, and does not need to be baked into `boot0` as a policy decision. This would require a separate `receipt keys` block just for this purpose.
 
 ## API Organization
 

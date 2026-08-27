@@ -686,6 +686,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 (bao1x_api::BAREMETAL_START + sigblock_size + STATICS_LEN) as u32,
             )?;
             builder.set_baremetal(true).target_baremetal_bao1x("baremetal").set_sigblock_size(sigblock_size);
+            if env::args().filter(|x| x == "--thirdparty-test").count() != 0 {
+                builder.set_thirdparty_test(true);
+            }
         }
 
         Some("bao1x-baremetal-dabao") => {
@@ -699,6 +702,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 (bao1x_api::BAREMETAL_START + sigblock_size + STATICS_LEN) as u32,
             )?;
             builder.set_baremetal(true).target_baremetal_bao1x("baremetal").set_sigblock_size(sigblock_size);
+            if env::args().filter(|x| x == "--thirdparty-test").count() != 0 {
+                builder.set_thirdparty_test(true);
+            }
         }
 
         Some("baremetal-bao1x-evb") => {
@@ -736,6 +742,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .set_baremetal(true)
                 .target_baremetal_bao1x("bao1x-boot1")
                 .set_sigblock_size(sigblock_size);
+            if env::args().filter(|x| x == "--thirdparty-test").count() != 0 {
+                builder.set_thirdparty_test(true);
+            }
         }
 
         Some("bao1x-alt-boot1") => {
@@ -750,6 +759,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .set_baremetal(true)
                 .target_baremetal_bao1x("bao1x-alt-boot1")
                 .set_sigblock_size(sigblock_size);
+            if env::args().filter(|x| x == "--thirdparty-test").count() != 0 {
+                builder.set_thirdparty_test(true);
+            }
         }
 
         Some("bao1x-boot1-lite") => {
@@ -766,6 +778,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 // todo: remove this after the update is published
                 // .add_loader_feature("fix-ifr")
                 .set_sigblock_size(sigblock_size);
+            if env::args().filter(|x| x == "--thirdparty-test").count() != 0 {
+                builder.set_thirdparty_test(true);
+            }
         }
 
         Some("bao1x-alt-boot1-lite") => {
@@ -781,6 +796,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .target_baremetal_bao1x("bao1x-alt-boot1")
                 .add_loader_feature("oem-baosec-lite")
                 .set_sigblock_size(sigblock_size);
+            if env::args().filter(|x| x == "--thirdparty-test").count() != 0 {
+                builder.set_thirdparty_test(true);
+            }
         }
 
         Some("bao1x-boot-updater-lite") => {
@@ -945,6 +963,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let print_boot0_warn = builder.uses_boot0_path() && boot0_path.is_none();
     let print_boot1_warn = builder.uses_boot1_path() && boot1_path.is_none();
+    let third_party_test = builder.thirdparty_test();
 
     builder.build()?;
 
@@ -990,6 +1009,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             "\n**** WARNING: boot1 path defaults to dev build. This is not what you want for a production release ****\n"
         );
     }
+    if third_party_test {
+        println!("\n**** WARNING: manifest contains fake third party keys ****\n");
+    }
     result
 }
 
@@ -1014,6 +1036,7 @@ fn print_help() {
     [--git-rev commit]
     [--boot0 <path-to-boot0>]
     [--boot1 <path-to-boot1>]
+    [--thirdparty-test]
 
 [cratespecs] is a list of 0 or more items of the following syntax:
    [name]                crate 'name' to be built from local source
@@ -1048,6 +1071,7 @@ be merged in with explicit app/service treatment with the following flags:
 [--pq-cache <cache>]     Use this PQ cache file. If provided and valid, speeds up the PQ signing operation.
 [--boot0 <path>]         Updater builds: path to the boot0 binary image (defaults to a built-in path if omitted)
 [--boot1 <path>]         Updater builds: path to the boot1 binary image (defaults to a built-in path if omitted)
+[--thirdparty-test]      Populate the key block with 'fake' third party keys. Only valid with bao1x-boot1/alt-boot1/barmetal targets.
 
 - An 'app' must be enumerated in apps/manifest.json.
    A pre-processor configures the launch menu based on the list of specified apps.

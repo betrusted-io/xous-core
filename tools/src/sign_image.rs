@@ -7,9 +7,26 @@ use std::path::Path;
 use std::str::FromStr;
 
 use bao1x_api::signatures::{
-    FunctionCode, PADDING_LEN, Pubkey, PubkeyPq, SIGBLOCK_LEN, SealedFields, SignatureInFlash, UNSIGNED_LEN,
-    baochip_sig_version,
+    FunctionCode, PADDING_LEN, Pubkey, PubkeyPq, SIGBLOCK_LEN, SIGNATURE_LENGTH, SIGNATURE_PQ_LENGTH,
+    SealedFields, SignatureAppendixInFlash, SignatureInFlash, UNSIGNED_LEN, baochip_sig_version,
 };
+
+/// Bytes of `SignatureAppendixInFlash` that trail the PQ signature:
+/// `manifest_sig || manifest_aad || manifest_aad_len`. Derived from the struct so
+/// it cannot drift from bao1x-api.
+const MANIFEST_APPENDIX_LEN: usize = size_of::<SignatureAppendixInFlash>() - SIGNATURE_PQ_LENGTH;
+
+/// Which images carry a manifest counter-signature appendix.
+///
+/// boot0 only ever runs `check_counter_sig` against `nextboot1`, so an appendix on
+/// anything else is dead weight. Conversely a boot1 image *without* one leaves
+/// `manifest_aad_len` and `manifest_sig` reading undefined RRAM at counter-sig time,
+/// which is why this is unconditional for boot1 rather than opt-in.
+fn needs_manifest_appendix(function_code: FunctionCode) -> bool {
+    matches!(function_code, FunctionCode::Boot1 | FunctionCode::UpdatedBoot1)
+}
+
+use ed25519_dalek::pkcs8::DecodePrivateKey;
 use ed25519_dalek::{DigestSigner, SigningKey};
 use pkcs8::PrivateKeyInfo;
 use pkcs8::der::Decodable;
@@ -354,18 +371,19 @@ pub fn sign_image<P: AsRef<Path>>(
                     dst.populate_from(&fake_pk);
                 }
 
-                // derive the public key for use in "fake keys" routines
+                // derive the public key for use in third party signing
                 let sk = Ed25519KeyPair::from_pkcs8_maybe_unchecked(&testing_pem.contents)
                     .map_err(|e| format!("{}", e))?;
                 let derived_public_key = sk.public_key();
 
-                // replace devkey slot with the derived public key of the fake signer
-                header.sealed_data.pubkeys[3].pk.copy_from_slice(derived_public_key.as_ref());
+                // replace 0-slot with the derived public key of the test third party signer
+                header.sealed_data.pubkeys[0].pk.copy_from_slice(derived_public_key.as_ref());
+                header.sealed_data.pubkeys[0].tag = *b"tpk0";
 
                 // fake keys also always includes fake PQ keys
                 header.sealed_data.pq_enabled = 0xA0A0_5555; // any non-0 value works, but more distance from 0 is stronger
-                // create fake PQ's for the 3 non-dev keys
-                for dst in header.sealed_data.pubkeys_pq[..3].iter_mut() {
+                // create fake PQ's for keys 1, 2, and 3
+                for dst in header.sealed_data.pubkeys_pq[1..].iter_mut() {
                     let mut fake_pk = PubkeyPq::default();
                     // n (in bytes) for SHA2-128-24. The secret key seed material is 3*n bytes
                     // (sk_seed || sk_prf || pk_seed); the serialized key is 4*n (adds pk_root).
@@ -385,8 +403,9 @@ pub fn sign_image<P: AsRef<Path>>(
                     rand::rngs::OsRng.fill_bytes(&mut fake_pk.tag);
                     dst.populate_from(&fake_pk);
                 }
-                rand::rngs::OsRng.fill_bytes(&mut header.sealed_data.pubkeys_pq[3].tag); // tag may be random
-                header.sealed_data.pubkeys_pq[3].pk.copy_from_slice(&TEST_KEY_PQ_PUB); // however we need to have a correct pub key so we can sign it
+                // fill in a "real" key for key 0
+                rand::rngs::OsRng.fill_bytes(&mut header.sealed_data.pubkeys_pq[0].tag); // tag may be random
+                header.sealed_data.pubkeys_pq[0].pk.copy_from_slice(&TEST_KEY_PQ_PUB); // however we need to have a correct pub key so we can sign it
             }
 
             header._jal_instruction = generate_jal_x0(SIGBLOCK_LEN as isize)?;
@@ -463,6 +482,40 @@ pub fn sign_image<P: AsRef<Path>>(
 
             // Write the PQ signature
             dest_file.write_all(&pq_sig_bytes)?;
+
+            // ---- manifest counter-signature appendix ----
+            //
+            // boot0 locates this at `sealed_data_end() + SIGNATURE_PQ_LENGTH` with no
+            // regard for `pq_enabled`, so the full PQ slot has to be present for the
+            // appendix to land where it is read from. Reserve it with zeros when this
+            // image carries no PQ signature.
+            if needs_manifest_appendix(function_code) {
+                if pq_sig_bytes.is_empty() {
+                    println!(
+                        "note: no PQ signature on this boot1 image; reserving a zeroed {}-byte PQ slot \
+                         so the counter-signature appendix sits where boot0 reads it",
+                        SIGNATURE_PQ_LENGTH
+                    );
+                    dest_file.write_all(&vec![0u8; SIGNATURE_PQ_LENGTH])?;
+                }
+
+                let mut appendix = [0u8; MANIFEST_APPENDIX_LEN];
+                if let Ok(ref csk) = SigningKey::from_pkcs8_der(&testing_pem.contents) {
+                    // Stand-in counter-signature. This emulates a third party applying their
+                    // secret key to a third-party image. Of course, this is a fake key, and
+                    // should not be used for anything real.
+                    //
+                    // aad_len stays 0, selecting the Ed25519ph branch of check_counter_sig:
+                    // the message is the 64-byte classical signature, pre-hashed with
+                    // SHA-512, no context.
+                    let mut h: Sha512 = Sha512::new();
+                    h.update(&header.signature);
+                    let csig = csk.sign_digest(h).to_bytes();
+                    appendix[..SIGNATURE_LENGTH].copy_from_slice(&csig);
+                    println!("Applied a stand-in counter-signature from fake manifest slot 0");
+                }
+                dest_file.write_all(&appendix)?;
+            }
 
             if function_code == FunctionCode::Kernel {
                 let target = bao1x_api::RRAM_STORAGE_LEN - (bao1x_api::KERNEL_START - bao1x_api::BOOT0_START);
