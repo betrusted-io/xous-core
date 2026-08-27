@@ -12,6 +12,7 @@ static BOOT0: &Aligned<[u8]> = &Aligned(*include_bytes!(env!("BOOT0_BIN")));
 #[unsafe(link_section = ".payload")]
 static BOOT1: &Aligned<[u8]> = &Aligned(*include_bytes!(env!("BOOT1_BIN")));
 
+#[cfg(feature = "boot0")]
 fn detect_stepping() -> &'static str {
     let mut rram = utralib::CSR::new(utralib::utra::rrc::HW_RRC_BASE as *mut u32);
     // this sets bit 12
@@ -180,6 +181,7 @@ pub fn run(mut csprng: &mut Csprng) -> bool {
     passing
 }
 
+#[cfg(feature = "boot0")]
 pub fn jump_to(target: usize, mask: usize) -> ! {
     // loader expects a0 to have the address of the kernel image pre-loaded
     let kernel_loc = bao1x_api::offsets::KERNEL_START;
