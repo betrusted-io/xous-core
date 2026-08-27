@@ -14,9 +14,7 @@ use alloc::collections::VecDeque;
 #[cfg(feature = "unsafe-dev")]
 use core::cell::RefCell;
 
-use bao1x_api::pubkeys::{
-    BOOT0_SELF_CHECK, BOOT0_TO_ALTBOOT1, BOOT0_TO_BOOT1, DEVELOPER_KEY_SLOT, KEYSLOT_INITIAL_TAGS,
-};
+use bao1x_api::pubkeys::{BOOT0_SELF_CHECK, BOOT0_TO_ALTBOOT1, BOOT0_TO_BOOT1};
 use bao1x_api::{
     BOOT0_PUBKEY_FAIL, BOOT1_PUBKEY_FAIL, BOOT1_RECEIPT_SLOTS, DEVELOPER_MODE, HardenedBool, bollard,
 };
@@ -269,15 +267,7 @@ pub unsafe extern "C" fn rust_entry() -> ! {
                 bollard!(die, 4);
 
                 // implement mutual distrust comparison
-                mutual_distrust(
-                    key,
-                    key_inv,
-                    tag,
-                    pq_tag,
-                    configuration.image_ptr as usize,
-                    &slot_mgr,
-                    &mut csprng,
-                );
+                mutual_distrust(configuration.image_ptr as usize, &slot_mgr, &mut csprng);
 
                 // implement the hardened erase policy. This is marked #[inline(always)].
                 hardened_erase_policy(paranoid1, paranoid2, key, key_inv, tag, &mut csprng, pq_tag)
@@ -334,29 +324,9 @@ fn print_ifr() {
 }
 
 #[inline(always)]
-fn mutual_distrust(
-    key: usize,
-    key_inv: usize,
-    tag: [u8; 4],
-    pq_tag: Option<[u8; 4]>,
-    block_start: usize,
-    slot_mgr: &bao1x_hal::acram::SlotManager,
-    mut csprng: &mut Csprng,
-) {
+fn mutual_distrust(block_start: usize, slot_mgr: &bao1x_hal::acram::SlotManager, mut csprng: &mut Csprng) {
     let block_ptr = block_start as *const bao1x_api::signatures::SignatureInFlash;
     let sig_block: &bao1x_api::signatures::SignatureInFlash = unsafe { block_ptr.as_ref().unwrap() };
-
-    // In all cases - if developer key is active - erase the collateral. This plugs a hole where
-    // it could be possible to bypass checks by stitching a third party header onto a developer-signed image.
-    if key == DEVELOPER_KEY_SLOT
-        || (!key_inv) == DEVELOPER_KEY_SLOT
-        || &tag == KEYSLOT_INITIAL_TAGS[DEVELOPER_KEY_SLOT]
-        || pq_tag == Some(*KEYSLOT_INITIAL_TAGS[DEVELOPER_KEY_SLOT])
-    {
-        bao1x_hal::sigcheck::erase_collateral(&mut Some(&mut csprng))
-            .inspect_err(|e| crate::println!("{}", e))
-            .ok(); // "ok" because the expected error is a check on logic/configuration bugs, not attacks
-    }
 
     // mutual distrust - don't trust Baochip. If any boot1 keys match those in the indelible array, erase the
     // collateral
