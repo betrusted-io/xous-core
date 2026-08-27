@@ -154,14 +154,14 @@ outcome should be the decider.
 
 Based on the above definitions, here are the mutual-distrust policies. Inside `boot0`:
 
-1. If developer mode is set, always erase collateral keys.
+1. Developer mode is not treated specially. Collateral survives only if the image's manifest is countersigned by one of its own keys (policy 5a), so a third party may grant collateral access to their own developer builds by countersigning them. Baochip cannot do so on their behalf.
 2. Verify that `boot0` `key manifest` is a 100% match against the `IFR keys` and `reference keys`. If not, `Baochip secrets` are erased.
 3. Verify that `nextboot1` `key manifest` is a 100% match against the `IFR keys` and `reference keys`. If not, `Baochip secrets` are erased.
 4. If any Baochip key is found in the `boot1` `key manifest`, erase `collateral`.
 5. If no Baochip keys are found, check that a valid `counter-signature` exists on `nextboot1`
-   1. The `counter-signature` should use a key from key slots 0-2.
-   2. A self-sig from slot 3 will trigger erasure of `collateral` under presumption that slot 3 is the third party dev key.
-   3. If no `counter-signature` is found, `collateral` is erased.
+   a. The `counter-signature` should use a key from key slots 0-2.
+   b. A self-sig from slot 3 will trigger erasure of `collateral` under presumption that slot 3 is the third party dev key.
+   c. If no `counter-signature` is found, `collateral` is erased.
 6. Check that the `nextboot1` `key manifest` matches `receipt keys`. On the first non-matching key, erase `collateral`, and copy the new `nextboot1` `key manifest` into `receipt keys`.
 
 Let's observe what properties are guaranteed by this arrangement:
@@ -198,6 +198,11 @@ Baochip will *only* sign third-party `boot1` images after the proposed firmware 
 4. The same introspection command used in step 2 is run again. The resulting value must be different from the value reported in the original run of step 2.
 5. The `boot1` code ensures the `OEM_MODE` counter is not 0
 6. Third party code should not tamper with `PK_RECEIPT` slots
+
+After Baochip has signed `boot1`, the developer must counter-sign it with their key. Here is an example of how to do it (replace `testing.key` with your private key; the routine should also accept signing keys in a FIDO2 key as well):
+`xous-core/signing/fido-signer$ cargo run --release --bin fido-signer -- -f ../../target/riscv32imac-unknown-none-elf/release/bao1x-boot1.img --countersign --countersign-pem ../../devkey/testing.key`
+
+Note that a third party developer can counter-sign a Baochip developer key image, allowing them to use the collateral key mechanism without direct intervention from Baochip staff.
 
 The above tests are written such that the test can be run without inspection of the details of the third party firmware, but ideally, Baochip can inspect the firmware to ensure the intended policies are in place.
 
