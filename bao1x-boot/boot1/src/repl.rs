@@ -1141,8 +1141,8 @@ impl Repl {
                             }
 
                             // setup relay I/O. PB[15:0] is the DAC data output
-                            iox.set_gpio_bank(IoxPort::PB, 0, 0xFFFF);
-                            for pin in 0..16 {
+                            iox.set_gpio_bank(IoxPort::PB, 0, 0x0FFF);
+                            for pin in 0..12 {
                                 iox.setup_pin(
                                     bao1x_api::IoxPort::PB,
                                     pin,
@@ -1211,7 +1211,7 @@ impl Repl {
                                                 let source = sources[channel];
                                                 let _dummy = adc.read_raw_averaged(source, 8); // dummy reading still required every source change, some bug in ADC driver?
                                                 let raw = adc.read_raw_averaged(source, 8);
-                                                iox.set_gpio_bank(IoxPort::PB, raw, 0xFFFF);
+                                                iox.set_gpio_bank(IoxPort::PB, raw, 0x0FFF);
                                                 got_channel = true;
                                                 break;
                                             }
@@ -1246,7 +1246,7 @@ impl Repl {
                                 }
                             }
                             // revert PB to inputs
-                            for pin in 0..16 {
+                            for pin in 0..12 {
                                 iox.setup_pin(
                                     bao1x_api::IoxPort::PB,
                                     pin,
