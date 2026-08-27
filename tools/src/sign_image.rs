@@ -404,8 +404,8 @@ pub fn sign_image<P: AsRef<Path>>(
                     dst.populate_from(&fake_pk);
                 }
                 // fill in a "real" key for key 0
-                rand::rngs::OsRng.fill_bytes(&mut header.sealed_data.pubkeys_pq[0].tag); // tag may be random
                 header.sealed_data.pubkeys_pq[0].pk.copy_from_slice(&TEST_KEY_PQ_PUB); // however we need to have a correct pub key so we can sign it
+                header.sealed_data.pubkeys_pq[0].tag = *b"tpk0";
             }
 
             header._jal_instruction = generate_jal_x0(SIGBLOCK_LEN as isize)?;

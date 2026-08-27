@@ -831,6 +831,23 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
 
+        Some("bao1x-boot-updater") => {
+            let sigblock_size = bao1x_api::signatures::SIGBLOCK_LEN;
+            update_flash_origin(
+                "bao1x-boot/boot-updater/src/platform/bao1x/link.x",
+                (bao1x_api::BAREMETAL_START + sigblock_size + STATICS_LEN) as u32,
+            )?;
+            builder
+                .set_baremetal(true)
+                .target_baremetal_bao1x("boot-updater")
+                .set_sigblock_size(sigblock_size)
+                .is_updater(true, true);
+
+            if let Some(target) = &boot1_path {
+                builder.set_boot1(target.to_owned());
+            }
+        }
+
         Some("baosec") => {
             baosec_common(&mut builder)?;
         }
