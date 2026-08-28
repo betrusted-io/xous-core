@@ -4419,6 +4419,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "net-tests"
+version = "0.1.0"
+dependencies = [
+ "com",
+ "dns",
+ "gam",
+ "log",
+ "modals",
+ "net",
+ "pddb",
+ "xous 0.9.70 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-api-log",
+ "xous-api-names",
+ "xous-api-susres 0.9.68",
+ "xous-api-ticktimer",
+]
+
+[[package]]
 name = "new_debug_unreachable"
 version = "1.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
