@@ -157,14 +157,14 @@ pub fn dict_name_length_boundary() {
     // and create_dir returns Ok. Same client bug as the already-exists case
     // pinned by dirs::mkdir_path_already_exists_error.
     let over_res = fs::create_dir(&over_name);
-    // Cleanup BEFORE the assert (a failing assert must not strand state):
-    // `dict_add` inserts the dict into the in-memory basis cache and bumps
-    // num_dicts *before* the dict_sync that validates the name length
-    // (services/pddb/src/backend/basis.rs ~362-365 vs ~1771), so the
-    // rejected dict lingers poisoned in RAM (PFC-8 territory) unless it is
-    // explicitly removed -- and a stranded entry drifts the basis's
-    // num_dicts accounting for the rest of the boot, which the offline
-    // pddbdbg audit flags as an ERROR.
+    // Cleanup BEFORE the assert (a failing assert must not strand state).
+    // Historically this also cleared server-side damage: `dict_add` used to
+    // insert the dict into the in-memory basis cache and bump num_dicts
+    // *before* the dict_sync that validated the name length, stranding the
+    // rejected dict in RAM and drifting the basis's num_dicts accounting
+    // (the dict-name twin of PFC-8) until it was explicitly removed.
+    // `dict_add` now validates the name up front, so nothing is created and
+    // this remove is just a harmless failed no-op.
     let _ = fs::remove_dir_all(&over_name);
     assert!(over_res.is_err(), "create_dir with a {}-byte dict name unexpectedly succeeded", over_name.len());
 
@@ -185,20 +185,18 @@ pub fn dict_name_length_boundary() {
 /// `KEY_NAME_LEN` itself (95, services/pddb/src/api.rs) is again the STRUCT
 /// size including the length byte, so the longest usable key name is
 /// `KEY_NAME_LEN - 1` = 94 bytes -- `KeyName::try_from_str` errors past that
-/// (called synchronously off the `dict_sync` that every `key_update` --
-/// including the create-file path -- triggers). Same off-by-one relative to
-/// the documented "<= 95" as `dict_name_length_boundary` above.
+/// (checked at the top of every `key_update`, including the create-file
+/// path, before any cache mutation). Same off-by-one relative to the
+/// documented "<= 95" as `dict_name_length_boundary` above.
 ///
-/// XFAIL PFC-8: `key_update`'s new-key path inserts the KeyCacheEntry and
-/// bumps key_count (backend/dictionary.rs ~1001/~1030) *before* the
-/// `dict_sync` whose `KeyName::try_from_str` (backend/basis.rs ~1848)
-/// rejects the over-length name, so the rejected key stays poisoned --
-/// valid+dirty -- in the dict's key cache, and EVERY later `dict_sync` of
-/// this dict re-fails on it. The over-length File::create itself correctly
-/// errors (open checks the retcode), but the follow-up "alive" create in
-/// the same dict then fails too, which is what this test pins. TmpDict's
-/// Drop (remove_dir_all: per-key unlink, then rmdir) clears the poisoned
-/// entry, so the damage does not outlive the test.
+/// Formerly XFAIL PFC-8: `key_update`'s new-key path used to insert the
+/// KeyCacheEntry and bump key_count *before* the `dict_sync` whose
+/// `KeyName::try_from_str` rejected the over-length name, so the rejected
+/// key stayed poisoned -- valid+dirty -- in the dict's key cache, and EVERY
+/// later `dict_sync` of this dict re-failed on it (the follow-up "alive"
+/// create below is what caught that). `key_update` now validates the name
+/// before any cache mutation, so the over-length create errors cleanly and
+/// the dict stays usable.
 pub fn key_name_length_boundary() {
     const KEY_MAX: usize = 94;
     let tmp = TmpDict::new("key_name_length_boundary");
@@ -371,9 +369,6 @@ pub const XFAILS: &[(&str, &str)] = &[
     // create_dir swallows ALL server retcodes (fork mkdir never reads the
     // reply), so the over-length name "succeeds" -- see the test's comment.
     ("errors::dict_name_length_boundary", "PFC-6"),
-    // rejected over-length key name poisons the dict's key cache -- see the
-    // test's comment and PFC-8.
-    ("errors::key_name_length_boundary", "PFC-8"),
     ("errors::metadata_len_characterization", "PFC-5"),
     // unlink never marks open handles `deleted` (basis-comparison dead code),
     // so a write through the stale handle re-creates the key -- see the
