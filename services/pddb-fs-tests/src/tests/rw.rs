@@ -237,14 +237,14 @@ pub fn seek_negative_offsets() {
     check!(fs::remove_file(&path));
 }
 
-/// Xous-specific: open-time-length staleness (PFC-5). Confirmed by reading
-/// services/pddb/src/libstd/mod.rs: `write_key` only ever advances
-/// `file.offset`, never `file.length`; `seek_key`'s `SeekFrom::End` branch
-/// seeks from `file.length` (the length captured at *open* time). So on a
-/// freshly-created (open-time length 0) handle, writing bytes through that
-/// SAME handle and then asking `SeekFrom::End(0)` must -- per POSIX -- report
-/// the file's current true end, but the server instead reports the stale
-/// open-time value. XFAIL PFC-5.
+/// Xous-specific: open-time-length staleness (PFC-5, fixed). `write_key` in
+/// services/pddb/src/libstd/mod.rs used to advance only `file.offset`, never
+/// `file.length`, while `seek_key`'s `SeekFrom::End` branch seeks from
+/// `file.length` (captured at *open* time). `write_key` now advances
+/// `file.length` alongside the offset, so on a freshly-created (open-time
+/// length 0) handle, writing bytes through that SAME handle and then asking
+/// `SeekFrom::End(0)` reports the file's current true end, as POSIX
+/// requires. Must pass.
 pub fn seek_end_after_write_staleness() {
     let tmp = TmpDict::new("seek_end_after_write_staleness");
     let path = tmp.path("file");
@@ -354,8 +354,5 @@ pub const TESTS: &[(&str, fn())] = &[
     ("rw::read_zero_length_buffer_and_empty_file", read_zero_length_buffer_and_empty_file as fn()),
 ];
 
-pub const XFAILS: &[(&str, &str)] = &[
-    ("rw::io_seek_shakedown", "PFC-3"),
-    ("rw::seek_negative_offsets", "PFC-3"),
-    ("rw::seek_end_after_write_staleness", "PFC-5"),
-];
+pub const XFAILS: &[(&str, &str)] =
+    &[("rw::io_seek_shakedown", "PFC-3"), ("rw::seek_negative_offsets", "PFC-3")];

@@ -234,9 +234,11 @@ pub fn key_name_length_boundary() {
 
 /// `fs::metadata(path).len()` characterization. POSIX-correct behavior is
 /// that the returned length matches the actual content length; xous instead
-/// always reports 0 (PFC-5: services/pddb/src/libstd/mod.rs `stat_path`
-/// writes a placeholder `0u64` length unconditionally). Assert the CORRECT
-/// length and register the XFAIL -- never assert the buggy `0`.
+/// always reports 0 (PFC-5: the server half is fixed -- `stat_path` now
+/// sends the key's real length -- but the client libstd `stat()` never
+/// reads the length word and hardcodes `len: 0`, so metadata stays 0 until
+/// a rebuilt client ships). Assert the CORRECT length and register the
+/// XFAIL -- never assert the buggy `0`.
 pub fn metadata_len_characterization() {
     let tmp = TmpDict::new("metadata_len_characterization");
     let path = tmp.path("sized");
