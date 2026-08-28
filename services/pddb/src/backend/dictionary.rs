@@ -894,25 +894,10 @@ impl DictCacheEntry {
                     if kcache.len < (data.len() + offset) as u64 {
                         kcache.len = (data.len() + offset) as u64;
                     } else if truncate {
-                        // discard all whole pages after written+offset, and reset the reserved field to the
-                        // smaller size.
-                        log::trace!("PageAligned VA components: {}, {}", written, offset);
-                        let vpage_end_offset = PageAlignedVa::from((written + offset) as u64);
-                        if (vpage_end_offset.as_u64() - kcache.start) > kcache.reserved {
-                            for vpage in (vpage_end_offset.as_u64()..kcache.start + kcache.reserved)
-                                .step_by(VPAGE_SIZE)
-                            {
-                                if let Some(pp) = v2p_map.get_mut(&VirtAddr::new(vpage).unwrap()) {
-                                    assert!(pp.valid(), "v2p returned an invalid page");
-                                    log::trace!("fast_space_free key_update {} before", pp.journal());
-                                    hw.fast_space_free(pp);
-                                    assert!(pp.valid() == false, "pp is still marked as valid!");
-                                }
-                            }
-                            kcache.reserved = vpage_end_offset.as_u64() - kcache.start;
-                            kcache.clean = false;
-                            kcache.len = (data.len() + offset) as u64;
-                        }
+                        // truncate the length only, mirroring the small-pool arm above: reads
+                        // clamp to kcache.len, and the retained page reservation is reclaimed
+                        // when the key is removed
+                        kcache.len = (data.len() + offset) as u64;
                     }
                 }
             }

@@ -37,13 +37,12 @@ pub fn overwrite_shorter_small() {
 }
 
 /// Same as overwrite_shorter_small, but the first write lands the key in the
-/// large pool (>= ~4 KiB). PFC-1 territory (large-key truncate is a no-op on
-/// length) -- but empirically (harness pilot) the truncating re-create doesn't
-/// just leave stale data, it PANICS the pddb server: `Option::unwrap()` on
-/// None at services/pddb/src/backend/types.rs:109 (`PageAlignedVa::from(0)`),
-/// killing pddb's main thread (main.rs:528). DISABLED in tests::TESTS until
-/// that code path is fixed; kept compiling so it is one line to re-register.
-#[allow(dead_code)]
+/// large pool (>= ~4 KiB). Regression test for PFC-1: the truncating
+/// re-create used to PANIC the pddb server (`PageAlignedVa::from(0)` unwrap
+/// at services/pddb/src/backend/types.rs, killing pddb's main thread), so
+/// this test was DISABLED until the large-key truncate arm in
+/// backend/dictionary.rs was fixed to truncate the length only, like the
+/// small-pool arm. Now a normal expected-pass test.
 pub fn overwrite_shorter_large() {
     let tmp = TmpDict::new("overwrite_shorter_large");
     let path = tmp.path("large");
@@ -53,8 +52,9 @@ pub fn overwrite_shorter_large() {
 
 fn overwrite_shorter_inner(path: &str, first_len: usize) {
     // Step logging (log::info is ignored by the sentinel parser): the large
-    // variant crashes the WHOLE pddb server (PageAlignedVa::from(0) unwrap,
-    // backend/types.rs:109) and these markers pin down the killing request.
+    // variant used to crash the WHOLE pddb server (PageAlignedVa::from(0)
+    // unwrap, backend/types.rs, bug PFC-1); the markers pinned down the
+    // killing request and stay useful if the truncate path ever regresses.
     let mut rng = XorShift::new(first_len as u32);
     let mut first = vec![0u8; first_len];
     rng.fill(&mut first);
@@ -140,23 +140,21 @@ pub fn two_files_close_one() {
 pub const TESTS: &[(&str, fn())] = &[
     ("smoke::create_write_read", create_write_read as fn()),
     ("smoke::overwrite_shorter_small", overwrite_shorter_small as fn()),
+    ("smoke::overwrite_shorter_large", overwrite_shorter_large as fn()),
     ("smoke::seek_negative_current", seek_negative_current as fn()),
     ("smoke::two_files_close_one", two_files_close_one as fn()),
     ("smoke::create_new_existing", create_new_existing as fn()),
-    // DISABLED, not XFAIL: smoke::overwrite_shorter_large PANICS THE PDDB
-    // SERVER (PageAlignedVa::from(0) unwrap, services/pddb/src/backend/
-    // types.rs:109, killing pddb's main thread) at the truncating re-create
-    // of an existing 8 KiB key -- harness pilot, 2026-07-07. A dead server
-    // hangs every subsequent test, so it cannot be in the table until the
-    // PFC-1 code path is fixed; re-register it (as XFAIL first) with the fix.
+    // smoke::overwrite_shorter_large (registered above) was DISABLED, not
+    // XFAIL, from the 2026-07-07 harness pilot until the PFC-1 fix landed:
+    // the truncating re-create of an existing 8 KiB key panicked the pddb
+    // server (PageAlignedVa::from(0) unwrap in backend/types.rs), and a dead
+    // server hangs every subsequent test. The large-key truncate arm in
+    // backend/dictionary.rs now truncates the length only, mirroring the
+    // small-pool arm, so the test is a normal expected-pass entry.
 ];
 
-pub const XFAILS: &[(&str, &str)] = &[
-    // smoke::overwrite_shorter_large (PFC-1) is not here: it crashes the pddb
-    // server outright and is disabled above.
-    ("smoke::seek_negative_current", "PFC-3"),
-    ("smoke::two_files_close_one", "PFC-4"),
-];
+pub const XFAILS: &[(&str, &str)] =
+    &[("smoke::seek_negative_current", "PFC-3"), ("smoke::two_files_close_one", "PFC-4")];
 
 /// `create_new` on an existing path must fail. Don't assert the ErrorKind: the
 /// xous backend surfaces the collision as an internal DiskFull retcode that

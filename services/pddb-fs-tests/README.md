@@ -32,10 +32,12 @@ is the equivalent `renode-test` suite used by `.github/workflows/pddb-renode-ci.
 The suite is green while every open bug stays visible: a test that reproduces a
 known defect asserts the *correct* behavior and is registered as an expected
 failure (`XFAIL`) rather than being weakened. If a bug is fixed, its test flips to
-`XPASS` and the run goes red until the registry is updated. One reproducer ships
-disabled because it panics the pddb server outright (a truncating `File::create`
-over an existing key ≥ 4 KiB — the same symptom as issue #297, whose 2023 fix
-touched only the shell command, not the server path std::fs uses).
+`XPASS` and the run goes red until the registry is updated. One reproducer
+(`smoke::overwrite_shorter_large`) shipped disabled rather than XFAIL while a
+truncating `File::create` over an existing key ≥ 4 KiB still panicked the pddb
+server outright (the same symptom as issue #297, whose 2023 fix touched only the
+shell command, not the server path std::fs uses); with that server path fixed, it
+is now a normal expected-pass test.
 
 Each XFAIL test's doc comment states the defect, its mechanism, and the suspected
 code path; grep the theme files under `src/tests/` for `XFAIL`.
@@ -45,8 +47,7 @@ code path; grep the theme files under `src/tests/` for `XFAIL`.
 Write a `pub fn` in the appropriate `src/tests/<theme>.rs` (panic to fail, return
 to pass), then add it to that file's `TESTS` table; `src/tests/mod.rs` aggregates
 the per-theme tables. The important xous/PDDB gotchas — the `/` (not `:`) dict/key
-separator, that `File::create` does not auto-create its parent dict, that
-`metadata().len()` is always 0, and the ≥ 4 KiB truncate hazard — are documented
-at the top of `src/tests/mod.rs` and in the existing tests. Use `TmpDict` for
-isolation, verify every write by reading it back, and keep re-created files under
-4 KiB.
+separator, that `File::create` does not auto-create its parent dict, and that
+`metadata().len()` is always 0 — are documented at the top of `src/tests/mod.rs`
+and in the existing tests. Use `TmpDict` for isolation, verify every write by
+reading it back, and clean up what you create.
