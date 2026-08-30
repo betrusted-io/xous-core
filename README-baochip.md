@@ -9,7 +9,7 @@ The Baochip bootloader assumes an environment where USB is available. The device
 
 The bootloader also makes a "serial console" available over USB. This is the primary method for developers to interact with the device. Read more about [serial consoles](./README-consoles.md).
 
-The build idiom is `cargo xtask <target>`, i.e. `cargo xtask dabao`. The build will generate a [`UF2`](https://makecode.com/blog/one-chip-to-flash-them-all) artifact, which can be found in `target/riscv32imac-unknown-[xous|none]-elf/release/`. You will need to copy all three artifacts generated (loader.uf2, xous.uf2, and apps.uf2) initially to ensure that the loader, kernel, and applications are at the same revision. After that point if the loader and kernel are not updated, one can just update apps.uf2.
+The build idiom is `cargo xtask <target>`, i.e. `cargo xtask dabao <app-name>` (without `app-name`, just the OS is built without any applications; `dabao-console` is the typical "hello world" app). The build will generate a [`UF2`](https://makecode.com/blog/one-chip-to-flash-them-all) artifact, which can be found in `target/riscv32imac-unknown-[xous|none]-elf/release/`. You will need to copy all three artifacts generated (loader.uf2, xous.uf2, and apps.uf2) initially to ensure that the loader, kernel, and applications are at the same revision. After that point if the loader and kernel are not updated, one can just update apps.uf2.
 
 Holding down the `PROG` button while plugging the device into USB will cause it to enter a bootloader that enumerates a mass storage device. The build artifacts can then be copied onto the device. Pressing `PROG` again will cause the device to run the program. Targets also enumerate a serial port over USB, which will activate a debug console.
 
