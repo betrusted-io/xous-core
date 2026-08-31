@@ -225,6 +225,7 @@ fn keyboard_bouncer() {
 
 fn keyboard_service() {
     let xns = xous_names::XousNames::new().unwrap();
+    let early_settings = early_settings::EarlySettings::new(&xns).unwrap();
 
     // "own" the KPC & Always-on registers
     #[cfg(feature = "board-baosec")]
@@ -411,14 +412,12 @@ fn keyboard_service() {
                     );
                 }
             }
-            Some(KeyboardOpcode::SelectKeyMap) => {
-                // only one key map for the input keyboard. Key mapping for translation of
-                // key presess to USB key codes should be set in the USB stack, not here.
-                unimplemented!()
-            }
+            Some(KeyboardOpcode::SelectKeyMap) => msg_scalar_unpack!(msg, km, _, _, _, {
+                early_settings.set_keymap(km).expect("cannot set early keymap");
+            }),
             Some(KeyboardOpcode::GetKeyMap) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
-                log::warn!("Defaulting to DVORAK map");
-                xous::return_scalar(msg.sender, KeyMap::Dvorak.into()).expect("can't retrieve keymap");
+                let kb_raw = early_settings.get_keymap().expect("cannot fetch early keymap");
+                xous::return_scalar(msg.sender, kb_raw).expect("can't retrieve keymap");
             }),
             #[cfg(feature = "board-baosec")]
             Some(KeyboardOpcode::SetRepeat) => msg_scalar_unpack!(msg, rate, delay, _, _, {

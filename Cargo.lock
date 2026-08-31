@@ -570,6 +570,7 @@ dependencies = [
  "bitfield",
  "bytemuck",
  "chrono",
+ "early_settings",
  "flatipc",
  "flatipc-derive",
  "log",
