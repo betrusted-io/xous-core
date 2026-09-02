@@ -1,5 +1,10 @@
 mod api;
+#[cfg(all(feature = "ccid-pddb", target_os = "xous"))]
+mod ccid_store;
+#[cfg(all(feature = "ccid-openpgp", target_os = "xous"))]
+mod ccid_transport;
 mod debug;
+mod ep_budget;
 #[cfg(target_os = "xous")]
 mod hw;
 #[cfg(not(target_os = "xous"))]
@@ -15,7 +20,7 @@ enum TimeoutOp {
 }
 
 #[derive(Debug)]
-#[cfg(target_os = "xous")]
+#[cfg(all(target_os = "xous", not(feature = "ccid-openpgp")))]
 enum SerialListenMode {
     // this just causes data incoming to be printed to the debug log; it is the default
     NoListener,
@@ -43,10 +48,14 @@ pub(crate) fn main_hw() -> ! {
     use core::convert::TryFrom;
     use core::num::NonZeroU8;
     use core::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+    #[cfg(feature = "ccid-openpgp")]
+    use std::cell::RefCell;
     use std::collections::VecDeque;
     // Install a local panic handler
     #[cfg(feature = "debug-print-usb")]
     use std::panic;
+    #[cfg(feature = "ccid-openpgp")]
+    use std::rc::Rc;
     use std::sync::Arc;
 
     use api::*;
@@ -87,8 +96,6 @@ pub(crate) fn main_hw() -> ! {
         .find(|(key, _value)| key == "PUBLIC_SERIAL")
         .map(|(_key, value)| value)
         .expect("Missing PUBLIC_SERIAL in environment");
-
-    let native_kbd = bao1x_api::keyboard::Keyboard::new(&xns).expect("couldn't connect to keyboard service");
 
     let usb_mapping = xous::syscall::map_memory(
         xous::MemoryAddress::new(bao1x_hal::usb::utra::CORIGINE_USB_BASE),
@@ -138,6 +145,7 @@ pub(crate) fn main_hw() -> ! {
     }
     let cw = CorigineWrapper::new(corigine_usb);
     let usb_alloc = UsbBusAllocator::new(cw.clone());
+    let mut ep_ledger = crate::ep_budget::EpBudgetLedger::new("bao1x USB composite");
 
     // Notes:
     //  - Most drivers would `Box()` the hardware management structure to make sure the compiler doesn't move
@@ -145,13 +153,69 @@ pub(crate) fn main_hw() -> ! {
     //    another crate that implements the USB stack which can't handle Box'd structures.
     //  - It is safe to call `.init()` repeatedly because within `init()` we have an atomic bool that tracks
     //    if the interrupt handler has been hooked, and ignores further requests to hook it.
-    let mut cu = Box::new(Bao1xUsb::new(usb.clone(), irq_csr.clone(), cid, cw, &usb_alloc, &serial_number));
-    cu.init();
+    // Persona A: CCID images allocate CCID+FIDO+NKRO only (6/8 Corigine slots; CCID bulk-only).
+    // USB CDC (debug and provisioning) is not present — console/log mirroring stays on
+    // xous-log UART/DUART (services/xous-log/.../bao1x). PIN lines in PDDB are offline-only.
+    #[cfg(feature = "ccid-openpgp")]
+    let ccid_rx_q = Rc::new(RefCell::new(VecDeque::new()));
 
-    // Serial driver variables
+    #[cfg(not(feature = "ccid-openpgp"))]
+    let mut cu = Box::new(Bao1xUsb::new(
+        usb.clone(),
+        irq_csr.clone(),
+        cid,
+        cw,
+        &usb_alloc,
+        &serial_number,
+        &mut ep_ledger,
+    ));
+
+    #[cfg(feature = "ccid-openpgp")]
+    let mut cu = Box::new({
+        let ccid = hw::make_ccid_transport(&usb_alloc, ccid_rx_q.clone(), cid, &mut ep_ledger);
+        Bao1xUsb::new(
+            usb.clone(),
+            irq_csr.clone(),
+            cid,
+            cw,
+            &usb_alloc,
+            &serial_number,
+            &mut ep_ledger,
+            ccid,
+            ccid_rx_q,
+        )
+    });
+
+    // Match boot1 SE0 / EMS4000 sequencing (bao1x-boot/boot1/src/main.rs ~220–247):
+    // setup_usb_pins → Low → delay(X≈500) → controller init → delay(Y=150) → High.
+    let iox = bao1x_api::IoxHal::new();
+    let (se0_port, se0_pin) = bao1x_hal::board::setup_usb_pins(&iox);
+    iox.set_gpio_pin_value(se0_port, se0_pin, bao1x_api::IoxValue::Low);
+    // boot1 Low hold before glue::setup is ~500 ms (OLED or non-OLED path).
+    tt.sleep_ms(500).ok();
+    cu.init();
+    // boot1 delay(150) after glue::setup before SE0 High (main.rs:243).
+    tt.sleep_ms(150).ok();
+    iox.set_gpio_pin_value(se0_port, se0_pin, bao1x_api::IoxValue::High);
+
+    // Prime CCID bulk OUT once before the main loop / first host traffic.
+    // Corigine UsbBus::read only queues a receive TRB after SET_ADDRESS
+    // (`address_is_set`); this call is a best-effort early attempt. A one-shot
+    // prime also runs in the main loop on the first LinkStatus that reports
+    // Configured (outside the USB IRQ path).
+    #[cfg(feature = "ccid-openpgp")]
+    {
+        cu.ccid.prime_bulk_out();
+    }
+
+    // Serial driver variables (USB CDC debug — not allocated on Persona A ccid-openpgp images)
+    #[cfg(not(feature = "ccid-openpgp"))]
     let mut serial_listener: Option<xous::MessageEnvelope> = None;
+    #[cfg(not(feature = "ccid-openpgp"))]
     let mut serial_listen_mode: SerialListenMode = SerialListenMode::NoListener;
+    #[cfg(not(feature = "ccid-openpgp"))]
     let mut serial_buf = Vec::<u8>::new();
+    #[cfg(not(feature = "ccid-openpgp"))]
     let mut serial_rx_trigger = false; // when true, the condition was met to pass data to the listener (but the listener was not yet installed)
 
     // under the theory that PIDs cannot be forged.
@@ -161,6 +225,10 @@ pub(crate) fn main_hw() -> ! {
     let mut fido_listener: Option<xous::MessageEnvelope> = None;
     let mut fido_rx_queue: VecDeque<[u8; 64]> = VecDeque::new();
 
+    #[cfg(all(feature = "ccid-openpgp", not(feature = "ccid-echo")))]
+    let mut ccid_listener_pid: Option<NonZeroU8> = None;
+    #[cfg(all(feature = "ccid-openpgp", not(feature = "ccid-echo")))]
+    let mut ccid_listener: Option<xous::MessageEnvelope> = None;
     let mut autotype_delay_ms = 30;
 
     // event observer connection
@@ -257,7 +325,26 @@ pub(crate) fn main_hw() -> ! {
         }
     });
 
-    let iox = bao1x_api::IoxHal::new();
+    // Periodic CCID bulk-OUT re-arm: Corigine can drop the OUT TRB after inline IN
+    // responses or between host sessions while staying Configured. Sleep + scalar to
+    // main (same pattern as the U2F timeout pump) so priming stays off the USB IRQ path.
+    #[cfg(all(feature = "ccid-openpgp", target_os = "xous"))]
+    std::thread::spawn({
+        let cid = cid;
+        move || {
+            let tt = ticktimer::Ticktimer::new().unwrap();
+            const CCID_PRIME_INTERVAL_MS: usize = 100;
+            loop {
+                tt.sleep_ms(CCID_PRIME_INTERVAL_MS).ok();
+                xous::try_send_message(
+                    cid,
+                    xous::Message::new_scalar(Opcode::CcidPrimeBulkOut.to_usize().unwrap(), 0, 0, 0, 0),
+                )
+                .ok();
+            }
+        }
+    });
+
     #[cfg(all(feature = "board-baosec", not(feature = "oem-baosec-lite")))]
     let mut i2c = bao1x_hal::i2c::I2c::new();
     #[cfg(all(feature = "board-baosec", not(feature = "oem-baosec-lite")))]
@@ -273,9 +360,8 @@ pub(crate) fn main_hw() -> ! {
         pmic
     };
 
-    let (se0_port, se0_pin) = bao1x_hal::board::setup_usb_pins(&iox);
-    iox.set_gpio_pin_dir(se0_port, se0_pin, bao1x_api::IoxDir::Input); // release SE0 state, allowing for enumeration
-    // NOTE: if SE0 is required, the KPC has to be un-configured to allow the SE0 I/O to actually be driven
+    // Defer Keyboard::new until after SE0 High: KBD server sets SFR_IOX=1 (PF incl. SE0/PF5).
+    let native_kbd = bao1x_api::keyboard::Keyboard::new(&xns).expect("couldn't connect to keyboard service");
 
     log::debug!("Entering main loop");
 
@@ -299,6 +385,20 @@ pub(crate) fn main_hw() -> ! {
                 VbusIrq::Remove => {
                     log::info!("VBUS removed. Resetting stack.");
                     cu.unplug();
+                    #[cfg(all(feature = "ccid-openpgp", not(feature = "ccid-echo")))]
+                    {
+                        // unplug() calls ccid.reset(); hang up deferred waiter explicitly too.
+                        if let Some(mut listener) = ccid_listener.take() {
+                            let mut response = unsafe {
+                                Buffer::from_memory_message_mut(listener.body.memory_message_mut().unwrap())
+                            };
+                            let mut deferred_buf = response.to_original::<CcidMsgIpc, _>().unwrap();
+                            deferred_buf.code = CcidCode::Hangup;
+                            response.replace(deferred_buf).unwrap();
+                        }
+                        ccid_listener_pid = None;
+                        let _ = cu.ccid.take_session_hangup();
+                    }
                 }
                 VbusIrq::InsertAndRemove => {
                     panic!("Unexpected report from vbus_irq status");
@@ -314,6 +414,21 @@ pub(crate) fn main_hw() -> ! {
                     let vbus_irq = VbusIrq::from(scalar.arg1);
                     if vbus_irq == VbusIrq::Remove {
                         cu.unplug();
+                        #[cfg(all(feature = "ccid-openpgp", not(feature = "ccid-echo")))]
+                        {
+                            if let Some(mut listener) = ccid_listener.take() {
+                                let mut response = unsafe {
+                                    Buffer::from_memory_message_mut(
+                                        listener.body.memory_message_mut().unwrap(),
+                                    )
+                                };
+                                let mut deferred_buf = response.to_original::<CcidMsgIpc, _>().unwrap();
+                                deferred_buf.code = CcidCode::Hangup;
+                                response.replace(deferred_buf).unwrap();
+                            }
+                            ccid_listener_pid = None;
+                            let _ = cu.ccid.take_session_hangup();
+                        }
                     }
                 }
             }
@@ -471,6 +586,198 @@ pub(crate) fn main_hw() -> ! {
                 }
                 buffer.replace(u2f_ipc).unwrap();
             }
+            #[cfg(all(feature = "ccid-openpgp", not(feature = "ccid-echo")))]
+            Opcode::CcidRxDeferred => {
+                if ccid_listener_pid.is_none() {
+                    ccid_listener_pid = msg.sender.pid();
+                }
+                if ccid_listener_pid == msg.sender.pid() {
+                    // Pop in its own statement so the RefMut is dropped before the else
+                    // branch. Edition 2021 keeps `if let` scrutinee temporaries alive for
+                    // the whole if-else; a second borrow_mut() there panics ("RefCell
+                    // already borrowed") the first time the queue is empty — which is the
+                    // normal CcidRxDeferred wait at startup.
+                    let queued = cu.ccid_rx.borrow_mut().pop_front();
+                    if let Some(frame) = queued {
+                        let mut response = unsafe {
+                            Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())
+                        };
+                        let mut buf = response.to_original::<CcidMsgIpc, _>().unwrap();
+                        assert_eq!(buf.code, CcidCode::RxWait, "Expected CcidCode::RxWait");
+                        buf.data = frame;
+                        buf.code = CcidCode::RxAck;
+                        response.replace(buf).unwrap();
+                    } else {
+                        ccid_listener = msg_opt.take();
+                        // Re-arm bulk OUT whenever a new deferred listener connects so the
+                        // host's next WriteUSB is not left without a TRB. Use prime_bulk_out
+                        // (no-op until SET_ADDRESS); force_prime here races SET_ADDRESS
+                        // and leaves the host at descriptor timeout -110.
+                        cu.ccid.prime_bulk_out();
+                        // Re-check after park: a frame may have landed between the empty
+                        // check and msg_opt.take() (lost IrqCcidRx would otherwise hang).
+                        if let Some(frame) = cu.ccid_rx.borrow_mut().pop_front() {
+                            if let Some(mut listener) = ccid_listener.take() {
+                                let mut response = unsafe {
+                                    Buffer::from_memory_message_mut(
+                                        listener.body.memory_message_mut().unwrap(),
+                                    )
+                                };
+                                let mut buf = response.to_original::<CcidMsgIpc, _>().unwrap();
+                                assert_eq!(buf.code, CcidCode::RxWait);
+                                buf.data = frame;
+                                buf.code = CcidCode::RxAck;
+                                response.replace(buf).unwrap();
+                            }
+                        }
+                    }
+                } else {
+                    let mut buffer =
+                        unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                    let mut ipc = buffer.to_original::<CcidMsgIpc, _>().unwrap();
+                    ipc.code = CcidCode::Denied;
+                    buffer.replace(ipc).unwrap();
+                }
+            }
+            #[cfg(all(feature = "ccid-openpgp", not(feature = "ccid-echo")))]
+            Opcode::CcidRxTimeout => {}
+            #[cfg(all(feature = "ccid-openpgp", target_os = "xous"))]
+            Opcode::CcidPrimeBulkOut => {
+                #[cfg(feature = "irq-pending-trace")]
+                {
+                    // Main-loop context (same timer as force_prime): read-only irqarray + USBSTS.
+                    // EV_PENDING / EV_ENABLE: volatile CSR loads, no ack. USBSTS sticky bits are
+                    // W1C on write only — a plain read does not clear or block.
+                    let pending = cu.irq_csr.r(utralib::utra::irqarray1::EV_PENDING);
+                    let enable = cu.irq_csr.r(utralib::utra::irqarray1::EV_ENABLE);
+                    let usbsts = cu.csr.r(bao1x_hal::usb::utra::USBSTS);
+                    bao1x_hal::usb::driver::usb_flight_record_main_loop_status(pending, enable, usbsts);
+                }
+                // Use device.bus() — the UsbBusAllocator clone has ep_meta; outer wrapper does not.
+                // Skip until Configured: force_prime during SET_ADDRESS breaks enumeration (-110).
+                if cu.device.state() == usb_device::device::UsbDeviceState::Configured {
+                    cu.ccid.force_prime_bulk_out(cu.device.bus());
+                }
+                #[cfg(feature = "irq-pending-trace")]
+                {
+                    // Periodic counter dump (~1 Hz at 100 ms prime interval) for UART correlation
+                    // with keepalive timeouts — no behavior change beyond logging.
+                    static PRIME_LOG: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
+                    let n = PRIME_LOG.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
+                    if n % 10 == 0 {
+                        let (clears, disable_pending, last) = cu.device.bus().irq_pending_trace_stats();
+                        log::info!(
+                            "irq-pending-trace stats: enable_cleared_nonempty={} disable_with_pending={} last_pending=0x{:x}",
+                            clears,
+                            disable_pending,
+                            last
+                        );
+                    }
+                }
+            }
+            #[cfg(feature = "irq-pending-trace")]
+            Opcode::IrqPendingTraceStats => {
+                if let Some(scalar) = msg.body.scalar_message_mut() {
+                    let (clears, disable_pending, last) = cu.device.bus().irq_pending_trace_stats();
+                    scalar.arg1 = clears as usize;
+                    scalar.arg2 = disable_pending as usize;
+                    scalar.arg3 = last as usize;
+                    scalar.arg4 = 0;
+                }
+            }
+            #[cfg(feature = "ccid-openpgp")]
+            Opcode::IrqCcidRx => {
+                // arg1 != 0: USB reset/unplug via CcidTransportClass::reset() — hang up deferred waiter.
+                let reset_hangup = msg.body.scalar_message().map(|s| s.arg1 != 0).unwrap_or(false);
+                #[cfg(not(feature = "ccid-echo"))]
+                {
+                    if reset_hangup || cu.ccid.take_session_hangup() {
+                        if let Some(mut listener) = ccid_listener.take() {
+                            let mut response = unsafe {
+                                Buffer::from_memory_message_mut(listener.body.memory_message_mut().unwrap())
+                            };
+                            let mut deferred_buf = response.to_original::<CcidMsgIpc, _>().unwrap();
+                            deferred_buf.code = CcidCode::Hangup;
+                            response.replace(deferred_buf).unwrap();
+                        }
+                        ccid_listener_pid = None;
+                        continue;
+                    }
+                }
+                #[cfg(feature = "ccid-echo")]
+                {
+                    if reset_hangup || cu.ccid.take_session_hangup() {
+                        continue;
+                    }
+                }
+                // Same edition-2021 if-let temporary rule as CcidRxDeferred: drop the
+                // RefMut before any later borrow_mut (push_front when no listener).
+                let queued = cu.ccid_rx.borrow_mut().pop_front();
+                if let Some(frame) = queued {
+                    #[cfg(feature = "ccid-echo")]
+                    {
+                        cu.ccid.enqueue_response(frame);
+                    }
+                    #[cfg(not(feature = "ccid-echo"))]
+                    {
+                        if let Some(mut listener) = ccid_listener.take() {
+                            let mut response = unsafe {
+                                Buffer::from_memory_message_mut(listener.body.memory_message_mut().unwrap())
+                            };
+                            let mut deferred_buf = response.to_original::<CcidMsgIpc, _>().unwrap();
+                            assert_eq!(deferred_buf.code, CcidCode::RxWait);
+                            deferred_buf.data = frame;
+                            deferred_buf.code = CcidCode::RxAck;
+                            response.replace(deferred_buf).unwrap();
+                        } else {
+                            cu.ccid_rx.borrow_mut().push_front(frame);
+                        }
+                    }
+                } else {
+                    // IrqCcidRx with empty queue: deny a parked deferred waiter (lost frame /
+                    // spurious notify). ccid-echo has no deferred listener.
+                    #[cfg(not(feature = "ccid-echo"))]
+                    if let Some(mut listener) = ccid_listener.take() {
+                        let mut response = unsafe {
+                            Buffer::from_memory_message_mut(listener.body.memory_message_mut().unwrap())
+                        };
+                        let mut deferred_buf = response.to_original::<CcidMsgIpc, _>().unwrap();
+                        deferred_buf.code = CcidCode::Denied;
+                        response.replace(deferred_buf).unwrap();
+                    }
+                }
+            }
+            #[cfg(feature = "ccid-openpgp")]
+            Opcode::CcidTx => {
+                let mut buffer =
+                    unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
+                let mut ipc = buffer.to_original::<CcidMsgIpc, _>().unwrap();
+                if cu.device.state() != usb_device::device::UsbDeviceState::Configured {
+                    ipc.code = CcidCode::Hangup;
+                    buffer.replace(ipc).unwrap();
+                    continue;
+                }
+                if ipc.code != CcidCode::Tx {
+                    ipc.code = CcidCode::Denied;
+                    buffer.replace(ipc).unwrap();
+                    continue;
+                }
+                let data = core::mem::take(&mut ipc.data);
+                cu.ccid.enqueue_response(data);
+                // Kick soft IRQ so poll_bulk_in runs and queues the EP1 IN TRB.
+                // Without this, tx_pending sits until some later USB IRQ and the
+                // host ReadUSB times out (U2F uses the same FidoTx pattern).
+                cu.sw_irq(UsbIrqReq::CcidTx);
+                while !cu.irq_serviced.load(Ordering::SeqCst) {
+                    xous::yield_slice();
+                }
+                cu.irq_serviced.store(false, Ordering::SeqCst);
+                // Bulk IN can drop the Corigine bulk-OUT TRB; re-arm so the host's
+                // next WriteUSB (e.g. after IccPowerOff SlotStatus) has a buffer.
+                cu.ccid.force_prime_bulk_out(cu.device.bus());
+                ipc.code = CcidCode::TxAck;
+                buffer.replace(ipc).unwrap();
+            }
             Opcode::SendKeyCode => {
                 if let Some(scalar) = msg.body.scalar_message_mut() {
                     if cu.device.state() != usb_device::device::UsbDeviceState::Configured {
@@ -589,6 +896,7 @@ pub(crate) fn main_hw() -> ! {
                     LogLevel::Err => log::set_max_level(log::LevelFilter::Error),
                 }
             }),
+            #[cfg(not(feature = "ccid-openpgp"))]
             Opcode::IrqSerialRx => {
                 if let Some(scalar) = msg.body.scalar_message() {
                     let valid_bytes = scalar.arg1;
@@ -671,6 +979,7 @@ pub(crate) fn main_hw() -> ! {
                     }
                 }
             }
+            #[cfg(not(feature = "ccid-openpgp"))]
             Opcode::SerialHookAscii => {
                 let maybe_delimiter = {
                     let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
@@ -680,10 +989,12 @@ pub(crate) fn main_hw() -> ! {
                 serial_listen_mode = SerialListenMode::AsciiListener(maybe_delimiter);
                 serial_listener = msg_opt.take();
             }
+            #[cfg(not(feature = "ccid-openpgp"))]
             Opcode::SerialHookBinary => {
                 serial_listen_mode = SerialListenMode::BinaryListener;
                 serial_listener = msg_opt.take();
             }
+            #[cfg(not(feature = "ccid-openpgp"))]
             Opcode::SerialHookConsole => msg_scalar_unpack!(msg, _, _, _, _, {
                 let log_conn = xous::connect(xous::SID::from_bytes(b"xous-log-server ").unwrap()).unwrap();
                 match xous::send_message(
@@ -710,6 +1021,7 @@ pub(crate) fn main_hw() -> ! {
                     }
                 }
             }),
+            #[cfg(not(feature = "ccid-openpgp"))]
             Opcode::SerialClearHooks => {
                 let log_conn = xous::connect(xous::SID::from_bytes(b"xous-log-server ").unwrap()).unwrap();
                 // it is never harmful to double-unhook this
@@ -728,6 +1040,7 @@ pub(crate) fn main_hw() -> ! {
                 serial_listen_mode = SerialListenMode::NoListener;
                 serial_listener.take();
             }
+            #[cfg(not(feature = "ccid-openpgp"))]
             Opcode::SerialFlush => msg_scalar_unpack!(msg, _, _, _, _, {
                 if cu.device.state() != usb_device::device::UsbDeviceState::Configured {
                     continue;
@@ -774,6 +1087,7 @@ pub(crate) fn main_hw() -> ! {
                     _ => {}
                 }
             }),
+            #[cfg(not(feature = "ccid-openpgp"))]
             Opcode::SerialSendData => {
                 if cu.device.state() != usb_device::device::UsbDeviceState::Configured {
                     continue;
@@ -790,6 +1104,7 @@ pub(crate) fn main_hw() -> ! {
                     }
                 }
             }
+            #[cfg(not(feature = "ccid-openpgp"))]
             Opcode::SerialSendDataBlocking => {
                 let mut buffer =
                     unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
@@ -827,6 +1142,7 @@ pub(crate) fn main_hw() -> ! {
                 request.sent = Some(total_sent as u32);
                 buffer.replace(request).unwrap();
             }
+            #[cfg(not(feature = "ccid-openpgp"))]
             Opcode::LogString => {
                 // the logger API is "best effort" only. Because retries and response codes can cause problems
                 // in the logger API, if anything goes wrong, we prefer to discard characters rather than get
@@ -845,11 +1161,39 @@ pub(crate) fn main_hw() -> ! {
                     }
                 }
             }
+            // Persona A: no USB CDC on CCID images — discard LogString (logger "prefer discard" convention);
+            // prefer xous-log UART/DUART for console output.
+            #[cfg(feature = "ccid-openpgp")]
+            Opcode::LogString => {}
+            #[cfg(feature = "ccid-openpgp")]
+            Opcode::SerialHookAscii
+            | Opcode::SerialHookBinary
+            | Opcode::SerialHookConsole
+            | Opcode::SerialClearHooks
+            | Opcode::SerialFlush
+            | Opcode::SerialSendData
+            | Opcode::SerialSendDataBlocking
+            | Opcode::IrqSerialRx => {
+                log::warn!("USB serial unavailable on CCID Persona A image (use UART / xous-log)");
+            }
             Opcode::LinkStatus => {
                 if let Some(scalar) = msg.body.scalar_message_mut() {
                     // to get the raw device state:
                     // cu.device.bus().core().get_device_state()
-                    scalar.arg1 = cu.device.state() as usize;
+                    let state = cu.device.state();
+                    scalar.arg1 = state as usize;
+                    // Re-arm bulk OUT whenever LinkStatus reports Configured (main
+                    // context, not IRQ). One-shot was insufficient: after an inline
+                    // response or between pcscd sessions the OUT TRB can be lost while
+                    // the device stays Configured; subsequent WriteUSB then times out.
+                    // prime_bulk_out is idempotent when already armed (WouldBlock).
+                    #[cfg(feature = "ccid-openpgp")]
+                    {
+                        use usb_device::device::UsbDeviceState;
+                        if state == UsbDeviceState::Configured {
+                            cu.ccid.prime_bulk_out();
+                        }
+                    }
                 }
             }
             Opcode::GetLedState => {

@@ -4661,6 +4661,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "624a8340c38c1b80fd549087862da4ba43e08858af025b236e509b6649fc13d5"
 
 [[package]]
+name = "openpgp-apdu"
+version = "0.1.0"
+dependencies = [
+ "log",
+ "rkyv 0.8.8",
+ "xous 0.9.70 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-api-log",
+ "xous-api-names",
+ "xous-api-ticktimer",
+ "xous-ipc 0.10.10 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
 name = "option-block"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7255,10 +7268,12 @@ dependencies = [
  "num-derive 0.4.2",
  "num-traits",
  "packed_struct",
+ "pddb",
  "rkyv 0.8.8",
  "usb-device",
  "usbd-serial 0.1.1 (git+https://github.com/betrusted-io/usbd-serial.git?branch=v0.1.1-betrusted)",
  "utralib 0.1.27",
+ "ux-api",
  "xous 0.9.70 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",
  "xous-api-names",

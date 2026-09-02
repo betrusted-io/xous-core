@@ -452,6 +452,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .hosted_build_only()
                 .add_apps(&get_cratespecs());
         }
+        Some("ccid-hil") => {
+            baosec_common(&mut builder)?;
+            builder.add_feature("ccid-openpgp");
+            builder.add_feature("ccid-echo");
+            builder.add_feature("oem-baosec-lite");
+            builder.add_loader_feature("oem-baosec-lite");
+        }
 
         // ------ Precursor hardware image configs ------
         Some("app-image") => {
@@ -852,6 +859,57 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             baosec_common(&mut builder)?;
         }
 
+        Some("baosec-ccid") => {
+            baosec_common(&mut builder)?;
+            builder.add_feature("ccid-openpgp");
+        }
+
+        Some("dabao-ccid") => {
+            // Same package set as dabao (no pddb service — dabao has no SPI flash).
+            // USB CCID transport only; does not enable ccid-pddb.
+            let board = "board-dabao";
+            let sigblock_size = bao1x_api::signatures::SIGBLOCK_LEN;
+            update_flash_origin(
+                "loader/src/platform/bao1x/link.x",
+                (bao1x_api::LOADER_START + sigblock_size + STATICS_LEN) as u32,
+            )?;
+            builder.set_board(board);
+            builder.add_feature(board);
+            builder.add_loader_feature(board);
+            builder.add_kernel_feature(board);
+            builder.add_detached_app_feature(board);
+            builder.set_sigblock_size(sigblock_size);
+            builder.add_feature("ccid-openpgp");
+
+            let bao_rram_pkgs =
+                ["xous-ticktimer", "keystore", "xous-log", "xous-names", "usb-bao1x", "bao1x-hal-service"]
+                    .to_vec();
+            let bao_app_pkgs: Vec<&'static str> = [].to_vec();
+
+            builder.add_loader_feature("debug-print");
+            builder.add_kernel_feature("v2p");
+            builder.add_kernel_feature("print-panics");
+            builder.add_kernel_feature("debug-proc");
+            builder.target_bao1x_soc();
+
+            for service in bao_rram_pkgs {
+                builder.add_service(service, LoaderRegion::Flash);
+            }
+            builder.add_apps(&bao_app_pkgs);
+
+            // Optional in-tree OpenPGP APDU test harness (replaces out-of-tree galdralag-stub).
+            if std::env::args().any(|a| a == "--with-openpgp-test-apdu") {
+                builder.add_service("openpgp-apdu", LoaderRegion::Flash);
+            }
+
+            // Positional cratespecs (e.g. an out-of-tree APDU stub path) are boot services so the
+            // CCID handler is running when usb-bao1x enumerates — not detached apps.
+            for svc in get_cratespecs() {
+                let (name, region) = crate::builder::region_from_name(&svc, LoaderRegion::Flash);
+                builder.add_service(name, region);
+            }
+        }
+
         Some("baosec-lite") => {
             baosec_common(&mut builder)?;
             builder.add_feature("oem-baosec-lite");
@@ -1113,8 +1171,13 @@ Hardware images:
  ro-test                 automation framework for TRNG testing (RO directly, no CPRNG). [cratespecs] ignored.
  av-test                 automation framework for TRNG testing (AV directly, no CPRNG). [cratespecs] ignored.
  tiny                    Precursor tiny image. For testing with services built out-of-tree.
- baosec                  Baosec application target image.
+ baosec                  Baosec application target image (no CCID; same as upstream dev).
+ baosec-ccid             Baosec with ccid-openpgp USB transport (no ccid-echo; no USB CDC).
  dabao                   Dabao application target image.
+ dabao-ccid              Dabao with ccid-openpgp USB transport (no pddb / no SPI flash).
+                         Positional cratespec (before flags): openpgp-apdu
+                         Optional: --with-openpgp-test-apdu adds the in-tree openpgp-apdu handler.
+                         Example: cargo xtask dabao-ccid openpgp-apdu --no-verify
  bao1x-baremetal-baosec  Baremetal image for baosec boards.
  bao1x-baremetal-dabao   Baremetal image for dabao boards.
  bao1x-boot0             Boot0 partition for baochip1x targets.
@@ -1133,6 +1196,7 @@ Hosted emulation:
  pddb-dev                Testing for compilation errors on hardware targets on the PDDB.
  hosted-ci               Check that precursor hosted mode isn't broken
  hosted-bao1x-ci         Check that bao1x hosted mode isn't broken
+ ccid-hil                Baosec-lite HIL image (ccid-openpgp + ccid-echo; oem-baosec-lite for PDDB boards)
 
 Renode emulation:
  renode-image            Renode user image. Unspecified [cratespecs] are apps
@@ -1319,10 +1383,10 @@ fn baosec_common(builder: &mut Builder) -> std::io::Result<()> {
         "xous-ticktimer",
         "xous-log",
         "xous-names",
+        "pddb",
         "usb-bao1x",
         "bao1x-hal-service",
         "modals",
-        "pddb",
         "bao-video",
     ]
     .to_vec();
