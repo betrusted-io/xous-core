@@ -44,3 +44,5 @@ pub mod dali;
 pub mod mac_demo;
 #[cfg(feature = "ws2812")]
 pub mod ws2812;
+
+pub mod bdma_test;

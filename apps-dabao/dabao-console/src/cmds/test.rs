@@ -114,6 +114,12 @@ impl<'a> ShellCmdApi<'a> for Test {
                         std::thread::sleep(std::time::Duration::from_millis(500));
                     }
                 }
+                "bdma" => {
+                    let mut bdma_test = bio_lib::bdma_test::BdmaTest::new().unwrap();
+                    log::info!("running test");
+                    bdma_test.test();
+                    log::info!("ending test");
+                }
                 "env" => {
                     log::info!("{:?}", std::env::vars());
                 }
