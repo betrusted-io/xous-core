@@ -4,7 +4,7 @@ Contributions are welcome!
 
 Contributions can be bug reports, feature requests, testing and documentation
 in addition to code. Please see the github guide on
-[Collaborating on projects using issues and pull requests](https://help.github.com/categories/collaborating-on-projects-using-issues-and-pull-requests/) for details.
+[Collaborating on projects using issues and pull requests](https://docs.github.com/en/pull-requests) for details.
 
 Contributions to this project are accepted on an
 ["inbound=outbound"](https://opensource.com/law/11/7/trouble-harmony-part-1) basis.
