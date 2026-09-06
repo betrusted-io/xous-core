@@ -18,7 +18,11 @@ bao1x-hal = { features = [
 bao1x-api = { path = "../../libs/bao1x-api" }
 bao1x-hal-service = { optional = true, path = "../bao1x-hal-service" }
 bao1x-emu = { optional = true, path = "../bao1x-emu" }
-usb-bao1x = { path = "../usb-bao1x", features = ["bao1x", "board-baosec", "oem-baosec-lite"] }
+usb-bao1x = { path = "../usb-bao1x", features = [
+    "bao1x",
+    "board-baosec",
+    "oem-baosec-lite",
+] }
 modals = { default-features = false, optional = true, path = "../modals" }
 ux-api = { optional = true, path = "../../libs/ux-api" }
 pddb = { optional = true, path = "../pddb" }
@@ -42,9 +46,7 @@ rand = { version = "0.8.5", features = ["getrandom"] }
 rand_chacha = { version = "0.3.1" }
 rand_core = "0.6.4"
 
-aes = { default-features = false, features = [
-    "chaffing",
-], path = "../aes" }
+aes = { default-features = false, features = ["chaffing"], path = "../aes" }
 
 # time testing
 chrono = "0.4.33"
@@ -89,6 +91,8 @@ misc-test = []
 qa-test = []
 # this flag leaks secrets
 hazardous-test = []
+# turns on USB console input by default - this is hazardous for release, but required for CI
+hazardous-usb-ci = []
 
 # these flags are for factory only builds
 # owc-inc is necessary because we use a OWC to disable the factory cheat routine after run-once.
