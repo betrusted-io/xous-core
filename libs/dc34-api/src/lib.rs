@@ -15,6 +15,7 @@ pub const DC34_IMAGE: &str = "image";
 pub const DC34_BIO: &str = "bio.code";
 pub const DC34_BIO_PINS: &str = "bio.pins";
 pub const DC34_BIO_CLK: &str = "bio.clk";
+pub const DC34_KEYMAP: &str = "keymap";
 
 pub const SERVER_NAME_VAULT2: &str = "_Vault2_";
 
