@@ -574,10 +574,10 @@ impl CtapState {
         now: Instant,
     ) -> Vec<u8> {
         let cmd = Command::deserialize(command_cbor);
-        log::debug!("Received command: {:?}", cmd);
+        // log::debug!("Received command: {:?}", cmd);
         let response =
             cmd.and_then(|command| self.process_parsed_command(env, command, channel, now));
-        log::debug!("Sending response: {:?}", response);
+        // log::debug!("Sending response: {:?}", response);
         match response {
             Ok(response_data) => {
                 let mut response_vec = vec![Ctap2StatusCode::CTAP2_OK as u8];

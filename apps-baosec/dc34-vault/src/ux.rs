@@ -1082,7 +1082,7 @@ impl VaultUi {
                 // ---- draw the top "detail info" about the selected password ----
                 let mut insert_at = 0;
                 if let Some(entry) = self.get_selected_item() {
-                    log::debug!("rendering entry {:?}", entry);
+                    // log::debug!("rendering entry {:?}", entry);
                     // draw more data about the selected item
                     let mut box_text = TextView::new(
                         Gid::dummy(),

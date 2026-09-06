@@ -112,8 +112,10 @@ impl ListItem {
 
     /// This is made available for edit/delete routines to generate the key without having to
     /// make a whole ListItem record (which is somewhat expensive).
+    #[allow(dead_code)]
     pub fn key_from_parts(name: &str, guid: &str) -> String { name.to_lowercase() + &guid.to_string() }
 
+    #[allow(dead_code)]
     pub fn key(&self) -> String { Self::key_from_parts(&self.name, &self.guid) }
 
     pub fn name(&self) -> &str { &self.name }

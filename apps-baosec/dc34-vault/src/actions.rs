@@ -302,25 +302,25 @@ impl ActionManager {
                                     let mut symbol_states = Vec::<(bool, &str)>::new();
                                     let symbols_str: Vec<String> =
                                         SYMBOLS_ALL.iter().map(|c| c.to_string()).collect();
-                                    log::info!("config: {:?}", modified_config);
+                                    // log::info!("config: {:?}", modified_config);
                                     for (&state, sym) in
                                         modified_config.symbols.iter().zip(symbols_str.iter())
                                     {
                                         symbol_states.push((state, sym))
                                     }
-                                    log::info!("states: {:?}", symbol_states);
+                                    // log::info!("states: {:?}", symbol_states);
                                     self.modals.add_stateful_list(symbol_states).unwrap();
                                     let new_states = self
                                         .modals
                                         .get_checkbox(&format!("{}:", t!("vault.use", locales::LANG)))
                                         .map_err(|e| format!("Can't get symbol list: {:?}", e))?;
-                                    log::info!("new states: {:?}", new_states);
+                                    // log::info!("new states: {:?}", new_states);
                                     for (new_state, sym) in
                                         modified_config.symbols.iter_mut().zip(symbols_str.iter())
                                     {
                                         *new_state = new_states.contains(sym);
                                     }
-                                    log::info!("updated list: {:?}", modified_config);
+                                    // log::info!("updated list: {:?}", modified_config);
                                 }
                                 if !modified_config.lower
                                     && !modified_config.upper
@@ -337,7 +337,7 @@ impl ActionManager {
                             }
                             Err(e) => return Err(format!("Couldn't get options: {:?}", e)),
                         }
-                        log::info!("leaving config with modified: {:?}", generator_modified);
+                        // log::info!("leaving config with modified: {:?}", generator_modified);
                     } else {
                         return Err("Operation canceled by user".to_string());
                     }
@@ -369,7 +369,7 @@ impl ActionManager {
         if generator_modified {
             // Create new file and write configuration content
             let file = File::create(VAULT_CONFIG_GENERATOR).unwrap();
-            log::info!("serializing generator: {:?}", generator_config);
+            // log::info!("serializing generator: {:?}", generator_config);
             generator_config
                 .serialize(file)
                 .map_err(|e| format!("Error saving generator config: {:?}", e))?;
@@ -772,7 +772,7 @@ impl ActionManager {
                     }
                 };
                 let li = make_pw_item_from_record(guid, pw);
-                log::debug!("updating {} to list item {}", li.extra, li.key());
+                // log::debug!("updating {} to list item {}", li.extra, li.key());
                 let exists = self.item_lists.lock().unwrap().insert_unique(entry.mode, li).is_some();
                 assert!(exists, "Somehow, the autotyped record isn't in the UX list for updating!");
             }
@@ -870,7 +870,7 @@ impl ActionManager {
                 // remove the entry from the old UX list
                 let mut desc = String::new();
                 make_pw_name(&pw.description, &pw.username, &mut desc);
-                log::info!("editing {}:{}", desc, key_guid);
+                // log::info!("editing {}:{}", desc, key_guid);
                 assert!(
                     self.item_lists
                         .lock()
@@ -1325,7 +1325,7 @@ impl ActionManager {
                     - search for a list time and/or search & set time
             */
             let mode_now = self.mode.lock().unwrap().clone();
-            log::info!("got qr data: {}, mode: {:?}", qr_uri, mode_now);
+            // log::info!("got qr data: {}, mode: {:?}", qr_uri, mode_now);
             match mode_now {
                 VaultMode::GeneScan
                 | VaultMode::ResponseGene { quantum: _ }
@@ -1502,9 +1502,9 @@ impl ActionManager {
                                         "new" => {
                                             if let Some(pass_pos) = rest.find("?pass=") {
                                                 let url = &rest[..pass_pos];
-                                                let password = &rest[pass_pos + 6..];
                                                 log::info!("URL: {}", url);
-                                                log::info!("Password: {}", password);
+                                                // let password = &rest[pass_pos + 6..];
+                                                // log::info!("Password: {}", password);
                                             }
                                         }
                                         _ => log::error!("Unknown pwauth operation: {}", op_type),

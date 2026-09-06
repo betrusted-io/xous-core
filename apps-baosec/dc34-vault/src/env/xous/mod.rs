@@ -126,7 +126,7 @@ impl XousEnv {
                     xous::reply_and_receive_next_legacy(ctap1_timeout_sid, &mut msg_opt, &mut _return_type)
                         .unwrap();
                     let msg = msg_opt.as_mut().unwrap();
-                    log::debug!("msg: {:x?}", msg);
+                    // log::debug!("msg: {:x?}", msg);
                     match num_traits::FromPrimitive::from_usize(msg.body.id())
                         .unwrap_or(Ctap1TimeoutOp::Invalid)
                     {
@@ -218,7 +218,7 @@ impl XousEnv {
                 loop {
                     xous::reply_and_receive_next_legacy(ctap1_sid, &mut msg_opt, &mut _return_type).unwrap();
                     let msg = msg_opt.as_mut().unwrap();
-                    log::trace!("msg: {:x?}", msg);
+                    // log::trace!("msg: {:x?}", msg);
                     match num_traits::FromPrimitive::from_usize(msg.body.id()).unwrap_or(Ctap1Op::Invalid) {
                         Ctap1Op::PollPermission => {
                             let mut buf = unsafe {
@@ -332,7 +332,7 @@ impl XousEnv {
                                     continue;
                                 }
                             } else {
-                                log::debug!("setup new ID query: {:?}", request.app_id);
+                                // log::debug!("setup new ID query: {:?}", request.app_id);
                                 if let Some(denied) = denied_id.take() {
                                     if tt.elapsed_ms() - request_start
                                         < (crate::ctap::U2F_UP_PROMPT_TIMEOUT.as_millis() as u64)
@@ -355,7 +355,7 @@ impl XousEnv {
                                 let app_id_str = hex::encode(request.app_id);
                                 if let Some(info) = {
                                     // fetch the application info, if it exists
-                                    log::debug!("querying U2F record {}", app_id_str);
+                                    // log::debug!("querying U2F record {}", app_id_str);
                                     // add code to query the PDDB here to look for the k/v mapping of this app
                                     // ID
                                     match pddb.get(
