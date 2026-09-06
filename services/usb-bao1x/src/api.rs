@@ -32,6 +32,9 @@ pub enum Opcode {
     /// Modify log level
     SetLogLevel = 12,
 
+    #[cfg(feature = "bao1x")]
+    SetKeyMap = 16,
+
     /// Send a U2F message
     U2fTx = 128,
     /// Blocks the caller, waiting for a U2F message
