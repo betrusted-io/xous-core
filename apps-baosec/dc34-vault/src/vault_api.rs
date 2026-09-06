@@ -42,6 +42,7 @@ pub(crate) enum VaultOp {
     MenuTokenHelp,
     MenuUsernames,
     MenuFilter,
+    UsbSerial,
 
     /// Tour menu
     TourContinue,
