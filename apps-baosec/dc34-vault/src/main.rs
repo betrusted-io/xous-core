@@ -2,6 +2,7 @@ mod ux;
 use aes::{Aes256, cipher::BlockSizeUser};
 use aes_gcm_siv::aead::{Aead, Payload};
 use aes_gcm_siv::{Nonce, Tag};
+use bao1x_api::keyboard::KeyMap;
 use ux::*;
 mod itemcache;
 use itemcache::*;
@@ -24,7 +25,7 @@ mod tests;
 mod vendor_commands;
 
 use core::sync::atomic::{AtomicBool, Ordering};
-use std::io::Read;
+use std::io::{Read, Write};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
@@ -294,6 +295,30 @@ fn main() -> ! {
     }
 
     let usb = usb_bao1x::UsbHid::new();
+    // setup the default keymap
+    match pddb.get(DC34_DICT, DC34_KEYMAP, None, false, false, None, None::<fn()>) {
+        Ok(mut entry) => {
+            let mut data = Vec::<u8>::new();
+            match entry.read_to_end(&mut data) {
+                Ok(4) => {
+                    let kbd_code = usize::from_le_bytes(data.try_into().unwrap());
+                    let kbd_decoded: KeyMap = kbd_code.into();
+                    log::info!("Setting host keyboard mapping to {:?}", kbd_decoded);
+                    usb.set_key_map(kbd_decoded);
+                }
+                _ => usb.set_key_map(KeyMap::Qwerty),
+            }
+        }
+        _ => {
+            // initialize the key
+            let mut kbd_key = pddb
+                .get(DC34_DICT, DC34_KEYMAP, None, true, true, None, None::<fn()>)
+                .expect("couldn't create PDDB key");
+            let qwerty_code: usize = KeyMap::Qwerty.into();
+            kbd_key.write(&qwerty_code.to_le_bytes()).ok();
+        }
+    }
+
     let mut menu_active = false;
     let mut jig_ready_seen = false;
     let mut mutation_param: u8 = 0;
@@ -1026,6 +1051,27 @@ fn main() -> ! {
                 } else {
                     usb.serial_clear_input_hooks();
                 }
+            }
+            Some(VaultOp::SetKeyMap) => {
+                let mut kbd_key = pddb
+                    .get(DC34_DICT, DC34_KEYMAP, None, true, true, None, None::<fn()>)
+                    .expect("couldn't get PDDB key");
+
+                modals.add_list_item("QWERTY").unwrap();
+                modals.add_list_item("Dvorak").unwrap();
+                modals.get_radiobutton("Select host keyboard mapping").unwrap();
+                let map_code: usize = match modals.get_radio_index() {
+                    Ok(code) => {
+                        if code == 1 {
+                            KeyMap::Dvorak.into()
+                        } else {
+                            KeyMap::Qwerty.into()
+                        }
+                    }
+                    _ => KeyMap::Qwerty.into(),
+                };
+                kbd_key.write(&map_code.to_le_bytes()).ok();
+                usb.set_key_map(map_code.into());
             }
             Some(VaultOp::Jig) => {
                 *mode.lock().unwrap() = VaultMode::FactoryTest;
