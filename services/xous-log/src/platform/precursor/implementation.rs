@@ -2,6 +2,9 @@ use core::fmt::{Error, Write};
 
 use utralib::generated::*;
 
+#[cfg(feature = "usb")]
+pub static KBD_ENA: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
+
 pub struct Output {}
 
 pub fn init() -> Output {

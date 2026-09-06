@@ -70,7 +70,6 @@ impl GeneratorConfig {
         writeln!(file, "{}", self.upper)?;
         writeln!(file, "{}", self.lower)?;
         writeln!(file, "{}", self.use_symbols)?;
-        log::info!("{:?}", self.symbols);
         for &sym in &self.symbols {
             write!(file, "{}", if sym { '1' } else { '0' })?;
         }

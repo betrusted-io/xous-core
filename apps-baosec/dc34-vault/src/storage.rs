@@ -530,9 +530,9 @@ impl TryFrom<Vec<u8>> for TotpRecord {
     type Error = TOTPSerializationError;
 
     fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
-        log::info!("{:?}", value);
+        // log::info!("{:?}", value);
         let desc_str = std::str::from_utf8(&value).or(Err(TOTPSerializationError::MalformedInput))?;
-        log::info!("{:?}", desc_str);
+        // log::info!("{:?}", desc_str);
 
         let mut pr = TotpRecord {
             version: VAULT_TOTP_REC_VERSION,

@@ -279,13 +279,13 @@ impl<S: Storage> Store<S> {
             match *update {
                 StoreUpdate::Insert { key, ref value } => {
                     // if it exists, remove the key; if it doesn't exist, ignore the error
-                    log::debug!("pre-delete key: {}:{}", crate::store::OPENSK2_DICT, key.to_string());
+                    // log::debug!("pre-delete key: {}:{}", crate::store::OPENSK2_DICT, key.to_string());
                     self.pddb.delete_key(
                         crate::store::OPENSK2_DICT,
                         &key.to_string(),
                         None
                     ).ok();
-                    log::debug!("write key: {}:{}", crate::store::OPENSK2_DICT, key.to_string());
+                    // log::debug!("write key: {}:{}", crate::store::OPENSK2_DICT, key.to_string());
                     match self.pddb.get(
                         crate::store::OPENSK2_DICT,
                         &key.to_string(),
@@ -309,7 +309,7 @@ impl<S: Storage> Store<S> {
                     }
                 }
                 StoreUpdate::Remove { key } => {
-                    log::debug!("remove key: {}:{}", crate::store::OPENSK2_DICT, key.to_string());
+                    // log::debug!("remove key: {}:{}", crate::store::OPENSK2_DICT, key.to_string());
                     match self.pddb.delete_key(
                         crate::store::OPENSK2_DICT,
                         &key.to_string(),

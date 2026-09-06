@@ -248,7 +248,7 @@ impl CtapHid {
     ) -> Option<Message> {
         match self.assembler.parse_packet(env, packet, clock_value) {
             Ok(Some(message)) => {
-                log::trace!("Received message: {:02x?}", message);
+                // log::trace!("Received message: {:02x?}", message);
                 self.preprocess_message(message)
             }
             Ok(None) => {

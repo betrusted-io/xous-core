@@ -38,7 +38,9 @@ fn main() {
     let run_led_fade = Arc::new(AtomicBool::new(false));
     let plugged_in = Arc::new(AtomicBool::new(false));
 
+    #[cfg(feature = "hazardous-usb-ci")]
     let usb = usb_bao1x::UsbHid::new();
+    #[cfg(feature = "hazardous-usb-ci")]
     usb.serial_console_input_injection();
 
     std::thread::spawn({

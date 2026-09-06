@@ -38,10 +38,6 @@ use xous_ipc::Buffer;
 use crate::actions::ActionOp;
 use crate::config::{GlobalConfig, read_badgetype_pins};
 
-/*
-  k0 hash check correct value: dca9ea49
-*/
-
 // Reproducible bootloader:
 // git clone https://github.com/sbellem/baobit.git
 // cd baobit
@@ -297,6 +293,7 @@ fn main() -> ! {
         }
     }
 
+    let usb = usb_bao1x::UsbHid::new();
     let mut menu_active = false;
     let mut jig_ready_seen = false;
     let mut mutation_param: u8 = 0;
@@ -305,7 +302,7 @@ fn main() -> ! {
     loop {
         global_config.lock().unwrap().update_power_state(mode.lock().unwrap().clone());
         let msg = xous::receive_message(sid).unwrap();
-        log::trace!("Got message: {:?}", msg.body.id());
+        // log::trace!("Got message: {:?}", msg.body.id());
         match FromPrimitive::from_usize(msg.body.id()) {
             Some(VaultOp::Redraw) => {
                 if !boot_sent {
@@ -364,7 +361,7 @@ fn main() -> ! {
                     k_last = k;
                 }
                 global_config.lock().unwrap().set_mutation_rate(MutationRate::from_param(mutation_param));
-                log::debug!("key {:x}", k1);
+                // log::debug!("key {:x}", k1);
 
                 // on the very first `~` received, this will transition a factory test state. In normal
                 // operation this has no effect on the UI. But in factory test state this is an easy way to
@@ -611,7 +608,7 @@ fn main() -> ! {
                 // top-level context. This avoids us having to share every object into the ActionManager.
                 let buffer = unsafe { Buffer::from_memory_message(msg.body.memory_message().unwrap()) };
                 let s: IpcString = buffer.to_original::<IpcString, _>().unwrap();
-                log::info!("mode: {:?}, s: {}", mode_now, s.s);
+                // log::info!("mode: {:?}, s: {}", mode_now, s.s);
                 skip_one_key = false;
 
                 match mode_now {
@@ -620,7 +617,7 @@ fn main() -> ! {
                     | VaultMode::ShowKey { quantum: _ } => {
                         match base45::decode(&s.s.as_bytes()) {
                             Ok(data) => {
-                                log::debug!("b45dec: {:x?}", data);
+                                // log::debug!("b45dec: {:x?}", data);
                                 if data.len() < DC34_HEADER.len() {
                                     log::error!("protocol error: QR data too short");
                                     *mode.lock().unwrap() = VaultMode::Idle;
@@ -649,9 +646,9 @@ fn main() -> ! {
                                     let mut response = Vec::new();
                                     response.extend_from_slice(&ct_nonce);
 
-                                    log::debug!("raw {} bytes", response.len());
+                                    // log::debug!("raw {} bytes", response.len());
                                     let encoded = base45::encode(&response);
-                                    log::debug!("encoding {} bytes", encoded.as_bytes().len());
+                                    // log::debug!("encoding {} bytes", encoded.as_bytes().len());
                                     let code = QrCode::with_error_correction_level(
                                         encoded.as_bytes(),
                                         qrcode::EcLevel::M,
@@ -693,14 +690,14 @@ fn main() -> ! {
                                             .store(mode.lock().unwrap().should_animate(), Ordering::SeqCst);
                                         continue;
                                     };
-                                    log::debug!("nonce1: {:x?}", nonce1);
+                                    // log::debug!("nonce1: {:x?}", nonce1);
                                     // extract & save their nonce
                                     let aead = global_config.lock().unwrap().cipher();
                                     let payload = Payload { msg: &data, aad: &[] };
-                                    log::debug!("payload: {:x?} {:x?}", payload.msg, payload.aad);
+                                    // log::debug!("payload: {:x?} {:x?}", payload.msg, payload.aad);
                                     match aead.decrypt(&nonce1, payload) {
                                         Ok(msg) => {
-                                            log::debug!("decrypted {:x?}", msg);
+                                            // log::debug!("decrypted {:x?}", msg);
                                             if let Some(mut sperm) =
                                                 Haploid::deserialize(&msg[..size_of::<Haploid>()])
                                             {
@@ -906,7 +903,6 @@ fn main() -> ! {
                     .ok();
                     vault_ui.refresh_draw_list();
                 }
-                log::info!("tour_later redraw");
                 vault_ui.redraw();
             }
             Some(VaultOp::TourNever) => {
@@ -1017,6 +1013,20 @@ fn main() -> ! {
                     global_config.lock().unwrap().render_gene();
                 }
             }),
+            Some(VaultOp::UsbSerial) => {
+                // handle USB serial hooking/unhooking
+                modals.add_list_item("Yes").unwrap();
+                modals.add_list_item("No").unwrap();
+                modals.get_radiobutton("Enable debug console?").unwrap();
+                if match modals.get_radio_index() {
+                    Ok(button) => button == 0,
+                    _ => false,
+                } {
+                    usb.serial_console_input_injection();
+                } else {
+                    usb.serial_clear_input_hooks();
+                }
+            }
             Some(VaultOp::Jig) => {
                 *mode.lock().unwrap() = VaultMode::FactoryTest;
                 vault_ui.reset_factory_test();

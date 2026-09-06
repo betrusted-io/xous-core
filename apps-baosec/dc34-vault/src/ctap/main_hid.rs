@@ -72,7 +72,7 @@ impl MainHid {
                     HidIterType::Vendor(processed_message)
                 }
                 _ => {
-                    log::trace!("Sending message: {:02x?}", processed_message);
+                    // log::trace!("Sending message: {:02x?}", processed_message);
                     HidIterType::Ctap(CtapHid::split_message(processed_message))
                 }
             }
