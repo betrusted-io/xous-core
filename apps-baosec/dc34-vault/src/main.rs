@@ -314,8 +314,10 @@ fn main() -> ! {
             let mut kbd_key = pddb
                 .get(DC34_DICT, DC34_KEYMAP, None, true, true, None, None::<fn()>)
                 .expect("couldn't create PDDB key");
-            let qwerty_code: usize = KeyMap::Qwerty.into();
-            kbd_key.write(&qwerty_code.to_le_bytes()).ok();
+            // initialize to Dvorak, so that users who created passwords using the stock conference firmware
+            // don't have a surprising experience that their passwords stopped working on the firmware update
+            let kbd_code: usize = KeyMap::Dvorak.into();
+            kbd_key.write(&kbd_code.to_le_bytes()).ok();
         }
     }
 
