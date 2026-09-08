@@ -602,10 +602,11 @@ impl MemoryManager {
     /// that are mutually exclusive in use.
     ///
     /// Peripheral memory currently only exists on the bao1x target.
-    pub fn is_peripheral_ram(&self, phys: usize) -> bool {
+    #[allow(dead_code)]
+    pub fn is_peripheral_ram(&self, _phys: usize) -> bool {
         #[cfg(feature = "bao1x")]
-        let ret = phys >= utralib::HW_IFRAM0_MEM
-            && phys < utralib::HW_IFRAM0_MEM + utralib::HW_IFRAM0_MEM_LEN + utralib::HW_IFRAM1_MEM_LEN;
+        let ret = _phys >= utralib::HW_IFRAM0_MEM
+            && _phys < utralib::HW_IFRAM0_MEM + utralib::HW_IFRAM0_MEM_LEN + utralib::HW_IFRAM1_MEM_LEN;
         #[cfg(not(feature = "bao1x"))]
         let ret = false;
         ret
