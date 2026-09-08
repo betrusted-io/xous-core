@@ -4,6 +4,7 @@
 use core::sync::atomic::{AtomicU8, AtomicUsize, Ordering::Relaxed};
 
 use xous_kernel::arch::PAGE_SIZE;
+use xous_kernel::arch::USER_AREA_END;
 use xous_kernel::*;
 
 use crate::arch;
@@ -738,7 +739,11 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
 
                 // Don't let the address exceed the user area (unless it's PID 1)
                 if pid.get() != 1
-                    && virt.map(|x| x.get() >= xous_kernel::arch::USER_AREA_END).unwrap_or(false)
+                    && virt.is_some_and(|x| {
+                        x.get()
+                            .checked_add(size.get())
+                            .is_none_or(|end| end >= xous_kernel::arch::USER_AREA_END)
+                    })
                 {
                     klog!("Exceeded user area");
                     return Err(xous_kernel::Error::BadAddress);
@@ -772,11 +777,7 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
 
                 if !phys_ptr.is_null() {
                     if mm.is_main_memory(phys_ptr) {
-                        let range_start = range.as_mut_ptr() as *mut usize;
-                        let range_end = range_start.wrapping_add(range.len() / core::mem::size_of::<usize>());
-                        unsafe {
-                            crate::mem::bzero(range_start, range_end);
-                        };
+                        unsafe { core::ptr::write_bytes(range.as_mut_ptr(), 0, range.len()) };
                     }
                     for offset in
                         (range.as_ptr() as usize..(range.as_ptr() as usize + range.len())).step_by(PAGE_SIZE)
@@ -796,6 +797,10 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
             let size = range.len();
             if cfg!(baremetal) && virt & 0xfff != 0 {
                 return Err(xous_kernel::Error::BadAlignment);
+            }
+            if virt >= USER_AREA_END || virt + size >= USER_AREA_END {
+                // don't allow processes to unmap kernel or page table memory
+                return Err(xous_kernel::Error::BadAddress);
             }
             for addr in (virt..(virt + size)).step_by(PAGE_SIZE) {
                 if let Err(e) = mm.unmap_page(addr as *mut usize) {
@@ -1057,10 +1062,15 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
         },
         #[cfg(feature = "v2p")]
         SysCall::VirtToPhys(vaddr) => {
-            let phys_addr = crate::arch::mem::virt_to_phys(vaddr as usize);
-            match phys_addr {
-                Ok(pa) => Ok(xous_kernel::Result::Scalar1(pa)),
-                Err(_) => Err(xous_kernel::Error::BadAddress),
+            if vaddr < USER_AREA_END {
+                let phys_addr = crate::arch::mem::virt_to_phys(vaddr as usize);
+                match phys_addr {
+                    Ok(pa) => Ok(xous_kernel::Result::Scalar1(pa)),
+                    Err(_) => Err(xous_kernel::Error::BadAddress),
+                }
+            } else {
+                // don't allow discovery of kernel or page tables
+                Err(xous_kernel::Error::BadAddress)
             }
         }
         #[cfg(feature = "v2p")]
