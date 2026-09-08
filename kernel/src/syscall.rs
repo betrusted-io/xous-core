@@ -860,7 +860,7 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
             }
             let (start, length, end) = ArchProcess::with_inner_mut(|process_inner| {
                 // Don't allow decreasing the heap beyond the current allocation
-                if delta > process_inner.mem_heap_size {
+                if delta >= process_inner.mem_heap_size {
                     return Err(xous_kernel::Error::OutOfMemory);
                 }
 
@@ -1043,6 +1043,9 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
             SystemServices::with_mut(|ss| ss.destroy_server(pid, sid).and(Ok(xous_kernel::Result::Ok)))
         }
         SysCall::JoinThread(other_tid) => {
+            if other_tid >= crate::arch::process::MAX_THREAD {
+                return Err(xous_kernel::Error::ThreadNotAvailable);
+            }
             SystemServices::with_mut(|ss| ss.join_thread(pid, tid, other_tid)).map(|ret| {
                 // Successfully joining a thread causes this thread to sleep while the parent process
                 // is resumed. This is the same as a `Yield`

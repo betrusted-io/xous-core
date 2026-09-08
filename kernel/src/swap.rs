@@ -921,7 +921,8 @@ impl Swap {
                 }
                 (pid, tid)
             }
-            None => panic!("No previous swap op was set"),
+            // No previous swap op was set
+            None => return Err(xous_kernel::Error::UseBeforeInit),
         };
 
         // return to the original pid memory space, now that we have memory
