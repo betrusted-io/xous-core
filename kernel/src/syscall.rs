@@ -800,8 +800,9 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
             if cfg!(baremetal) && virt & 0xfff != 0 {
                 return Err(xous_kernel::Error::BadAlignment);
             }
-            if virt >= USER_AREA_END || virt.saturating_add(size) >= USER_AREA_END {
-                // don't allow processes to unmap kernel or page table memory
+            if cfg!(baremetal) && (virt >= USER_AREA_END || virt.saturating_add(size) >= USER_AREA_END) {
+                // don't allow processes to unmap kernel or page table memory; however, these addresses
+                // only have meaning on actual hardware (baremetal), and not in hosted mode.
                 return Err(xous_kernel::Error::BadAddress);
             }
             for addr in (virt..(virt + size)).step_by(PAGE_SIZE) {
