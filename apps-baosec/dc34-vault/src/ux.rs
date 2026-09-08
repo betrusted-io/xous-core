@@ -537,6 +537,7 @@ pub struct VaultUi {
     edge: bool,
     last_mode: VaultMode,
     pub bio_loaded: bool,
+    keystore: keystore::Keystore,
 }
 
 impl VaultUi {
@@ -601,6 +602,7 @@ impl VaultUi {
             edge: false,
             last_mode: VaultMode::FactoryTest,
             bio_loaded: false,
+            keystore: keystore::Keystore::new(xns),
         }
     }
 
@@ -1564,9 +1566,7 @@ impl VaultUi {
                 }
                 if self.about_state.is_diagnostics() {
                     if k == '↑' {
-                        let xns = xous_names::XousNames::new().unwrap();
-                        let keystore = keystore::Keystore::new(&xns);
-                        keystore.bootwait(Some(false)).unwrap();
+                        self.keystore.bootwait(Some(false)).unwrap();
                         log::info!("Bootwait secret disable activated");
                     }
                 }

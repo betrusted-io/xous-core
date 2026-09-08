@@ -117,6 +117,7 @@ fn main() -> ! {
     // Protects access to the openSK PDDB entries from simultaneous readout on the UX while OpenSK is updating
     let opensk_mutex = Arc::new(Mutex::new(0));
     let allow_host = Arc::new(AtomicBool::new(false));
+    let keystore = keystore::Keystore::new(&xns);
 
     // spawn the actions server. This is responsible for grooming the UX elements. It
     // has to be in its own thread because it uses blocking modal calls that would cause
@@ -183,7 +184,7 @@ fn main() -> ! {
 
     log::info!("Read config...");
     // this must init after PDDB is mounted
-    let (global_config, init_mode) = GlobalConfig::init();
+    let (global_config, init_mode) = GlobalConfig::init(&keystore);
     let global_config = Arc::new(Mutex::new(global_config));
     *mode.lock().unwrap() = init_mode;
     vault_ui.set_global_config(global_config.clone());
@@ -247,7 +248,6 @@ fn main() -> ! {
     {
         // check/trigger swap encryption before starting the main loop
         let xns = xous_names::XousNames::new().unwrap();
-        let keystore = keystore::Keystore::new(&xns);
         const THROW_AWAY_SERVER: &'static str = "_use once server_";
         const THROW_AWAY_OP: usize = 42;
         // idle forever, maybe turn this into a full blocking server that just parks and ends
@@ -319,6 +319,12 @@ fn main() -> ! {
             let kbd_code: usize = KeyMap::Dvorak.into();
             kbd_key.write(&kbd_code.to_le_bytes()).ok();
         }
+    }
+
+    if !xns.trusted_init_done().expect("couldn't query trusted init state") {
+        panic!(
+            "Trusted init state is inconsistent; check that connection count required for keystore is consistent with reality."
+        );
     }
 
     let mut menu_active = false;
