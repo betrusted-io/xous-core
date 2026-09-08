@@ -590,11 +590,25 @@ impl MemoryManager {
         (phys as usize) >= self.ram_start && (phys as usize) < self.ram_start + self.ram_size
     }
 
-    #[cfg(feature = "bao1x")]
     /// This test is needed because peripheral memory is unmappable, but peripherals are not.
+    /// The characteristic of peripheral memory is that it is:
+    ///   - not in the allocation pool for stack/heap RAM
+    ///   - primarily used for I/O buffers
+    ///   - in an isolated address space
+    ///   - multi-purpose in nature (i.e., not a dedicated frame buffer that would only have one sensible
+    ///     driver mapping)
+    /// The last point - the fact that the memory could have multiple purposes - is the reason that
+    /// drives the need to potentially unmap it, as it may need to be handed off between drivers
+    /// that are mutually exclusive in use.
+    ///
+    /// Peripheral memory currently only exists on the bao1x target.
     pub fn is_peripheral_ram(&self, phys: usize) -> bool {
-        phys >= utralib::HW_IFRAM0_MEM
-            && phys < utralib::HW_IFRAM0_MEM + utralib::HW_IFRAM0_MEM_LEN + utralib::HW_IFRAM1_MEM_LEN
+        #[cfg(feature = "bao1x")]
+        let ret = phys >= utralib::HW_IFRAM0_MEM
+            && phys < utralib::HW_IFRAM0_MEM + utralib::HW_IFRAM0_MEM_LEN + utralib::HW_IFRAM1_MEM_LEN;
+        #[cfg(not(feature = "bao1x"))]
+        let ret = false;
+        ret
     }
 
     #[cfg(feature = "memmap-flash")]
