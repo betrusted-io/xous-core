@@ -70,7 +70,7 @@ const SCD_VERSION: u32 = 2;
 #[cfg(all(feature = "pddbtest", feature = "autobasis"))]
 pub const BASIS_TEST_ROOTNAME: &'static str = "test";
 
-#[cfg(all(feature = "gen2", target_os = "xous"))]
+#[cfg(all(feature = "gen2"))]
 const DOMAIN_SEPERATOR: &'static str = "PDDB's key";
 
 #[derive(Zeroize)]
@@ -263,7 +263,8 @@ impl PddbOs {
         #[cfg(feature = "gen1")]
         let dna = llio.soc_dna().unwrap();
         #[cfg(feature = "gen2")]
-        let keystore = keystore::Keystore::new(&xns);
+        let keystore = keystore::Keystore::new_key(&xns, DOMAIN_SEPERATOR);
+
         #[cfg(feature = "gen2")]
         let dna = keystore.get_dna();
 
@@ -322,7 +323,7 @@ impl PddbOs {
         #[cfg(all(feature = "gen2", target_os = "xous"))]
         let ret = PddbOs {
             swapper: xous_swapper::Swapper::new().expect("couldn't connect to swapper"),
-            rootkeys: keystore::Keystore::new_key(&xns, DOMAIN_SEPERATOR),
+            rootkeys: keystore,
             flash_page: RefCell::new(xous_swapper::FlashPage::new()),
             tt: ticktimer_server::Ticktimer::new().unwrap(),
             pddb_mr: pddb,

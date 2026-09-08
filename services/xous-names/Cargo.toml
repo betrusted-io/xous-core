@@ -34,5 +34,8 @@ precursor = ["utralib/precursor"]
 hosted = ["utralib/hosted"]
 renode = ["utralib/renode"]
 
+# When enabled, prints the list of servers and their connection count when trusted init doneness is queried.
+debug-xns-init = []
+
 debugprint = []
 default = []    # "debugprint"

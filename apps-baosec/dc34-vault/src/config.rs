@@ -65,9 +65,8 @@ pub(crate) struct GlobalConfig {
 }
 
 impl GlobalConfig {
-    pub fn init() -> (Self, VaultMode) {
+    pub fn init(keystore: &keystore::Keystore) -> (Self, VaultMode) {
         let xns = xous_names::XousNames::new().unwrap();
-        let keystore = keystore::Keystore::new(&xns);
         let is_developer = keystore.is_developer().expect("couldn't query developer mode");
         let pddb = pddb::Pddb::new();
 
