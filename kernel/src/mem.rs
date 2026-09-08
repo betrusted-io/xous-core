@@ -915,11 +915,16 @@ impl MemoryManager {
             match action {
                 ClaimReleaseMove::Claim => {
                     if allow_alias {
-                        if owner_addr.is_some() {
-                            println!(
-                                "WARN: aliasing physical address {:x} {:?} (me: {:?})",
-                                addr, owner_addr, pid
-                            );
+                        if let Some(previous_owner) = owner_addr {
+                            if previous_owner.get() == pid.get() {
+                                // only allow aliases within the same process
+                                println!(
+                                    "WARN: aliasing physical address {:x} {:?} (me: {:?})",
+                                    addr, owner_addr, pid
+                                );
+                            } else {
+                                return Err(xous_kernel::Error::MemoryInUse);
+                            }
                         }
                         *owner_addr = Some(pid);
                     } else {

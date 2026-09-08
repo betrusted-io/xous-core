@@ -160,7 +160,6 @@ impl SwapAlloc {
 
     pub fn set_wired(&mut self) { self.vpn |= SWAP_FLG_WIRED; }
 
-    #[cfg(feature = "debug-swap-verbose")]
     pub fn get_raw_vpn(&self) -> u32 { self.vpn }
 
     pub fn get_timestamp(&self) -> u32 { self.timestamp }
