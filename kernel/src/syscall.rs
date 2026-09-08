@@ -101,45 +101,118 @@ fn send_message(pid: PID, tid: TID, cid: CID, message: Message) -> SysCallResult
         // process. Additionally, determine whether the call is blocking. If
         // so, switch to the server context right away.
         let blocking = message.is_blocking();
+
+        // --- decide delivery path BEFORE touching memory ---
+        let (available_tid, can_deliver) = {
+            let server_pid = ss.server_from_sidx(sidx).expect("server couldn't be located").pid;
+            let current_pid = ss.current_pid();
+
+            // Switch to the server's address space so we can read the queue array
+            let server_process = ss.get_process(server_pid)?;
+            server_process.mapping.activate().unwrap();
+
+            let server = ss.server_from_sidx_mut(sidx).expect("server couldn't be located");
+            let tid = server.take_available_thread();
+            let has_capacity = tid.is_some() || server.has_queue_capacity();
+
+            // Switch back to the client's address space
+            let current_process = ss.get_process(current_pid).expect("couldn't get client process");
+            current_process.mapping.activate().unwrap();
+
+            (tid, has_capacity)
+        };
+
+        if !can_deliver {
+            return Err(xous_kernel::Error::ServerQueueFull);
+        }
+
+        // --- Memory transfer (now guaranteed to be deliverable) ---
         let message = match message {
             Message::Scalar(_) | Message::BlockingScalar(_) => message,
             Message::Move(msg) => {
-                let new_virt = ss.send_memory(
+                let new_virt = match ss.send_memory(
                     msg.buf.as_mut_ptr() as *mut usize,
                     server_pid,
                     core::ptr::null_mut(),
                     msg.buf.len(),
-                )?;
+                ) {
+                    Ok(v) => v,
+                    Err(e) => {
+                        // Give the thread back before returning the error
+                        if let Some(st) = available_tid {
+                            ss.server_from_sidx_mut(sidx)
+                                .expect("server couldn't be located")
+                                .return_available_thread(st);
+                        }
+                        return Err(e);
+                    }
+                };
                 Message::Move(MemoryMessage {
                     id: msg.id,
-                    buf: unsafe { MemoryRange::new(new_virt as usize, msg.buf.len()) }?,
+                    buf: unsafe { MemoryRange::new(new_virt as usize, msg.buf.len()) }.map_err(|e| {
+                        if let Some(st) = available_tid {
+                            ss.server_from_sidx_mut(sidx)
+                                .expect("server couldn't be located")
+                                .return_available_thread(st);
+                        }
+                        e
+                    })?,
                     offset: msg.offset,
                     valid: msg.valid,
                 })
             }
             Message::MutableBorrow(msg) => {
-                let new_virt = ss.lend_memory(
+                let new_virt = match ss.lend_memory(
                     msg.buf.as_mut_ptr() as *mut usize,
                     server_pid,
                     core::ptr::null_mut(),
                     msg.buf.len(),
                     true,
-                )?;
+                ) {
+                    Ok(v) => v,
+                    Err(e) => {
+                        // Give the thread back before returning the error
+                        if let Some(st) = available_tid {
+                            ss.server_from_sidx_mut(sidx)
+                                .expect("server couldn't be located")
+                                .return_available_thread(st);
+                        }
+                        return Err(e);
+                    }
+                };
                 Message::MutableBorrow(MemoryMessage {
                     id: msg.id,
-                    buf: unsafe { MemoryRange::new(new_virt as usize, msg.buf.len()) }?,
+                    buf: unsafe { MemoryRange::new(new_virt as usize, msg.buf.len()) }.map_err(|e| {
+                        if let Some(st) = available_tid {
+                            ss.server_from_sidx_mut(sidx)
+                                .expect("server couldn't be located")
+                                .return_available_thread(st);
+                        }
+                        e
+                    })?,
                     offset: msg.offset,
                     valid: msg.valid,
                 })
             }
             Message::Borrow(msg) => {
-                let new_virt = ss.lend_memory(
+                let new_virt = match ss.lend_memory(
                     msg.buf.as_mut_ptr() as *mut usize,
                     server_pid,
                     core::ptr::null_mut(),
                     msg.buf.len(),
                     false,
-                )?;
+                ) {
+                    Ok(v) => v,
+                    Err(e) => {
+                        // Give the thread back before returning the error
+                        if let Some(st) = available_tid {
+                            ss.server_from_sidx_mut(sidx)
+                                .expect("server couldn't be located")
+                                .return_available_thread(st);
+                        }
+                        return Err(e);
+                    }
+                };
                 // println!(
                 //     "Lending {} bytes from {:08x} in PID {} to {:08x} in PID {}",
                 //     msg.buf.len(),
@@ -150,17 +223,24 @@ fn send_message(pid: PID, tid: TID, cid: CID, message: Message) -> SysCallResult
                 // );
                 Message::Borrow(MemoryMessage {
                     id: msg.id,
-                    buf: unsafe { MemoryRange::new(new_virt as usize, msg.buf.len()) }?,
+                    buf: unsafe { MemoryRange::new(new_virt as usize, msg.buf.len()) }.map_err(|e| {
+                        if let Some(st) = available_tid {
+                            ss.server_from_sidx_mut(sidx)
+                                .expect("server couldn't be located")
+                                .return_available_thread(st);
+                        }
+                        e
+                    })?,
                     offset: msg.offset,
                     valid: msg.valid,
                 })
             }
         };
 
+        // --- Deliver ---
         // If the server has an available thread to receive the message,
         // transfer it right away.
-        let server = ss.server_from_sidx_mut(sidx).expect("server couldn't be located");
-        if let Some(server_tid) = server.take_available_thread() {
+        if let Some(server_tid) = available_tid {
             // klog!(
             //     "there are threads available in PID {} to handle this message -- marking as Ready",
             //     server_pid
