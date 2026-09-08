@@ -1379,7 +1379,7 @@ impl SystemServices {
         if dest_virt as usize & 0xfff != 0 {
             return Err(xous_kernel::Error::BadAddress);
         }
-        if (dest_virt as usize) + len > USER_AREA_END {
+        if (dest_virt as usize).saturating_add(len) > USER_AREA_END {
             return Err(xous_kernel::Error::BadAddress);
         }
 

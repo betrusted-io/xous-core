@@ -590,6 +590,13 @@ impl MemoryManager {
         (phys as usize) >= self.ram_start && (phys as usize) < self.ram_start + self.ram_size
     }
 
+    #[cfg(feature = "bao1x")]
+    /// This test is needed because peripheral memory is unmappable, but peripherals are not.
+    pub fn is_peripheral_ram(&self, phys: usize) -> bool {
+        phys >= utralib::HW_IFRAM0_MEM
+            && phys < utralib::HW_IFRAM0_MEM + utralib::HW_IFRAM0_MEM_LEN + utralib::HW_IFRAM1_MEM_LEN
+    }
+
     #[cfg(feature = "memmap-flash")]
     pub fn is_mapped_flash(&self, virt: *mut u8) -> bool {
         // true if the address starts with the bitmask of the virtual start of the MMAP region
@@ -629,8 +636,12 @@ impl MemoryManager {
         #[cfg(baremetal)]
         if phys == 0
             && (flags & MemoryFlags::VIRT == MemoryFlags::VIRT)
-            && ((virt_ptr as usize & MMAP_VIRT_BASE) == MMAP_VIRT_BASE)
+            && ((virt_ptr as usize & 0xF000_0000) == MMAP_VIRT_BASE)
         {
+            // only the range from 0xB000_0000 - 0xBFFF_FFFF is reserved for this purpose
+            if (virt_ptr as usize).saturating_add(size) & 0xF000_0000 != MMAP_VIRT_BASE {
+                return Err(xous_kernel::Error::BadAddress);
+            }
             let mut mm = MemoryMapping::current();
             // round down any virtual address to the next page
             let start = virt_ptr as usize & !(PAGE_SIZE - 1);
@@ -919,7 +930,7 @@ impl MemoryManager {
                             if previous_owner.get() == pid.get() {
                                 // only allow aliases within the same process
                                 println!(
-                                    "WARN: aliasing physical address {:x} {:?} (me: {:?})",
+                                    "WARN: aliasing physical address {:x} {:?} (requester: {:?})",
                                     addr, owner_addr, pid
                                 );
                             } else {
@@ -932,7 +943,7 @@ impl MemoryManager {
                             *owner_addr = Some(pid);
                         } else {
                             println!(
-                                "ERR: physical address {:x} already used by {:?} (claimer: {:?})",
+                                "ERR: physical address {:x} already used by {:?} (requester: {:?})",
                                 addr, owner_addr, pid
                             );
                             return Err(xous_kernel::Error::MemoryInUse);
@@ -982,7 +993,7 @@ impl MemoryManager {
                     } else {
                         // even self-claims should be denied
                         println!(
-                            "ERR: swap claim already in use by {:x}({:?}) (claimer: {:?})",
+                            "ERR: swap claim already in use by {:x}({:?}) (requester: {:?})",
                             owner_addr.get_raw_vpn(),
                             owner_addr.get_pid(),
                             pid
@@ -1009,7 +1020,7 @@ impl MemoryManager {
 
         let mut offset = 0;
         // Happy path: The address is in main RAM
-        if addr >= self.ram_start && addr < self.ram_start + self.ram_size {
+        if self.is_main_memory(addr as *mut u8) {
             offset += (addr - self.ram_start) / PAGE_SIZE;
             #[cfg(not(feature = "swap"))]
             return unsafe { action_inner(&mut MEMORY_ALLOCATIONS[offset], pid, action, false, addr) };
@@ -1043,7 +1054,14 @@ impl MemoryManager {
                     // -------------------------------
 
                     offset += (addr - (region.mem_start as usize)) / PAGE_SIZE;
-                    return action_inner(&mut EXTRA_ALLOCATIONS[offset], pid, action, true, addr);
+                    if self.is_peripheral_ram(offset) {
+                        // don't allow aliasing of peripheral RAM, because peripheral RAM can be unmapped
+                        return action_inner(&mut EXTRA_ALLOCATIONS[offset], pid, action, false, addr);
+                    } else {
+                        // aliasing is allowed, however, unmapping is NOT allowed. This allows us to not have
+                        // to do reference counting to avoid unmap races
+                        return action_inner(&mut EXTRA_ALLOCATIONS[offset], pid, action, true, addr);
+                    }
                 }
                 offset += region.mem_size as usize / PAGE_SIZE;
             }

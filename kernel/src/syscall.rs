@@ -798,7 +798,7 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
             if cfg!(baremetal) && virt & 0xfff != 0 {
                 return Err(xous_kernel::Error::BadAlignment);
             }
-            if virt >= USER_AREA_END || virt + size >= USER_AREA_END {
+            if virt >= USER_AREA_END || virt.saturating_add(size) >= USER_AREA_END {
                 // don't allow processes to unmap kernel or page table memory
                 return Err(xous_kernel::Error::BadAddress);
             }
@@ -1142,15 +1142,21 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
                         let paddr = crate::arch::mem::virt_to_phys(vaddr_to_release).unwrap() as usize;
                         #[cfg(feature = "debug-swap-verbose")]
                         println!("ReleaseMemory - paddr {:x}", paddr);
-                        // this call unmaps the virtual page from the page table
-                        crate::arch::mem::unmap_page_inner(mm, vaddr_to_release)
-                            .expect("couldn't unmap page");
-                        // This call releases the physical page from the RPT - the pid has to match that of
-                        // the original owner. This is the "pointy end" of the stick;
-                        // after this call, the memory is now back into the free pool.
-                        mm.release_page_swap(paddr as *mut usize, PID::new(original_pid).unwrap())
-                            .expect("couldn't free page that was swapped out");
-                        Ok(xous_kernel::Result::Ok)
+                        if mm.is_main_memory(paddr as *mut u8) || mm.is_peripheral_ram(paddr) {
+                            // this call unmaps the virtual page from the page table
+                            crate::arch::mem::unmap_page_inner(mm, vaddr_to_release)
+                                .expect("couldn't unmap page");
+                            // This call releases the physical page from the RPT - the pid has to match that
+                            // of the original owner. This is the "pointy end" of
+                            // the stick; after this call, the memory is now back
+                            // into the free pool.
+                            mm.release_page_swap(paddr as *mut usize, PID::new(original_pid).unwrap())
+                                .expect("couldn't free page that was swapped out");
+                            Ok(xous_kernel::Result::Ok)
+                        } else {
+                            // you are not allowed to unmap a peripheral address space once you have mapped it
+                            Err(xous_kernel::Error::InvalidArgument)
+                        }
                     })
                 }
                 SwapAbi::HardOom => {
