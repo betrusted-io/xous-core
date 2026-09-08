@@ -529,11 +529,16 @@ impl MemoryManager {
         }
 
         let mut mm = MemoryMapping::current();
-        for virt in (virt..(virt + size)).step_by(PAGE_SIZE) {
-            // FIXME: Un-reserve addresses if we encounter an error here
-            mm.reserve_address(self, virt, flags)?;
+        for addr in (virt..(virt + size)).step_by(PAGE_SIZE) {
+            if let Err(e) = mm.reserve_address(self, addr, flags) {
+                // Roll back the prefix we already reserved.
+                for undo in (virt..addr).step_by(PAGE_SIZE) {
+                    mm.unreserve_address(undo).expect("Internal error: couldn't unwind failed reservation");
+                }
+                return Err(e);
+            }
         }
-        unsafe { xous_kernel::MemoryRange::new(virt_ptr as usize, size) }
+        unsafe { xous_kernel::MemoryRange::new(virt as usize, size) }
     }
 
     /// Attempt to allocate a single page from the default section.
@@ -885,6 +890,8 @@ impl MemoryManager {
             owner_addr: &mut Option<PID>,
             pid: PID,
             action: ClaimReleaseMove,
+            allow_alias: bool,
+            addr: usize,
         ) -> Result<(), xous_kernel::Error> {
             if let Some(current_pid) = *owner_addr {
                 if current_pid != pid {
@@ -906,7 +913,28 @@ impl MemoryManager {
                 }
             }
             match action {
-                ClaimReleaseMove::Claim | ClaimReleaseMove::Move(_) => {
+                ClaimReleaseMove::Claim => {
+                    if allow_alias {
+                        if owner_addr.is_some() {
+                            println!(
+                                "WARN: aliasing physical address {:x} {:?} (me: {:?})",
+                                addr, owner_addr, pid
+                            );
+                        }
+                        *owner_addr = Some(pid);
+                    } else {
+                        if owner_addr.is_none() {
+                            *owner_addr = Some(pid);
+                        } else {
+                            println!(
+                                "ERR: physical address {:x} already used by {:?} (claimer: {:?})",
+                                addr, owner_addr, pid
+                            );
+                            return Err(xous_kernel::Error::MemoryInUse);
+                        }
+                    }
+                }
+                ClaimReleaseMove::Move(_) => {
                     *owner_addr = Some(pid);
                 }
                 ClaimReleaseMove::Release => {
@@ -943,7 +971,21 @@ impl MemoryManager {
                 }
             }
             match action {
-                ClaimReleaseMove::Claim | ClaimReleaseMove::Move(_) => {
+                ClaimReleaseMove::Claim => {
+                    if owner_addr.is_none() {
+                        unsafe { owner_addr.update(Some(pid), Some(addr)) };
+                    } else {
+                        // even self-claims should be denied
+                        println!(
+                            "ERR: swap claim already in use by {:x}({:?}) (claimer: {:?})",
+                            owner_addr.get_raw_vpn(),
+                            owner_addr.get_pid(),
+                            pid
+                        );
+                        return Err(xous_kernel::Error::MemoryInUse);
+                    }
+                }
+                ClaimReleaseMove::Move(_) => {
                     unsafe { owner_addr.update(Some(pid), Some(addr)) };
                 }
                 ClaimReleaseMove::Release => {
@@ -965,7 +1007,7 @@ impl MemoryManager {
         if addr >= self.ram_start && addr < self.ram_start + self.ram_size {
             offset += (addr - self.ram_start) / PAGE_SIZE;
             #[cfg(not(feature = "swap"))]
-            return unsafe { action_inner(&mut MEMORY_ALLOCATIONS[offset], pid, action) };
+            return unsafe { action_inner(&mut MEMORY_ALLOCATIONS[offset], pid, action, false, addr) };
             #[cfg(feature = "swap")]
             return unsafe { action_inner_tracking(&mut MEMORY_ALLOCATIONS[offset], pid, action, addr) };
         }
@@ -996,7 +1038,7 @@ impl MemoryManager {
                     // -------------------------------
 
                     offset += (addr - (region.mem_start as usize)) / PAGE_SIZE;
-                    return action_inner(&mut EXTRA_ALLOCATIONS[offset], pid, action);
+                    return action_inner(&mut EXTRA_ALLOCATIONS[offset], pid, action, true, addr);
                 }
                 offset += region.mem_size as usize / PAGE_SIZE;
             }
