@@ -142,6 +142,7 @@ userspace-swap-debug = []     # sets up app UART mapping.
 
 # general flags
 debug-print = []
+verbose-debug = []
 unsafe-debug-print = []
 debug-swap-sig = []
 early-printk = []
