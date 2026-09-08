@@ -1037,9 +1037,31 @@ pub fn virt_to_phys(virt: usize) -> Result<usize, xous_kernel::Error> {
     Ok((l0_pt.entries[vpn0] >> 10) << 12)
 }
 
-#[allow(dead_code)]
-pub fn virt_to_phys_pid(_pid: PID, _virt: usize) -> Result<usize, xous_kernel::Error> {
-    todo!("virt_to_phys_pid is not yet implemented for riscv");
+pub fn virt_to_phys_pid(pid: PID, virt: usize) -> Result<usize, xous_kernel::Error> {
+    use crate::services::SystemServices;
+
+    let current_pid = SystemServices::with(|ss| ss.current_pid());
+
+    /// Ensures switching back to the source memory space whenever this function returns
+    /// in successful and error cases
+    struct SwitchBackGuard(PID);
+    impl Drop for SwitchBackGuard {
+        fn drop(&mut self) {
+            SystemServices::with(|ss| {
+                let p = ss.get_process(self.0).expect("current process");
+                p.mapping.activate().ok();
+            });
+        }
+    }
+
+    let _guard = SwitchBackGuard(current_pid);
+
+    SystemServices::with(|ss| {
+        let target_process = ss.get_process(pid).or_else(|_| Err(xous_kernel::Error::InvalidPID))?;
+        target_process.mapping.activate().or_else(|_| Err(xous_kernel::Error::InvalidPID))?;
+
+        virt_to_phys(virt)
+    })
 }
 
 pub fn ensure_page_exists_inner(address: usize) -> Result<usize, xous_kernel::Error> {
