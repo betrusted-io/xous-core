@@ -727,6 +727,29 @@ impl<'a> ShellCmdApi<'a> for Test {
                 });
                 write!(ret, "Starting suspend/resume stress test. Hard reboot required to exit.").unwrap();
             }
+            #[cfg(feature = "qa-test")]
+            "pt0map" => {
+                // This test will print out the L0 page table mapping on older, unpatched versions of the
+                // kernel. Converting the flags from R to R|W would transitively allow a
+                // process to rewrite its page tables which can then lead to all sorts of
+                // chaos.
+                //
+                // On patched kernels, this test should return a BadAddress violation
+                let result = xous::map_memory(
+                    None,
+                    xous::MemoryAddress::new(0xfeff_f000),
+                    0x0040_2000,
+                    xous::MemoryFlags::R,
+                );
+                log::info!("Result: {:x?}", result);
+                if let Ok(m) = result {
+                    log::info!("L0 PT:");
+                    let ms: &[u8] = unsafe { m.as_slice() };
+                    for (i, chunk) in ms[0x40_1000..0x40_1200].chunks(16).enumerate() {
+                        log::info!("{:04x}: {:02x?}", i * 16, chunk);
+                    }
+                }
+            }
             _ => {
                 write!(ret, "{}", helpstring).unwrap();
             }
