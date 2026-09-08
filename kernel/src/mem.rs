@@ -529,11 +529,16 @@ impl MemoryManager {
         }
 
         let mut mm = MemoryMapping::current();
-        for virt in (virt..(virt + size)).step_by(PAGE_SIZE) {
-            // FIXME: Un-reserve addresses if we encounter an error here
-            mm.reserve_address(self, virt, flags)?;
+        for addr in (virt..(virt + size)).step_by(PAGE_SIZE) {
+            if let Err(e) = mm.reserve_address(self, addr, flags) {
+                // Roll back the prefix we already reserved.
+                for undo in (virt..addr).step_by(PAGE_SIZE) {
+                    mm.unreserve_address(undo).expect("Internal error: couldn't unwind failed reservation");
+                }
+                return Err(e);
+            }
         }
-        unsafe { xous_kernel::MemoryRange::new(virt_ptr as usize, size) }
+        unsafe { xous_kernel::MemoryRange::new(virt as usize, size) }
     }
 
     /// Attempt to allocate a single page from the default section.
@@ -585,6 +590,27 @@ impl MemoryManager {
         (phys as usize) >= self.ram_start && (phys as usize) < self.ram_start + self.ram_size
     }
 
+    /// This test is needed because peripheral memory is unmappable, but peripherals are not.
+    /// The characteristic of peripheral memory is that it is:
+    ///   - not in the allocation pool for stack/heap RAM
+    ///   - primarily used for I/O buffers
+    ///   - in an isolated address space
+    ///   - multi-purpose in nature (i.e., not a dedicated frame buffer that would only have one sensible
+    ///     driver mapping)
+    /// The last point - the fact that the memory could have multiple purposes - is the reason that
+    /// drives the need to potentially unmap it, as it may need to be handed off between drivers
+    /// that are mutually exclusive in use.
+    ///
+    /// Peripheral memory currently only exists on the bao1x target.
+    pub fn is_peripheral_ram(&self, phys: usize) -> bool {
+        #[cfg(feature = "bao1x")]
+        let ret = phys >= utralib::HW_IFRAM0_MEM
+            && phys < utralib::HW_IFRAM0_MEM + utralib::HW_IFRAM0_MEM_LEN + utralib::HW_IFRAM1_MEM_LEN;
+        #[cfg(not(feature = "bao1x"))]
+        let ret = false;
+        ret
+    }
+
     #[cfg(feature = "memmap-flash")]
     pub fn is_mapped_flash(&self, virt: *mut u8) -> bool {
         // true if the address starts with the bitmask of the virtual start of the MMAP region
@@ -624,8 +650,12 @@ impl MemoryManager {
         #[cfg(baremetal)]
         if phys == 0
             && (flags & MemoryFlags::VIRT == MemoryFlags::VIRT)
-            && ((virt_ptr as usize & MMAP_VIRT_BASE) == MMAP_VIRT_BASE)
+            && ((virt_ptr as usize & 0xF000_0000) == MMAP_VIRT_BASE)
         {
+            // only the range from 0xB000_0000 - 0xBFFF_FFFF is reserved for this purpose
+            if (virt_ptr as usize).saturating_add(size) & 0xF000_0000 != MMAP_VIRT_BASE {
+                return Err(xous_kernel::Error::BadAddress);
+            }
             let mut mm = MemoryMapping::current();
             // round down any virtual address to the next page
             let start = virt_ptr as usize & !(PAGE_SIZE - 1);
@@ -885,6 +915,8 @@ impl MemoryManager {
             owner_addr: &mut Option<PID>,
             pid: PID,
             action: ClaimReleaseMove,
+            allow_alias: bool,
+            addr: usize,
         ) -> Result<(), xous_kernel::Error> {
             if let Some(current_pid) = *owner_addr {
                 if current_pid != pid {
@@ -906,7 +938,33 @@ impl MemoryManager {
                 }
             }
             match action {
-                ClaimReleaseMove::Claim | ClaimReleaseMove::Move(_) => {
+                ClaimReleaseMove::Claim => {
+                    if allow_alias {
+                        if let Some(previous_owner) = owner_addr {
+                            if previous_owner.get() == pid.get() {
+                                // only allow aliases within the same process
+                                println!(
+                                    "WARN: aliasing physical address {:x} {:?} (requester: {:?})",
+                                    addr, owner_addr, pid
+                                );
+                            } else {
+                                return Err(xous_kernel::Error::MemoryInUse);
+                            }
+                        }
+                        *owner_addr = Some(pid);
+                    } else {
+                        if owner_addr.is_none() {
+                            *owner_addr = Some(pid);
+                        } else {
+                            println!(
+                                "ERR: physical address {:x} already used by {:?} (requester: {:?})",
+                                addr, owner_addr, pid
+                            );
+                            return Err(xous_kernel::Error::MemoryInUse);
+                        }
+                    }
+                }
+                ClaimReleaseMove::Move(_) => {
                     *owner_addr = Some(pid);
                 }
                 ClaimReleaseMove::Release => {
@@ -943,7 +1001,21 @@ impl MemoryManager {
                 }
             }
             match action {
-                ClaimReleaseMove::Claim | ClaimReleaseMove::Move(_) => {
+                ClaimReleaseMove::Claim => {
+                    if owner_addr.is_none() {
+                        unsafe { owner_addr.update(Some(pid), Some(addr)) };
+                    } else {
+                        // even self-claims should be denied
+                        println!(
+                            "ERR: swap claim already in use by {:x}({:?}) (requester: {:?})",
+                            owner_addr.get_raw_vpn(),
+                            owner_addr.get_pid(),
+                            pid
+                        );
+                        return Err(xous_kernel::Error::MemoryInUse);
+                    }
+                }
+                ClaimReleaseMove::Move(_) => {
                     unsafe { owner_addr.update(Some(pid), Some(addr)) };
                 }
                 ClaimReleaseMove::Release => {
@@ -962,10 +1034,10 @@ impl MemoryManager {
 
         let mut offset = 0;
         // Happy path: The address is in main RAM
-        if addr >= self.ram_start && addr < self.ram_start + self.ram_size {
+        if self.is_main_memory(addr as *mut u8) {
             offset += (addr - self.ram_start) / PAGE_SIZE;
             #[cfg(not(feature = "swap"))]
-            return unsafe { action_inner(&mut MEMORY_ALLOCATIONS[offset], pid, action) };
+            return unsafe { action_inner(&mut MEMORY_ALLOCATIONS[offset], pid, action, false, addr) };
             #[cfg(feature = "swap")]
             return unsafe { action_inner_tracking(&mut MEMORY_ALLOCATIONS[offset], pid, action, addr) };
         }
@@ -996,7 +1068,14 @@ impl MemoryManager {
                     // -------------------------------
 
                     offset += (addr - (region.mem_start as usize)) / PAGE_SIZE;
-                    return action_inner(&mut EXTRA_ALLOCATIONS[offset], pid, action);
+                    if self.is_peripheral_ram(offset) {
+                        // don't allow aliasing of peripheral RAM, because peripheral RAM can be unmapped
+                        return action_inner(&mut EXTRA_ALLOCATIONS[offset], pid, action, false, addr);
+                    } else {
+                        // aliasing is allowed, however, unmapping is NOT allowed. This allows us to not have
+                        // to do reference counting to avoid unmap races
+                        return action_inner(&mut EXTRA_ALLOCATIONS[offset], pid, action, true, addr);
+                    }
                 }
                 offset += region.mem_size as usize / PAGE_SIZE;
             }
