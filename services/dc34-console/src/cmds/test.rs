@@ -9,6 +9,7 @@ use crate::{CommonEnv, ShellCmdApi};
 #[derive(Debug)]
 pub struct Test {
     pwr_mgr: xous::CID,
+    keystore: keystore::Keystore,
     #[cfg(feature = "qa-test")]
     mutation_rate: u8,
 }
@@ -17,6 +18,7 @@ impl Test {
         let xns = xous_names::XousNames::new().unwrap();
         Self {
             pwr_mgr: xns.request_connection_blocking(POWER_MANAGER_SERVER).unwrap(),
+            keystore: keystore::Keystore::new(&xns),
             #[cfg(feature = "qa-test")]
             mutation_rate: 1,
         }
@@ -41,15 +43,14 @@ impl<'a> ShellCmdApi<'a> for Test {
 
         match cmd.as_str() {
             "bootwait" => {
-                let keystore = keystore::Keystore::new(&_env.xns);
                 if args.len() != 1 {
                     write!(ret, "bootwait [check | enable | disable]").ok();
                     return Ok(Some(ret));
                 }
                 if args[0] == "check" {
-                    write!(ret, "bootwait is {:?}", keystore.bootwait(None).unwrap()).ok();
+                    write!(ret, "bootwait is {:?}", self.keystore.bootwait(None).unwrap()).ok();
                 } else if args[0] == "enable" {
-                    keystore.bootwait(Some(true)).unwrap();
+                    self.keystore.bootwait(Some(true)).unwrap();
                     write!(ret, "bootwait enabled").ok();
                     log::info!(
                         "{}BOOTWAIT.ENABLED,{}",
@@ -57,7 +58,7 @@ impl<'a> ShellCmdApi<'a> for Test {
                         bao1x_hal::board::BOOKEND_END
                     );
                 } else if args[0] == "disable" {
-                    keystore.bootwait(Some(false)).unwrap();
+                    self.keystore.bootwait(Some(false)).unwrap();
                     write!(ret, "bootwait disabled").ok();
                 } else {
                     write!(ret, "bootwait [check | enable | disable]").ok();
@@ -674,12 +675,23 @@ impl<'a> ShellCmdApi<'a> for Test {
             }
             #[cfg(feature = "owc-test")]
             "owc" => {
-                let keystore = keystore::Keystore::new(&_env.xns);
-                log::info!("{:?}", keystore.get_owc_decoded::<bao1x_api::offsets::common::BoardTypeCoding>());
+                log::info!(
+                    "{:?}",
+                    self.keystore.get_owc_decoded::<bao1x_api::offsets::common::BoardTypeCoding>()
+                );
 
-                log::info!("{:?}", keystore.get_owc_decoded::<bao1x_api::offsets::common::BootWaitCoding>());
-                log::info!("{:?}", keystore.inc_owc_coded::<bao1x_api::offsets::common::BootWaitCoding>());
-                log::info!("{:?}", keystore.get_owc_decoded::<bao1x_api::offsets::common::BootWaitCoding>());
+                log::info!(
+                    "{:?}",
+                    self.keystore.get_owc_decoded::<bao1x_api::offsets::common::BootWaitCoding>()
+                );
+                log::info!(
+                    "{:?}",
+                    self.keystore.inc_owc_coded::<bao1x_api::offsets::common::BootWaitCoding>()
+                );
+                log::info!(
+                    "{:?}",
+                    self.keystore.get_owc_decoded::<bao1x_api::offsets::common::BootWaitCoding>()
+                );
             }
             #[cfg(feature = "wfi-stress-test")]
             "wfistress" => {

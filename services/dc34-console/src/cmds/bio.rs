@@ -74,6 +74,7 @@ impl BioLoader {
             use dc34_api::{BadgeType, DC34_BADGE, DC34_TOUR, FACTORY_ONE_WAY};
 
             let xns = xous_names::XousNames::new().unwrap();
+            // note: this fails now that keystore connection count is locked down
             let keystore = keystore::Keystore::new(&xns);
             if keystore.get_owc(FACTORY_ONE_WAY).unwrap_or(1) == 0 {
                 let pddb = pddb::Pddb::new();
@@ -101,6 +102,7 @@ impl BioLoader {
             use dc34_api::FACTORY_ONE_WAY;
 
             let xns = xous_names::XousNames::new().unwrap();
+            // note: this fails now that keystore connection count is locked down
             let keystore = keystore::Keystore::new(&xns);
             if keystore.get_owc(FACTORY_ONE_WAY).unwrap_or(1) == 0 {
                 let pddb = pddb::Pddb::new();
