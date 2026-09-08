@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2020 Sean Cross <sean@xobs.io>
 // SPDX-License-Identifier: Apache-2.0
 
-use core::sync::atomic::{AtomicU8, AtomicUsize, Ordering::Relaxed};
+use core::sync::atomic::{AtomicBool, AtomicU8, AtomicUsize, Ordering::Relaxed};
 
 use xous_kernel::arch::PAGE_SIZE;
 use xous_kernel::*;
@@ -38,6 +38,8 @@ static mut SWITCHTO_CALLER: Option<(PID, TID)> = None;
 /// return control to the Client.
 static ORIGINAL_PID: AtomicU8 = AtomicU8::new(2);
 static ORIGINAL_TID: AtomicUsize = AtomicUsize::new(2);
+
+static NS_TOFU: AtomicBool = AtomicBool::new(false);
 
 #[derive(PartialEq)]
 enum ExecutionType {
@@ -944,6 +946,20 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
             ss.create_process(process_init).map(xous_kernel::Result::NewProcess)
         }),
         SysCall::CreateServerWithAddress(name) => SystemServices::with_mut(|ss| {
+            const NS_SID: SID = SID::from_u32(
+                u32::from_le_bytes(*b"xous"),
+                u32::from_le_bytes(*b"-nam"),
+                u32::from_le_bytes(*b"e-se"),
+                u32::from_le_bytes(*b"rver"),
+            );
+            // This counts on the `name==NS_SID` short-circuiting the NS_TOFU call. Short-circuit evaluation
+            // is the specified behavior in Rust, so this should always be correct.
+            if name == NS_SID && NS_TOFU.swap(true, Relaxed) {
+                return Err(xous_kernel::Error::ServerExists);
+            }
+            // note: if create_server_with_address() fails on the legitimate boot, it fails-closed forever.
+            // this should never happen - on early boot there is no reason for server creation to fail -
+            // so this is a deliberate choice to simplify the check logic.
             ss.create_server_with_address(pid, name, true)
                 .map(|(sid, cid)| xous_kernel::Result::NewServerID(sid, cid))
         }),
