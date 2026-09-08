@@ -482,6 +482,20 @@ impl SystemServices {
             if entry.state != ProcessState::Free {
                 continue;
             }
+            #[cfg(feature = "swap")]
+            if idx == xous_kernel::SWAPPER_PID as usize {
+                // don't allow re-allocation of the swapper PID. It has special privileges, if it crashes,
+                // it shall remain empty forever.
+                continue;
+            }
+            #[cfg(feature = "bao1x")]
+            if idx == 3 {
+                // don't allow re-allocation of PID 3 on all Baochip-1x targets. This is because PID 3 is the
+                // very special keystore process, which has elevated privileges in hardware to
+                // access secret data slots. This seals off an attack where an adversary crashes PID 3 and
+                // then tries to start a new process in its place.
+                continue;
+            }
             entry_idx = Some(idx);
             new_pid = Some(pid_from_usize(idx + 1)?);
             entry.pid = new_pid.unwrap();
