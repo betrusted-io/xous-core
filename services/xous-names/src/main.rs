@@ -506,6 +506,13 @@ fn main() -> ! {
                 unimplemented!("AuthenticatedLookup not yet implemented");
             }
             Some(api::Opcode::TrustedInitDone) => {
+                #[cfg(feature = "debug-xns-init")]
+                for (server, info) in &name_table.map {
+                    if let Ok(name) = server.as_str() {
+                        log::info!("{:?} : {:?}", name, info.current_conns);
+                    }
+                }
+
                 if name_table.trusted_init_done() {
                     xous::return_scalar(msg.sender, 1).expect("couldn't return trusted_init_done");
                 } else {
