@@ -691,28 +691,28 @@ fn boot_sequence(
 
         // this can help debug XPT allocation issues
         #[cfg(feature = "verbose-debug")]
-        println!(
-            "RPT len: {:x} / XPT len: {:x}",
-            cfg.runtime_page_tracker.len(),
-            cfg.extra_page_tracker.len()
-        );
-        #[cfg(feature = "verbose-debug")]
-        fn xpt_index_to_addr(cfg: &BootConfig, idx: usize) -> Option<usize> {
-            let mut offset = 0;
-            for region in cfg.regions.iter() {
-                let pages_in_region = (region.length as usize + PAGE_SIZE - 1) / PAGE_SIZE;
-                if idx < offset + pages_in_region {
-                    let within = idx - offset;
-                    return Some(region.start as usize + within * PAGE_SIZE);
+        {
+            println!(
+                "RPT len: {:x} / XPT len: {:x}",
+                cfg.runtime_page_tracker.len(),
+                cfg.extra_page_tracker.len()
+            );
+            fn xpt_index_to_addr(cfg: &BootConfig, idx: usize) -> Option<usize> {
+                let mut offset = 0;
+                for region in cfg.regions.iter() {
+                    let pages_in_region = (region.length as usize + PAGE_SIZE - 1) / PAGE_SIZE;
+                    if idx < offset + pages_in_region {
+                        let within = idx - offset;
+                        return Some(region.start as usize + within * PAGE_SIZE);
+                    }
+                    offset += pages_in_region;
                 }
-                offset += pages_in_region;
+                None
             }
-            None
-        }
-        #[cfg(feature = "verbose-debug")]
-        for (i, chunk) in cfg.extra_page_tracker.chunks(16).enumerate() {
-            if !chunk.iter().all(|&x| x == 0) {
-                println!("{:08x} ({:x?}): {:x?}", i * 16, xpt_index_to_addr(&cfg, i * 16), chunk);
+            for (i, chunk) in cfg.extra_page_tracker.chunks(16).enumerate() {
+                if !chunk.iter().all(|&x| x == 0) {
+                    println!("{:08x} ({:x?}): {:x?}", i * 16, xpt_index_to_addr(&cfg, i * 16), chunk);
+                }
             }
         }
 
