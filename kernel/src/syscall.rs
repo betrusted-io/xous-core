@@ -1075,10 +1075,15 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
         }
         #[cfg(feature = "v2p")]
         SysCall::VirtToPhysPid(pid, vaddr) => {
-            let phys_addr = crate::arch::mem::virt_to_phys_pid(pid, vaddr as usize);
-            match phys_addr {
-                Ok(pa) => Ok(xous_kernel::Result::Scalar1(pa)),
-                Err(_) => Err(xous_kernel::Error::BadAddress),
+            if vaddr < USER_AREA_END {
+                let phys_addr = crate::arch::mem::virt_to_phys_pid(pid, vaddr as usize);
+                match phys_addr {
+                    Ok(pa) => Ok(xous_kernel::Result::Scalar1(pa)),
+                    Err(_) => Err(xous_kernel::Error::BadAddress),
+                }
+            } else {
+                // don't allow discovery of kernel or page tables
+                Err(xous_kernel::Error::BadAddress)
             }
         }
         #[cfg(feature = "swap")]
