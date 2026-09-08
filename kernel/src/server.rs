@@ -898,6 +898,10 @@ impl Server {
         self.queue.iter().any(|e| *e == QueuedMessage::Empty)
     }
 
+    pub fn has_queue_capacity_scalar(&self) -> bool {
+        self.tail_generation != self.head_generation.wrapping_sub(1)
+    }
+
     /// Add the given message to this server's queue.
     ///
     /// # Errors

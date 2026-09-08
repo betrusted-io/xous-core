@@ -103,23 +103,43 @@ fn send_message(pid: PID, tid: TID, cid: CID, message: Message) -> SysCallResult
         let blocking = message.is_blocking();
 
         // --- decide delivery path BEFORE touching memory ---
+        let has_memory =
+            matches!(&message, Message::Move(_) | Message::MutableBorrow(_) | Message::Borrow(_));
+
         let (available_tid, can_deliver) = {
             let server_pid = ss.server_from_sidx(sidx).expect("server couldn't be located").pid;
-            let current_pid = ss.current_pid();
-
-            // Switch to the server's address space so we can read the queue array
-            let server_process = ss.get_process(server_pid)?;
-            server_process.mapping.activate().unwrap();
 
             let server = ss.server_from_sidx_mut(sidx).expect("server couldn't be located");
             let tid = server.take_available_thread();
-            let has_capacity = tid.is_some() || server.has_queue_capacity();
 
-            // Switch back to the client's address space
-            let current_process = ss.get_process(current_pid).expect("couldn't get client process");
-            current_process.mapping.activate().unwrap();
+            if tid.is_some() {
+                // A thread is waiting - delivery is guaranteed regardless of queue state.
+                // No need to check queue at all, saves an address-space switch.
+                (tid, true)
+            } else if has_memory {
+                // Memory message: we MUST confirm the queue can accept this before
+                // transferring. This requires reading the queue array, which means
+                // switching to the server's page table.
+                let current_pid = ss.current_pid();
+                let server_process = ss.get_process(server_pid)?;
+                server_process.mapping.activate().unwrap();
 
-            (tid, has_capacity)
+                let server = ss.server_from_sidx_mut(sidx).expect("server couldn't be located");
+                let capacity = server.has_queue_capacity();
+
+                let current_process = ss.get_process(current_pid).expect("client process");
+                current_process.mapping.activate().unwrap();
+
+                (None, capacity)
+            } else {
+                // Scalar / BlockingScalar: no memory to protect. Just check the
+                // generation counters (lives in the Server struct, kernel static).
+                // If this says "full," we bail early (saves the switch that
+                // queue_server_message would have done). If it says "not full",
+                // we proceed and let queue_server_message do the real check.
+                let server = ss.server_from_sidx_mut(sidx).expect("server couldn't be located");
+                (None, server.has_queue_capacity_scalar())
+            }
         };
 
         if !can_deliver {
