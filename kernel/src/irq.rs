@@ -77,7 +77,7 @@ pub fn interrupt_claim(
     // Unsafe is required since we're accessing a static mut array.
     // However, we disable interrupts to prevent contention on this array.
     unsafe {
-        if irq > (&mut *(&raw mut IRQ_HANDLERS)).len() {
+        if irq >= (&mut *(&raw mut IRQ_HANDLERS)).len() {
             Err(xous_kernel::Error::InterruptNotFound)
         } else if (&mut *(&raw mut IRQ_HANDLERS))[irq].is_some() {
             Err(xous_kernel::Error::InterruptInUse)

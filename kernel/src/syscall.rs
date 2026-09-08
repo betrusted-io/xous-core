@@ -800,8 +800,9 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
             if cfg!(baremetal) && virt & 0xfff != 0 {
                 return Err(xous_kernel::Error::BadAlignment);
             }
-            if virt >= USER_AREA_END || virt.saturating_add(size) >= USER_AREA_END {
-                // don't allow processes to unmap kernel or page table memory
+            if cfg!(baremetal) && (virt >= USER_AREA_END || virt.saturating_add(size) >= USER_AREA_END) {
+                // don't allow processes to unmap kernel or page table memory; however, these addresses
+                // only have meaning on actual hardware (baremetal), and not in hosted mode.
                 return Err(xous_kernel::Error::BadAddress);
             }
             for addr in (virt..(virt + size)).step_by(PAGE_SIZE) {
@@ -860,7 +861,7 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
             }
             let (start, length, end) = ArchProcess::with_inner_mut(|process_inner| {
                 // Don't allow decreasing the heap beyond the current allocation
-                if delta > process_inner.mem_heap_size {
+                if delta >= process_inner.mem_heap_size {
                     return Err(xous_kernel::Error::OutOfMemory);
                 }
 
@@ -1043,6 +1044,9 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
             SystemServices::with_mut(|ss| ss.destroy_server(pid, sid).and(Ok(xous_kernel::Result::Ok)))
         }
         SysCall::JoinThread(other_tid) => {
+            if other_tid >= crate::arch::process::MAX_THREAD {
+                return Err(xous_kernel::Error::ThreadNotAvailable);
+            }
             SystemServices::with_mut(|ss| ss.join_thread(pid, tid, other_tid)).map(|ret| {
                 // Successfully joining a thread causes this thread to sleep while the parent process
                 // is resumed. This is the same as a `Yield`

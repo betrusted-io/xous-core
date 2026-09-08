@@ -329,26 +329,23 @@ pub extern "C" fn trap_handler(
         }
 
         RiscvException::InstructionPageFault(RETURN_FROM_EXCEPTION_HANDLER, _offset) => {
-            // This address indicates the exception handler
-            SystemServices::with_mut(|ss| {
-                ss.finish_exception_handler_and_resume(pid).expect("unable to finish exception handler")
-            });
-
-            // TODO: Handle the case where this happens in an ISR
-            // finish_isr();
-
-            // Resume the new thread within the same process.
-            ArchProcess::with_current_mut(|p| {
-                // Adjust the program counter by the amount returned by the exception handler
-                let pc_adjust = a0 as isize;
-                if pc_adjust < 0 {
-                    p.current_thread_mut().sepc -= pc_adjust.abs() as usize;
-                } else {
-                    p.current_thread_mut().sepc += pc_adjust.abs() as usize;
-                }
-
-                crate::arch::syscall::resume(pid.get() == 1, p.current_thread())
-            });
+            // A process can branch here on purpose without ever having entered an
+            // exception handler. Only perform the resume dance if the process was
+            // genuinely in an Exception state; otherwise fall through to the
+            // unhandled-fault path, which terminates just this process.
+            if SystemServices::with_mut(|ss| ss.finish_exception_handler_and_resume(pid)).is_ok() {
+                ArchProcess::with_current_mut(|p| {
+                    let pc_adjust = a0 as isize;
+                    if pc_adjust < 0 {
+                        p.current_thread_mut().sepc -= pc_adjust.abs() as usize;
+                    } else {
+                        p.current_thread_mut().sepc += pc_adjust.abs() as usize;
+                    }
+                    crate::arch::syscall::resume(pid.get() == 1, p.current_thread());
+                });
+            }
+            // On Err: do nothing here, let control reach the bottom-of-handler
+            // containment that calls terminate_process(pid).
         }
 
         RiscvException::InstructionPageFault(EXIT_THREAD, _offset) => {
@@ -385,48 +382,52 @@ pub extern "C" fn trap_handler(
                 println!("IPF RFS from PID{}, hw{}, offset {:x}", pid.get(), hardware_pid, _offset);
             } */
             // Cleanup after the swapper
-            let response = Swap::with_mut(|s|
-                // safety: this is safe because on return from swapper, we're in the swapper's memory space.
-                unsafe { s.exit_blocking_call() })
-            .unwrap_or_else(xous_kernel::Result::Error);
+            if crate::arch::process::current_pid().get() != xous_kernel::SWAPPER_PID {
+                // Not the swapper - illegal branch. Fall through to containment.
+            } else {
+                let response = Swap::with_mut(|s|
+                    // safety: this is safe because on return from swapper, we're in the swapper's memory space.
+                    unsafe { s.exit_blocking_call() })
+                .unwrap_or_else(xous_kernel::Result::Error);
 
-            #[cfg(feature = "debug-swap-verbose")]
-            {
-                // debugging
-                SystemServices::with(|ss| {
-                    let hardware_pid = (riscv::register::satp::read().bits() >> 22) & ((1 << 9) - 1);
-                    let current = ss.get_process(current_pid()).unwrap();
-                    let state = current.state();
-                    ArchProcess::with_current(|p| {
-                        println!(
-                            "Swapper userspace handler returning to PID{}(hw{})-{:?} with result {:?}; tid {}, sepc {:x}\n{:x?}",
-                            current.pid.get(),
-                            hardware_pid,
-                            state,
-                            response,
-                            p.current_tid(),
-                            p.current_thread().sepc,
-                            p.current_thread().registers,
-                        );
+                #[cfg(feature = "debug-swap-verbose")]
+                {
+                    // debugging
+                    SystemServices::with(|ss| {
+                        let hardware_pid = (riscv::register::satp::read().bits() >> 22) & ((1 << 9) - 1);
+                        let current = ss.get_process(current_pid()).unwrap();
+                        let state = current.state();
+                        ArchProcess::with_current(|p| {
+                            println!(
+                                "Swapper userspace handler returning to PID{}(hw{})-{:?} with result {:?}; tid {}, sepc {:x}\n{:x?}",
+                                current.pid.get(),
+                                hardware_pid,
+                                state,
+                                response,
+                                p.current_tid(),
+                                p.current_thread().sepc,
+                                p.current_thread().registers,
+                            );
+                        });
                     });
+                }
+
+                ArchProcess::with_current_mut(|p| {
+                    let thread = p.current_thread();
+                    #[cfg(feature = "debug-swap-verbose")]
+                    println!(
+                        "Swapper syscall returning to address {:08x} in pid {}.{}",
+                        thread.sepc,
+                        p.pid().get(),
+                        p.current_tid(),
+                    );
+                    // this is necessary because ClearMemoryNow diverges on this path instead of
+                    // cleaning exiting out of its entry point. Means every thunk out has to check
+                    // this special case, even though it's rare...
+                    Swap::with_mut(|s| s.clearmem_restore_irq());
+                    unsafe { _xous_syscall_return_result(&response, thread) };
                 });
             }
-
-            ArchProcess::with_current_mut(|p| {
-                let thread = p.current_thread();
-                #[cfg(feature = "debug-swap-verbose")]
-                println!(
-                    "Swapper syscall returning to address {:08x} in pid {}.{}",
-                    thread.sepc,
-                    p.pid().get(),
-                    p.current_tid(),
-                );
-                // this is necessary because ClearMemoryNow diverges on this path instead of
-                // cleaning exiting out of its entry point. Means every thunk out has to check
-                // this special case, even though it's rare...
-                Swap::with_mut(|s| s.clearmem_restore_irq());
-                unsafe { _xous_syscall_return_result(&response, thread) };
-            });
         }
 
         // Handle faulted instruction pages, because we can now actually have instruction pages that are
