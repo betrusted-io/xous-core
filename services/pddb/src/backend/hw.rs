@@ -70,7 +70,7 @@ const SCD_VERSION: u32 = 2;
 #[cfg(all(feature = "pddbtest", feature = "autobasis"))]
 pub const BASIS_TEST_ROOTNAME: &'static str = "test";
 
-#[cfg(all(feature = "gen2", target_os = "xous"))]
+#[cfg(all(feature = "gen2"))]
 const DOMAIN_SEPERATOR: &'static str = "PDDB's key";
 
 #[derive(Zeroize)]
