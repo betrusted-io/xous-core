@@ -107,38 +107,71 @@ fn send_message(pid: PID, tid: TID, cid: CID, message: Message) -> SysCallResult
             matches!(&message, Message::Move(_) | Message::MutableBorrow(_) | Message::Borrow(_));
 
         let (available_tid, can_deliver) = {
-            let server_pid = ss.server_from_sidx(sidx).expect("server couldn't be located").pid;
-
-            let server = ss.server_from_sidx_mut(sidx).expect("server couldn't be located");
-            let tid = server.take_available_thread();
-
-            if tid.is_some() {
-                // A thread is waiting - delivery is guaranteed regardless of queue state.
-                // No need to check queue at all, saves an address-space switch.
-                (tid, true)
-            } else if has_memory {
-                // Memory message: we MUST confirm the queue can accept this before
-                // transferring. This requires reading the queue array, which means
-                // switching to the server's page table.
-                let current_pid = ss.current_pid();
-                let server_process = ss.get_process(server_pid)?;
-                server_process.mapping.activate().unwrap();
-
+            let (server_pid, avail_tid) = {
                 let server = ss.server_from_sidx_mut(sidx).expect("server couldn't be located");
-                let capacity = server.has_queue_capacity();
+                let server_pid = server.pid;
 
-                let current_process = ss.get_process(current_pid).expect("client process");
-                current_process.mapping.activate().unwrap();
+                let avail_tid = server.take_available_thread();
+                (server_pid, avail_tid)
+            };
 
-                (None, capacity)
+            // A delivered message consumes at most one slot of the server's
+            // queue:
+            //   * no available thread: the message itself is enqueued by queue_message() in the "queue it"
+            //     path below,
+            //   * available thread + blocking: queue_response() enqueues a WaitingReturn* token -- the
+            //     message goes to the thread directly, but the response bookkeeping still occupies a queue
+            //     slot,
+            //   * available thread + non-blocking: direct handoff, no slot.
+            // So an available thread only exempts *non-blocking* sends from
+            // the capacity probe. Erring toward "full" is cheap: the
+            // dispatcher retries ServerQueueFull once capacity frees. Erring
+            // toward "not full" is unrecoverable for memory messages, because
+            // send_memory() has already moved the client's pages by the time
+            // the enqueue fails, and the ServerQueueFull retry would move
+            // them a second time against a now-empty client mapping. Memory
+            // messages therefore run the authoritative predicate before any
+            // transfer: has_queue_capacity() is exactly queue_message()'s
+            // acceptance rule, and strictly stricter than queue_response()'s.
+            let needs_slot = avail_tid.is_none() || blocking;
+
+            if has_memory {
+                let capacity = if needs_slot {
+                    // The queue array lives in the server's address space.
+                    let current_pid = ss.current_pid();
+                    let server_process = match ss.get_process(server_pid) {
+                        Ok(v) => v,
+                        Err(e) => {
+                            // Give the thread back before returning the error
+                            if let Some(st) = avail_tid {
+                                ss.server_from_sidx_mut(sidx)
+                                    .expect("server couldn't be located")
+                                    .return_available_thread(st);
+                            }
+                            return Err(e);
+                        }
+                    };
+                    server_process.mapping.activate().unwrap();
+
+                    let server = ss.server_from_sidx_mut(sidx).expect("server couldn't be located");
+                    let capacity = server.has_queue_capacity();
+
+                    let current_process = ss.get_process(current_pid).expect("client process");
+                    current_process.mapping.activate().unwrap();
+                    capacity
+                } else {
+                    true
+                };
+                (avail_tid, capacity)
             } else {
-                // Scalar / BlockingScalar: no memory to protect. Just check the
-                // generation counters (lives in the Server struct, kernel static).
-                // If this says "full," we bail early (saves the switch that
-                // queue_server_message would have done). If it says "not full",
-                // we proceed and let queue_server_message do the real check.
+                // Scalar / BlockingScalar: no memory to protect, and the
+                // generation counters live in the kernel-static Server
+                // struct, so this costs no address-space switch. It can miss
+                // a queue full of WaitingReturn* tokens (tokens never move
+                // the generations), but a late ServerQueueFull there merely
+                // retries an idempotent syscall.
                 let server = ss.server_from_sidx_mut(sidx).expect("server couldn't be located");
-                (None, server.has_queue_capacity_scalar())
+                (avail_tid, !needs_slot || server.has_queue_capacity_scalar())
             }
         };
 
@@ -316,6 +349,14 @@ fn send_message(pid: PID, tid: TID, cid: CID, message: Message) -> SysCallResult
                         .map(|_| Ok(xous_kernel::Result::ResumeProcess))
                         .unwrap_or(Err(xous_kernel::Error::ProcessNotFound));
 
+                    if result.is_err() {
+                        if let Some(st) = available_tid {
+                            ss.server_from_sidx_mut(sidx)
+                                .expect("server couldn't be located")
+                                .return_available_thread(st);
+                        }
+                    }
+
                     // Keep track of which process owned the quantum. This ensures that the next
                     // thread in sequence gets to run when this process is activated again.
                     ss.set_last_thread(
@@ -347,7 +388,14 @@ fn send_message(pid: PID, tid: TID, cid: CID, message: Message) -> SysCallResult
                             let envelope = MessageEnvelope { sender: sender.into(), body: message };
                             Ok(xous_kernel::Result::MessageEnvelope(envelope))
                         }
-                        _ => Err(xous_kernel::Error::ProcessNotFound),
+                        _ => {
+                            if let Some(st) = available_tid {
+                                ss.server_from_sidx_mut(sidx)
+                                    .expect("server couldn't be located")
+                                    .return_available_thread(st);
+                            }
+                            Err(xous_kernel::Error::ProcessNotFound)
+                        }
                     }
                 }
             } else if blocking && !cfg!(baremetal) {
