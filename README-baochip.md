@@ -27,16 +27,36 @@ Regardless of the board, the `bao1x` chip comes from the factory programmed with
 - `PC13` and `PF5` are both briefly driven to 0 and then 1 before USB enumeration. A USB switch such as the EMS4000 will ensure "clean" enumeration as the USB PHY on Baochip has no way to definitively enter the SE0 state on its own. After exiting the bootloader, the pin not corresponding to the board type is set to an input (`PC13` is dabao, `PF5` is baosec).
 - `PB14` and `PB13` are `TX` and `RX` pairs of a serial console, set to 1,000,000 baud 8N1.
 
-### Updating Boot1
+### Updating Boot1 - Xous v0.10.2 and later
 
-`boot1` is responsible for managing application loading. As such, updating `boot1` requires an intermediate step, because the actively executing program cannot overwrite its contents safely. The overview for updating `boot1` is as follows:
+`boot1` is responsible for managing application loading. As such, updating `boot1` requires overwriting the current application code on the device with an updater program. Thus, before doing an update of `boot1`, be sure you have a copy of your application code to restore functionality. If you don't know where to look for this, the [releases](https://ci.betrusted.io/releases/latest/baochip/) directory is a good place to start.
 
-1. Load `boot1-alt` into the `baremetal` region.
-2. Run `boot1-alt`, thus freeing `boot1` to be updated.
-3. Copy the updated `boot1` record while in the `boot1-alt` environment.
-4. Reboot back into the `boot1` environment.
+#### Applying a Pre-Built Update
 
-#### Detailed Boot1 Update for Dabao Users
+1. Fetch an update ([dabao](https://ci.betrusted.io/releases/latest/baochip/dabao/boot-updater.uf2) [dc34](https://ci.betrusted.io/releases/latest/baochip/dc34-badge/boot-updater.uf2))
+2. Enter `boot1` mode by either holding down PROG (dabao) or holding a key on the device (dc34) while powering on
+3. Plug the chip into a host computer.
+4. Copy the `boot-updater.uf2` file to the mass storage device that appears.
+5. Linux users: type `sync` to actually ensure the file copied
+6. Press either PROG (dabao) or any key on the device (dc34) to execute the update
+7. Wait for the update to run. Should take about 5-10 seconds. dc34 will see a progress display; dabao users with serial cables can monitor progress via the physical serial port on PB13/PB14.
+8. The device will automatically reboot back to `boot1` mode.
+9. Restore your application code by copying all the application .uf2 files to the device. Failing to do this will just cause the device to re-update itself.
+10. If you accidentally trigger a re-update, DO NOT panic and unplug the device while it is updating itself again. This will brick the device. Just let the update run again, it is harmless. If you can't immediately restore the application code, unplug the device while it is at the `boot1` console.
+
+#### Building The Updater
+
+This assumes you have Xous installed and you have the Rust toolchain up and running.
+
+1. Build `boot1`: `cargo xtask bao1x-boot1` (for dabao) or `cargo xtask bao1x-boot1-lite` (for dc34)
+2. Build the updater: `cargo xtask bao1x-boot-updater`. This wraps `boot1` into a script that applies it.
+3. `boot-updater.uf2` will be in `target/riscv32imac-unknown-none-elf/release/`.
+
+If you are doing development and you want a "saving throw" against bricking your board, use `cargo xtask bao1x-boot-updater --loader-feature force-stage` to build the updater. This sets a flag that will force the device to fall back to the updater script and wait for further instructions if `boot1` does not transition to the next run stage.
+
+With `force-stage` turned on, simply booting into `boot1` and then seeing the command line prompt does *not* qualify as a successful boot. The staging flag is cleared only after `boot1` has validated the next program stage and is just about to jump into the validated program.
+
+#### Before v0.10.2 - Detailed Boot1 Update for Dabao Users
 
 [!TIP]
 You can fetch pre-built verions of the .uf2 files from the CI pipeline [here](https://ci.betrusted.io/latest-ci/baochip/bootloader/). Once Baochip hits release status, we'll drop a link for a stable release version here as well.
