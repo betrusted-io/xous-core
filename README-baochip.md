@@ -34,7 +34,7 @@ Regardless of the board, the `bao1x` chip comes from the factory programmed with
 #### Applying a Pre-Built Update
 
 1. Fetch an update ([dabao](https://ci.betrusted.io/releases/latest/baochip/dabao/boot-updater.uf2) [dc34](https://ci.betrusted.io/releases/latest/baochip/dc34-badge/boot-updater.uf2))
-2. Enter `boot1` mode by either holding down PROG (dabao) or holding a key on the device (dc34) while powering on
+2. Enter `boot1` mode by holding a key on the device (dc34) while powering on. Dabaos by default enter `boot1` when plugged in, but if the bootwait setting is toggled, you can force entry by pressing the PROG button while applying power or pressing reset.
 3. Plug the chip into a host computer.
 4. Copy the `boot-updater.uf2` file to the mass storage device that appears.
 5. Linux users: type `sync` to actually ensure the file copied
@@ -56,7 +56,9 @@ If you are doing development and you want a "saving throw" against bricking your
 
 With `force-stage` turned on, simply booting into `boot1` and then seeing the command line prompt does *not* qualify as a successful boot. The staging flag is cleared only after `boot1` has validated the next program stage and is just about to jump into the validated program.
 
-#### Before v0.10.2 - Detailed Boot1 Update for Dabao Users
+#### Before v0.10.2 - Detailed Boot1 Update for Dabao Users (DEPRECATED)
+
+This is historical documentation for people still building on older releases. It will be removed in a few months (2027 sometime).
 
 [!TIP]
 You can fetch pre-built verions of the .uf2 files from the CI pipeline [here](https://ci.betrusted.io/latest-ci/baochip/bootloader/). Once Baochip hits release status, we'll drop a link for a stable release version here as well.
