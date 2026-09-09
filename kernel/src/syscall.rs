@@ -101,45 +101,141 @@ fn send_message(pid: PID, tid: TID, cid: CID, message: Message) -> SysCallResult
         // process. Additionally, determine whether the call is blocking. If
         // so, switch to the server context right away.
         let blocking = message.is_blocking();
+
+        // helper for handling the error-recovery path
+        fn return_thread(ss: &mut SystemServices, sidx: usize, tid: Option<TID>) {
+            if let Some(st) = tid {
+                ss.server_from_sidx_mut(sidx)
+                    .expect("server couldn't be located")
+                    .return_available_thread(st);
+            }
+        }
+
+        // --- decide delivery path BEFORE touching memory ---
+        let has_memory =
+            matches!(&message, Message::Move(_) | Message::MutableBorrow(_) | Message::Borrow(_));
+
+        let (available_tid, can_deliver) = {
+            let (server_pid, avail_tid) = {
+                let server = ss.server_from_sidx_mut(sidx).expect("server couldn't be located");
+                let server_pid = server.pid;
+
+                let avail_tid = server.take_available_thread();
+                (server_pid, avail_tid)
+            };
+
+            // A delivered message consumes at most one slot of the server's
+            // queue:
+            //   * no available thread: the message itself is enqueued by queue_message() in the "queue it"
+            //     path below,
+            //   * available thread + blocking: queue_response() enqueues a WaitingReturn* token -- the
+            //     message goes to the thread directly, but the response bookkeeping still occupies a queue
+            //     slot,
+            //   * available thread + non-blocking: direct handoff, no slot.
+            // So an available thread only exempts *non-blocking* sends from
+            // the capacity probe. Erring toward "full" is cheap: the
+            // dispatcher retries ServerQueueFull once capacity frees. Erring
+            // toward "not full" is unrecoverable for memory messages, because
+            // send_memory() has already moved the client's pages by the time
+            // the enqueue fails, and the ServerQueueFull retry would move
+            // them a second time against a now-empty client mapping. Memory
+            // messages therefore run the authoritative predicate before any
+            // transfer: has_queue_capacity() is exactly queue_message()'s
+            // acceptance rule, and strictly stricter than queue_response()'s.
+            let needs_slot = avail_tid.is_none() || blocking;
+
+            if has_memory {
+                let capacity = if needs_slot {
+                    // The queue array lives in the server's address space.
+                    let current_pid = ss.current_pid();
+                    let server_process = match ss.get_process(server_pid) {
+                        Ok(v) => v,
+                        Err(e) => {
+                            // Give the thread back before returning the error
+                            return_thread(ss, sidx, avail_tid);
+                            return Err(e);
+                        }
+                    };
+                    server_process.mapping.activate().unwrap();
+
+                    let server = ss.server_from_sidx_mut(sidx).expect("server couldn't be located");
+                    let capacity = server.has_queue_capacity();
+
+                    let current_process = ss.get_process(current_pid).expect("client process");
+                    current_process.mapping.activate().unwrap();
+                    capacity
+                } else {
+                    true
+                };
+                (avail_tid, capacity)
+            } else {
+                // Scalar / BlockingScalar: no memory to protect, and the
+                // generation counters live in the kernel-static Server
+                // struct, so this costs no address-space switch. It can miss
+                // a queue full of WaitingReturn* tokens (tokens never move
+                // the generations), but a late ServerQueueFull there merely
+                // retries an idempotent syscall.
+                let server = ss.server_from_sidx_mut(sidx).expect("server couldn't be located");
+                (avail_tid, !needs_slot || server.has_queue_capacity_scalar())
+            }
+        };
+
+        if !can_deliver {
+            return Err(xous_kernel::Error::ServerQueueFull);
+        }
+
+        // --- Memory transfer (now guaranteed to be deliverable) ---
         let message = match message {
             Message::Scalar(_) | Message::BlockingScalar(_) => message,
             Message::Move(msg) => {
-                let new_virt = ss.send_memory(
-                    msg.buf.as_mut_ptr() as *mut usize,
-                    server_pid,
-                    core::ptr::null_mut(),
-                    msg.buf.len(),
-                )?;
+                let new_virt = ss
+                    .send_memory(
+                        msg.buf.as_mut_ptr() as *mut usize,
+                        server_pid,
+                        core::ptr::null_mut(),
+                        msg.buf.len(),
+                    )
+                    .inspect_err(|_| return_thread(ss, sidx, available_tid))?;
                 Message::Move(MemoryMessage {
                     id: msg.id,
-                    buf: unsafe { MemoryRange::new(new_virt as usize, msg.buf.len()) }?,
+                    buf: unsafe { MemoryRange::new(new_virt as usize, msg.buf.len()) }.map_err(|e| {
+                        return_thread(ss, sidx, available_tid);
+                        e
+                    })?,
                     offset: msg.offset,
                     valid: msg.valid,
                 })
             }
             Message::MutableBorrow(msg) => {
-                let new_virt = ss.lend_memory(
-                    msg.buf.as_mut_ptr() as *mut usize,
-                    server_pid,
-                    core::ptr::null_mut(),
-                    msg.buf.len(),
-                    true,
-                )?;
+                let new_virt = ss
+                    .lend_memory(
+                        msg.buf.as_mut_ptr() as *mut usize,
+                        server_pid,
+                        core::ptr::null_mut(),
+                        msg.buf.len(),
+                        true,
+                    )
+                    .inspect_err(|_| return_thread(ss, sidx, available_tid))?;
                 Message::MutableBorrow(MemoryMessage {
                     id: msg.id,
-                    buf: unsafe { MemoryRange::new(new_virt as usize, msg.buf.len()) }?,
+                    buf: unsafe { MemoryRange::new(new_virt as usize, msg.buf.len()) }.map_err(|e| {
+                        return_thread(ss, sidx, available_tid);
+                        e
+                    })?,
                     offset: msg.offset,
                     valid: msg.valid,
                 })
             }
             Message::Borrow(msg) => {
-                let new_virt = ss.lend_memory(
-                    msg.buf.as_mut_ptr() as *mut usize,
-                    server_pid,
-                    core::ptr::null_mut(),
-                    msg.buf.len(),
-                    false,
-                )?;
+                let new_virt = ss
+                    .lend_memory(
+                        msg.buf.as_mut_ptr() as *mut usize,
+                        server_pid,
+                        core::ptr::null_mut(),
+                        msg.buf.len(),
+                        false,
+                    )
+                    .inspect_err(|_| return_thread(ss, sidx, available_tid))?;
                 // println!(
                 //     "Lending {} bytes from {:08x} in PID {} to {:08x} in PID {}",
                 //     msg.buf.len(),
@@ -150,17 +246,20 @@ fn send_message(pid: PID, tid: TID, cid: CID, message: Message) -> SysCallResult
                 // );
                 Message::Borrow(MemoryMessage {
                     id: msg.id,
-                    buf: unsafe { MemoryRange::new(new_virt as usize, msg.buf.len()) }?,
+                    buf: unsafe { MemoryRange::new(new_virt as usize, msg.buf.len()) }.map_err(|e| {
+                        return_thread(ss, sidx, available_tid);
+                        e
+                    })?,
                     offset: msg.offset,
                     valid: msg.valid,
                 })
             }
         };
 
+        // --- Deliver ---
         // If the server has an available thread to receive the message,
         // transfer it right away.
-        let server = ss.server_from_sidx_mut(sidx).expect("server couldn't be located");
-        if let Some(server_tid) = server.take_available_thread() {
+        if let Some(server_tid) = available_tid {
             // klog!(
             //     "there are threads available in PID {} to handle this message -- marking as Ready",
             //     server_pid
@@ -216,6 +315,10 @@ fn send_message(pid: PID, tid: TID, cid: CID, message: Message) -> SysCallResult
                         .map(|_| Ok(xous_kernel::Result::ResumeProcess))
                         .unwrap_or(Err(xous_kernel::Error::ProcessNotFound));
 
+                    if result.is_err() {
+                        return_thread(ss, sidx, available_tid);
+                    }
+
                     // Keep track of which process owned the quantum. This ensures that the next
                     // thread in sequence gets to run when this process is activated again.
                     ss.set_last_thread(
@@ -247,7 +350,10 @@ fn send_message(pid: PID, tid: TID, cid: CID, message: Message) -> SysCallResult
                             let envelope = MessageEnvelope { sender: sender.into(), body: message };
                             Ok(xous_kernel::Result::MessageEnvelope(envelope))
                         }
-                        _ => Err(xous_kernel::Error::ProcessNotFound),
+                        _ => {
+                            return_thread(ss, sidx, available_tid);
+                            Err(xous_kernel::Error::ProcessNotFound)
+                        }
                     }
                 }
             } else if blocking && !cfg!(baremetal) {

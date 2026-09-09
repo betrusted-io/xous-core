@@ -1242,3 +1242,94 @@ fn increase_heap_rejects_absurd_delta() {
     shutdown_kernel();
     main_thread.join().expect("join kernel");
 }
+
+#[cfg(test)]
+mod queue_capacity_tests {
+    use xous_kernel::{MemoryRange, Message, PID, SID};
+
+    use crate::server::Server;
+
+    fn scalar(id: usize) -> Message {
+        Message::Scalar(xous_kernel::ScalarMessage { id, arg1: 0, arg2: 0, arg3: 0, arg4: 0 })
+    }
+
+    fn make_server() -> Server {
+        let mut slot: Option<Server> = None;
+        let backing = unsafe { MemoryRange::new(0x1_0000, 0x1_000) }.unwrap();
+        Server::init(&mut slot, PID::new(3).unwrap(), SID::from_bytes(&[0x12, 0x34]).unwrap(), backing)
+            .unwrap();
+        slot.unwrap()
+    }
+
+    /// Response tokens (`WaitingReturn*`, enqueued by `queue_response()` on
+    /// every blocking handoff) occupy queue slots but never advance the
+    /// generation counters. A queue saturated with tokens must therefore be
+    /// reported as full by `has_queue_capacity()` -- this is the exact state
+    /// in which a blocking direct handoff (available server thread, full
+    /// queue) used to pass the pre-check, move its payload, and then fail
+    /// inside `queue_response()`. `has_queue_capacity_scalar()` deliberately
+    /// misses it; that is only sound because scalar sends have no payload to
+    /// strand on a retry.
+    #[test]
+    fn token_saturated_queue_reports_full() {
+        let mut server = make_server();
+        let client = PID::new(4).unwrap();
+        let mut tokens = 0;
+        while server.queue_response(client, 0, &scalar(1), None).is_ok() {
+            tokens += 1;
+        }
+        assert!(tokens > 0, "queue accepted no tokens");
+        assert!(!server.has_queue_capacity(), "token-saturated queue must read as full");
+        assert!(server.has_queue_capacity_scalar(), "gen-only probe is expected to miss token saturation");
+        assert_eq!(
+            server.queue_response(client, 0, &scalar(2), None),
+            Err(xous_kernel::Error::ServerQueueFull)
+        );
+        assert_eq!(
+            server.queue_message(client, 0, scalar(3), None),
+            Err(xous_kernel::Error::ServerQueueFull)
+        );
+    }
+
+    /// `has_queue_capacity()` is the pre-flight check that lets
+    /// `send_message()` decide it may transfer a payload before enqueueing.
+    /// It must never disagree with `queue_response()`'s acceptance in any
+    /// reachable state (here: progressive token fill through a wrapped
+    /// queue head).
+    #[test]
+    fn has_queue_capacity_agrees_with_response_enqueue() {
+        let mut server = make_server();
+        let client = PID::new(4).unwrap();
+        for round in 0..10_000usize {
+            let predicted = server.has_queue_capacity();
+            let accepted = server.queue_response(client, 0, &scalar(1), None).is_ok();
+            assert_eq!(
+                predicted, accepted,
+                "has_queue_capacity() and queue_response() diverged at round {}",
+                round
+            );
+            if !accepted {
+                break;
+            }
+        }
+    }
+
+    /// Same agreement property against the message-enqueue path.
+    #[test]
+    fn has_queue_capacity_agrees_with_message_enqueue() {
+        let mut server = make_server();
+        let client = PID::new(4).unwrap();
+        for round in 0..10_000usize {
+            let predicted = server.has_queue_capacity();
+            let accepted = server.queue_message(client, 0, scalar(1), None).is_ok();
+            assert_eq!(
+                predicted, accepted,
+                "has_queue_capacity() and queue_message() diverged at round {}",
+                round
+            );
+            if !accepted {
+                break;
+            }
+        }
+    }
+}
