@@ -4,6 +4,8 @@ A graphical IMAP/SMTP mail client for Xous, built on the GAM UI stack.
 
 To run it in hosted mode, `cargo xtask run mailapp`.
 
+![Screenshots of mail app running on Precursor / Xous](./screenshots.png)
+
 It leverages the synchronous, no-async SMTP/IMAP clients in `libs/mail`,
 plus MIME / RFC-2047 / quoted-printable parsing
 It has graphical screens driven by function keys
