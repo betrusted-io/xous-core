@@ -922,6 +922,10 @@ pub struct CorigineUsb {
     pub remaining_wr: Option<(usize, usize)>,
 }
 impl CorigineUsb {
+    /// Some UDCs commit whole packets, so the EP0 buffer must be a whole number of
+    /// max packet sizes (64 at HS/FS) for a `length <= capacity` check to be sufficient.
+    const _CHECK_EP0_SIZE: () = assert!(CRG_UDC_EP0_REQBUFSIZE % 64 == 0);
+
     /// Safety: this function is generally pretty unsafe because the underlying hardware needs raw pointers,
     /// and will mutate values underneath the OS with no regard for safety.
     ///
@@ -1861,7 +1865,26 @@ impl CorigineUsb {
         self.knock_doorbell(0);
     }
 
-    pub fn ep0_receive(&mut self, addr: usize, length: usize, intr_target: u32) {
+    /// Queue an EP0 OUT data stage into the driver-owned EP0 request buffer.
+    ///
+    /// The destination address is computed internally and the length is checked
+    /// against buffer capacity, so a host-controlled `wLength` can neither steer
+    /// nor overrun the DMA. Returns `Err` if `length` exceeds capacity; callers
+    /// must stall EP0 in that case.
+    pub fn ep0_receive_bounded(
+        &mut self,
+        length: usize,
+        intr_target: u32,
+    ) -> core::result::Result<(), Error> {
+        if length > CRG_UDC_EP0_REQBUFSIZE {
+            return Err(Error::InvalidState);
+        }
+        let addr = self.ifram_base_ptr + CRG_UDC_EP0_BUF_OFFSET;
+        self.ep0_receive(addr, length, intr_target);
+        Ok(())
+    }
+
+    fn ep0_receive(&mut self, addr: usize, length: usize, intr_target: u32) {
         let udc_ep = &mut self.udc_ep[0];
         let mut enq_pt =
             unsafe { udc_ep.enq_pt.load(Ordering::SeqCst).as_mut().expect("couldn't deref pointer") };
@@ -2821,8 +2844,7 @@ impl UsbBus for CorigineWrapper {
     /// be IN or OUT, but not both at the same time. Devices with both IN/OUT may leave this as
     /// an empty stub.
     fn set_ep0_out(&self) {
-        // let addr = self.core().ep0_buf.load(Ordering::SeqCst) as usize;
-        // self.core().ep0_receive(addr, 64, 0);
+        // this.ep0_receive_bounded(64, 0).expect("64 <= EP0 buffer");
     }
 
     /// Causes the USB peripheral to enter USB suspend mode, lowering power consumption and
@@ -3010,7 +3032,7 @@ pub fn handle_event_inner(this: &mut CorigineUsb, event_trb: &mut EventTrbS) -> 
                 crate::println!(
                     "HACK: setup ep0 receive for ACM class - we ignore the result, but the receive must exist"
                 );
-                this.ep0_receive(this.ep0_buf.load(Ordering::SeqCst) as usize, 7, 0);
+                this.ep0_receive_bounded(7, 0).expect("7 <= EP0 buffer");
             }
 
             ret = CrgEvent::Data(0, 0, 1);

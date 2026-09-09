@@ -133,7 +133,7 @@ impl<'a> ShellCmdApi<'a> for Test {
                     .expect("Can't connect to SUSRES");
                 match xous::send_message(
                     conn,
-                    xous::Message::new_blocking_scalar(
+                    xous::Message::new_scalar(
                         susres::api::Opcode::PlatformSpecific.to_usize().unwrap(),
                         bao1x_hal::clocks::ClockOp::DeepSleep.to_usize().unwrap(),
                         0,

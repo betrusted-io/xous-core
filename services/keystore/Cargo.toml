@@ -64,6 +64,12 @@ hkdf = "0.12.4"
 
 xous-swapper = { path = "../xous-swapper", optional = true } # contains spinor
 
+ed25519-dalek = { package = "ed25519-dalek-compat", path = "../../bao1x-boot/ed25519-dalek-compat", default-features = false, features = [
+    "digest",
+    "zeroize",
+], optional = true }
+
+
 #[dependencies.curve25519-dalek]
 #version = "=4.1.2"                           # note this is patched to our fork in ./Cargo.toml
 #default-features = false
@@ -79,6 +85,7 @@ xous-swapper = { path = "../xous-swapper", optional = true } # contains spinor
 bao1x = ["utralib/bao1x", "aes/bao1x"]
 
 debug-hal = ["bao1x-hal/debug-print-duart"]
+debug-swap-sig = []
 
 # Enables incrementing one way counters. Off by default because this API can be, at the very least,
 # used to grief the security layer if not worse
@@ -95,7 +102,12 @@ app-keys = ["keystore-api/app-keys"]
 # so it's...probably OK to just leave there?
 legacy-swap-key = []
 # used to track which targets have swap
-swap = ["xous-swapper/bao1x", "keystore-api/swap", "legacy-swap-key"]
+swap = [
+    "xous-swapper/bao1x",
+    "keystore-api/swap",
+    "legacy-swap-key",
+    "ed25519-dalek",
+]
 
 board-baosec = [
     "utralib/bao1x",

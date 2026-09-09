@@ -60,11 +60,12 @@ Install the latest [Rust](https://rust-lang.org/tools/install/) or run `rustup u
 ## Build Commands
 
 - Precursor: `cargo xtask app-image`
-- Dabao: `cargo xtask dabao`
+- Dabao: `cargo xtask dabao dabao-console`
 - Baosec: `cargo xtask baosec`
 - Baochip baremetal: `cargo xtask baremetal-bao1x`
+- Defcon34: `cargo xtask baosec-lite dc34-console~flash dc34-vault`
 
-Additional apps to be bundled into images can be specified as extra arguments on the command line, e.g. `cargo xtask dabao helloworld` will generate a Dabao image that includes `helloworld` in the detached-app section. Features, app-features, loader-features, and so forth can also be passed as command line arguments; run `cargo xtask` on its own for more help.
+Additional apps to be bundled into images can be specified as extra arguments on the command line, e.g. `cargo xtask dabao dabao-console` will generate a Dabao image that includes `dabao-console` in the detached-app section. Features, app-features, loader-features, and so forth can also be passed as command line arguments; run `cargo xtask` on its own for more help.
 
 ## Emulation
 

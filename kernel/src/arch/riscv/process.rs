@@ -236,7 +236,7 @@ impl Process {
         let process = unsafe { &mut *PROCESS };
         let tid = fixup_irq(tid);
         klog!("Switching to thread {}", tid);
-        assert!(tid <= process.threads.len(), "attempt to switch to an invalid thread {}", tid);
+        assert!(tid < process.threads.len(), "attempt to switch to an invalid thread {}", tid);
         process.hardware_thread = tid + 1;
         Ok(())
     }
@@ -244,14 +244,14 @@ impl Process {
     pub fn thread_mut(&mut self, tid: TID) -> &mut Thread {
         let process = unsafe { &mut *PROCESS };
         let tid = fixup_irq(tid);
-        assert!(tid <= process.threads.len(), "attempt to retrieve an invalid thread {}", tid);
+        assert!(tid < process.threads.len(), "attempt to retrieve an invalid thread {}", tid);
         &mut process.threads[tid]
     }
 
     pub fn thread(&self, tid: TID) -> &Thread {
         let process = unsafe { &mut *PROCESS };
         let tid = fixup_irq(tid);
-        assert!(tid <= process.threads.len(), "attempt to retrieve an invalid thread {}", tid);
+        assert!(tid < process.threads.len(), "attempt to retrieve an invalid thread {}", tid);
         &process.threads[tid]
     }
 

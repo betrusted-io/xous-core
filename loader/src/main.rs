@@ -267,7 +267,9 @@ pub unsafe extern "C" fn rust_entry(signed_buffer: *const usize, signature: u32)
     // Run kernel image validation now that the heap is set up.
     #[cfg(feature = "bao1x")]
     let detached_app = {
-        use bao1x_api::{PARANOID_MODE, PARANOID_MODE_DUPE, bollard, pubkeys::LOADER_TO_KERNEL};
+        use bao1x_api::{
+            HardenedBool, PARANOID_MODE, PARANOID_MODE_DUPE, bollard, pubkeys::LOADER_TO_KERNEL,
+        };
         use bao1x_hal::{ERASE_VALUE, buram::ERASURE_PROOF_RANGE_BYTES};
 
         let owc = bao1x_hal::acram::OneWayCounter::new();
@@ -278,7 +280,12 @@ pub unsafe extern "C" fn rust_entry(signed_buffer: *const usize, signature: u32)
         csprng.random_delay();
         bollard!(bao1x_hal::sigcheck::die_no_std, 4);
         // validate using the bao1x signature scheme
-        match bao1x_hal::sigcheck::validate_image(LOADER_TO_KERNEL, None, Some(&mut csprng)) {
+        match bao1x_hal::sigcheck::validate_image(
+            LOADER_TO_KERNEL,
+            None,
+            Some(&mut csprng),
+            HardenedBool::FALSE,
+        ) {
             Ok((key, key_inv, tag, _target, pq_tag)) => {
                 if paranoid1 == 0 && paranoid2 == 0 {
                     let tag_owned;
@@ -370,7 +377,12 @@ pub unsafe extern "C" fn rust_entry(signed_buffer: *const usize, signature: u32)
             use bao1x_api::pubkeys::LOADER_TO_DETACHED_APP;
 
             csprng.random_delay();
-            match bao1x_hal::sigcheck::validate_image(LOADER_TO_DETACHED_APP, None, Some(&mut csprng)) {
+            match bao1x_hal::sigcheck::validate_image(
+                LOADER_TO_DETACHED_APP,
+                None,
+                Some(&mut csprng),
+                HardenedBool::FALSE,
+            ) {
                 Ok((key, key_inv, tag, _target, pq_tag)) => {
                     if paranoid1 == 0 && paranoid2 == 0 {
                         let tag_owned;
@@ -676,6 +688,34 @@ fn boot_sequence(
         let rpt_offset =
             cfg.runtime_page_tracker.as_ptr() as usize - krn_struct_start + KERNEL_ARGUMENT_OFFSET;
         let xpt_offset = cfg.extra_page_tracker.as_ptr() as usize - krn_struct_start + KERNEL_ARGUMENT_OFFSET;
+
+        // this can help debug XPT allocation issues
+        #[cfg(feature = "verbose-debug")]
+        {
+            println!(
+                "RPT len: {:x} / XPT len: {:x}",
+                cfg.runtime_page_tracker.len(),
+                cfg.extra_page_tracker.len()
+            );
+            fn xpt_index_to_addr(cfg: &BootConfig, idx: usize) -> Option<usize> {
+                let mut offset = 0;
+                for region in cfg.regions.iter() {
+                    let pages_in_region = (region.length as usize + PAGE_SIZE - 1) / PAGE_SIZE;
+                    if idx < offset + pages_in_region {
+                        let within = idx - offset;
+                        return Some(region.start as usize + within * PAGE_SIZE);
+                    }
+                    offset += pages_in_region;
+                }
+                None
+            }
+            for (i, chunk) in cfg.extra_page_tracker.chunks(16).enumerate() {
+                if !chunk.iter().all(|&x| x == 0) {
+                    println!("{:08x} ({:x?}): {:x?}", i * 16, xpt_index_to_addr(&cfg, i * 16), chunk);
+                }
+            }
+        }
+
         #[cfg(not(feature = "atsama5d27"))]
         let _tt_addr = { cfg.processes[0].satp };
         #[cfg(feature = "atsama5d27")]
@@ -860,7 +900,7 @@ pub fn read_initial_config(cfg: &mut BootConfig) {
 #[cfg(feature = "swap")]
 pub fn read_swap_config(cfg: &mut BootConfig) {
     // Read in the swap arguments: should be located at beginning of the encrypted image in swap.
-    let page0 = cfg.swap_hal.as_mut().unwrap().decrypt_src_page_at(0x0).unwrap();
+    let page0 = cfg.swap_hal.as_mut().unwrap().decrypt_src_page_at::<sha2_bao1x::Sha512>(0x0, None).unwrap();
     let swap_args = KernelArguments::new(page0.as_ptr() as *const usize);
     for tag in swap_args.iter() {
         if tag.name == u32::from_le_bytes(*b"IniS") {

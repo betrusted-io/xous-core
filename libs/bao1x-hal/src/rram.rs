@@ -391,9 +391,9 @@ impl<'a> Reram {
     pub fn write_slice(&mut self, offset: usize, data: &[u8]) -> Result<usize, xous::Error> {
         // This needs to be disabled for CI tests that check if boot0 is actually hardware
         // write-protected (because otherwise software would just fail at this check).
-        #[cfg(not(feature = "redteam"))]
+        let end = offset.checked_add(data.len()).ok_or(xous::Error::AccessDenied)?;
         if offset < bao1x_api::offsets::BOOT1_START - utralib::HW_RERAM_MEM
-            || offset >= bao1x_api::RRAM_STORAGE_LEN
+            || end > bao1x_api::RRAM_STORAGE_LEN
         {
             return Err(xous::Error::AccessDenied);
         }
@@ -405,11 +405,23 @@ impl<'a> Reram {
     /// There are nominally other hardware mechanisms at play to disallow writes from ineligible
     /// processes, but they only come into effect after the OS is booted.
     pub fn protected_write_slice(&mut self, offset: usize, data: &[u8]) -> Result<usize, xous::Error> {
-        if offset < bao1x_api::RRAM_STORAGE_LEN || offset >= utralib::HW_RERAM_MEM_LEN {
+        let end = offset.checked_add(data.len()).ok_or(xous::Error::AccessDenied)?;
+        if offset < bao1x_api::RRAM_STORAGE_LEN || end > utralib::HW_RERAM_MEM_LEN {
             // crate::println!("offset {:x} access denied", offset);
             return Err(xous::Error::AccessDenied);
         }
         // crate::println!("Writing to {:x}: {:x?}", offset, &data[..16.min(data.len())]);
+        self.write_slice_retry(offset, data)
+    }
+
+    /// safety: absolutely no bounds checking on offset or data done prior to write. Mis-use of this
+    /// function can brick the chip. Useful for red-teaming the chip as it allows dangerous operations.
+    #[cfg(feature = "redteam")]
+    pub unsafe fn crazy_unsafe_write_slice(
+        &mut self,
+        offset: usize,
+        data: &[u8],
+    ) -> Result<usize, xous::Error> {
         self.write_slice_retry(offset, data)
     }
 }
