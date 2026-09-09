@@ -1199,9 +1199,20 @@ impl MailApp {
 
         match result {
             Ok((from, subject, body)) => {
-                self.page_message(&from, &subject, &body);
-                // Remember it so F4 (reply) can pre-fill from it.
-                self.open_msg = Some(OpenMessage { from, subject, body });
+                // Remember it *before* paging so F4 (reply) can pre-fill from
+                // it -- whether pressed from the home screen after backing out,
+                // or from inside the reader itself (see page_message).
+                self.open_msg = Some(OpenMessage {
+                    from: from.clone(),
+                    subject: subject.clone(),
+                    body: body.clone(),
+                });
+                // The reader captures every keystroke while its modal is open,
+                // so an F4 pressed while reading is handled there and reported
+                // back here rather than reaching the main loop's Rawkeys path.
+                if self.page_message(&from, &subject, &body) {
+                    self.reply();
+                }
             }
             Err(e) => self.notify(&e),
         }
@@ -1215,12 +1226,18 @@ impl MailApp {
     ///
     ///   * Down or Space -> next page
     ///   * Up    -> previous page
+    ///   * F4    -> close the reader and reply (returns true)
     ///   * Enter or Backspace -> close the reader
     ///   * anything else -> ignored (stays on the page)
     ///
     /// Every open starts at page 1 (top of the message) -- there's no shared
     /// scroll state to carry over.
-    fn page_message(&mut self, from: &str, subject: &str, body: &str) {
+    ///
+    /// Returns `true` when the reader was closed via F4 (the caller should
+    /// then start a reply). While this modal is open it receives *every*
+    /// keystroke, so F4 can't reach the main loop's Rawkeys handler -- we
+    /// handle it here instead.
+    fn page_message(&mut self, from: &str, subject: &str, body: &str) -> bool {
         let full = format!("From: {}\nSubject: {}\n\n{}", from, subject, body);
         let pages = paginate(&full, self.page_cols, self.page_lines, self.pad_lines);
         let n = pages.len();
@@ -1232,6 +1249,7 @@ impl MailApp {
         // the notification stays open (see apps/vault for the same idiom).
         let token = self.modals.token();
         let conn = self.modals.conn();
+        let mut reply_requested = false;
         loop {
             match modals::dynamic_notification_blocking_listener(token, conn) {
                 Ok(Some(key)) => match key {
@@ -1258,6 +1276,12 @@ impl MailApp {
                     // left free for the system app switcher instead of exiting
                     // the reader.
                     '\u{d}' | '\n' | '\u{8}' | '\u{7f}' => break,
+                    // F4 (crate::api::F4): close the reader and reply. The
+                    // caller starts the reply once the modal is torn down.
+                    '\u{0014}' => {
+                        reply_requested = true;
+                        break;
+                    }
                     _ => {} // ignore other keys; stay on the current page
                 },
                 Ok(None) => break, // modal closed / unblocked with no key
@@ -1265,6 +1289,7 @@ impl MailApp {
             }
         }
         self.modals.dynamic_notification_close().ok();
+        reply_requested
     }
 
     // ---- F2: compose --------------------------------------------------
