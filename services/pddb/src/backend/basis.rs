@@ -537,16 +537,27 @@ impl BasisCache {
                                     "offest requested is beyond the key length",
                                 ));
                             }
-                            if data.len() == 0 {
-                                // mostly because i don't want to have to think about this case in the later
-                                // logic.
-                                return Ok(0);
+                            let start_off = offset.unwrap_or(0) as u64;
+                            if start_off > kcache.len {
+                                return Err(Error::new(
+                                    ErrorKind::UnexpectedEof,
+                                    "offest requested is beyond the key length",
+                                ));
                             }
-                            // large pool fetch
+                            if data.len() == 0 || start_off == kcache.len {
+                                // nothing to read: zero-length buffer, or cursor at EOF (includes empty
+                                // keys). Must return before touching any
+                                // pages, since reserved pages past `len`
+                                // may never have been written and won't authenticate.
+                                return Ok(0);
+                            } // large pool fetch
                             let mut abs_cursor = offset.unwrap_or(0) as u64;
                             let mut blocks_read = 0;
                             let mut bytes_read = 0;
                             loop {
+                                if abs_cursor >= kcache.len || bytes_read >= data.len() {
+                                    break;
+                                }
                                 let start_vpage_addr =
                                     ((kcache.start + abs_cursor) / VPAGE_SIZE as u64) * VPAGE_SIZE as u64;
 
@@ -554,9 +565,21 @@ impl BasisCache {
                                 {
                                     let block_start_pos = (abs_cursor % VPAGE_SIZE as u64) as usize;
                                     assert!(pp.valid(), "v2p returned an invalid page");
-                                    let pt_data = hw
-                                        .data_decrypt_page(&basis.cipher, &basis.aad, pp)
-                                        .expect("Decryption auth error");
+                                    let pt_data = match hw.data_decrypt_page(&basis.cipher, &basis.aad, pp) {
+                                        Some(d) => d,
+                                        None => {
+                                            log::error!(
+                                                "Decryption auth error reading {}:{} at vpage {:x}",
+                                                dict,
+                                                key,
+                                                start_vpage_addr
+                                            );
+                                            return Err(Error::new(
+                                                ErrorKind::InvalidData,
+                                                "Decryption auth error",
+                                            ));
+                                        }
+                                    };
                                     if blocks_read != 0 {
                                         assert!(
                                             block_start_pos == 0,
@@ -585,21 +608,14 @@ impl BasisCache {
                                         );
                                     }
                                     let data_offset = bytes_read;
-                                    for (&src, dst) in
-                                        pt_data[size_of::<JournalType>() // always this fixed offset per block
-                                        + block_start_pos..]
-                                            .iter()
-                                            .zip(data[data_offset..].iter_mut())
+                                    for (&src, dst) in pt_data[size_of::<JournalType>() + block_start_pos..]
+                                        .iter()
+                                        .zip(data[data_offset..].iter_mut())
                                     {
-                                        *dst = src;
-                                        // it'd be computationally more efficient to figure out what this
-                                        // should be going into
-                                        // every copy loop, but it's logically easier to think about in this
-                                        // form. Without this check, a
-                                        // user could read past the allocated space for a block...
                                         if abs_cursor >= kcache.len {
-                                            break;
+                                            break; // check *before* writing, so we don't clobber a byte past EOF
                                         }
+                                        *dst = src;
                                         abs_cursor += 1;
                                         bytes_read += 1;
                                     }
