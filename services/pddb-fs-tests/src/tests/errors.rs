@@ -367,9 +367,4 @@ pub const TESTS: &[(&str, fn())] = &[
     ("errors::churn_create_delete", churn_create_delete as fn()),
 ];
 
-pub const XFAILS: &[(&str, &str)] = &[
-    // create_dir swallows ALL server retcodes (fork mkdir never reads the
-    // reply), so the over-length name "succeeds" -- see the test's comment.
-    ("errors::dict_name_length_boundary", "PFC-6"),
-    ("errors::metadata_len_characterization", "PFC-5"),
-];
+pub const XFAILS: &[(&str, &str)] = &[];

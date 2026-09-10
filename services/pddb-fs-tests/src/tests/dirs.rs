@@ -375,9 +375,4 @@ pub const TESTS: &[(&str, fn())] = &[
     ("dirs::concurrent_recursive_mkdir", concurrent_recursive_mkdir as fn()),
 ];
 
-pub const XFAILS: &[(&str, &str)] = &[
-    ("dirs::mkdir_path_already_exists_error", "PFC-6"),
-    // read_dir on a missing dict returns Ok(empty) instead of an error --
-    // see the test's doc comment and PFC-9.
-    ("dirs::read_dir_not_found", "PFC-9"),
-];
+pub const XFAILS: &[(&str, &str)] = &[];

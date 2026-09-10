@@ -360,4 +360,4 @@ pub const TESTS: &[(&str, fn())] = &[
     ("openflags::double_create_truncates_each_time", double_create_truncates_each_time as fn()),
 ];
 
-pub const XFAILS: &[(&str, &str)] = &[("openflags::create_new_creates_missing", "PFC-10")];
+pub const XFAILS: &[(&str, &str)] = &[];
