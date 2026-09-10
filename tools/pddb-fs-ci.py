@@ -56,6 +56,11 @@ FOCUS_DELAY = 1.5
 # re-injecting (one retry).
 ECHO_TIMEOUT = 5.0
 MAX_PIN_ATTEMPTS = 3
+# One Down arrow as the ESC [ B byte sequence, written into the keyboard
+# model's UART_CHAR inject register (services/keyboard esc_match).
+ARROW_DOWN = ['sysbus.keyboard WriteDoubleWord 0x0 0x1b',
+              'sysbus.keyboard WriteDoubleWord 0x0 0x5b',
+              'sysbus.keyboard WriteDoubleWord 0x0 0x42']
 
 
 class RunFailure(Exception):
@@ -264,9 +269,10 @@ class RenodeRun:
             self.monitor(command)
             time.sleep(delay)
 
-    def inject_verified(self, keyboard_commands, what):
+    def inject_verified(self, keyboard_commands, what, expect_echoes=1):
         """Inject after the marker->focus delay; verify via the keyboard
-        service's 'injecting key' echo, with one re-injection retry."""
+        service's 'injecting key' echo (one per injected key), with one
+        re-injection retry."""
         time.sleep(FOCUS_DELAY)
         for attempt in (1, 2):
             baseline = self.tail.echo_count
@@ -277,7 +283,7 @@ class RenodeRun:
                 # poll_console preserves the lines for the next wait_for;
                 # echo_count is a tail-side counter independent of consumption
                 self.poll_console()
-                if self.tail.echo_count > baseline:
+                if self.tail.echo_count >= baseline + expect_echoes:
                     self.milestone('injected: {}'.format(what))
                     return
                 time.sleep(0.2)
@@ -302,15 +308,15 @@ class RenodeRun:
         self.wait_for([MARK_STATUS_MAIN], t_boot, ec_abort_ok=True)
         self.wait_for([MARK_PW_REQUEST], t_boot, ec_abort_ok=True)
         # Radio [Okay, Cancel], cursor on the item row: Down x2 to reach the
-        # OK row (CR on the item row only sets the payload), then CR.
+        # OK row (CR on the item row only sets the payload), then CR. The
+        # arrows go through the keyboard model's inject queue as ESC [ B so
+        # the keyboard service echoes each one; scan-matrix Press/Release
+        # leaves no echo and is lost when the release lands before the
+        # interrupt handler has read the matrix.
         self.wait_for([MARK_REQFMT], t_boot, ec_abort_ok=True)
-        self.inject_verified([
-            'sysbus.keyboard Press Down',
-            'sysbus.keyboard Release Down',
-            'sysbus.keyboard Press Down',
-            'sysbus.keyboard Release Down',
-            'sysbus.keyboard InjectLine ""',
-        ], 'REQFMT Okay')
+        self.inject_verified(
+            ARROW_DOWN + ARROW_DOWN + ['sysbus.keyboard InjectLine ""'],
+            'REQFMT Okay', expect_echoes=3)
         for attempt in range(1, MAX_PIN_ATTEMPTS + 1):
             # PIN entry #1
             self.wait_for([MARK_BOOTPW], t_boot)
