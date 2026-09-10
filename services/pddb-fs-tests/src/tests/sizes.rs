@@ -1,7 +1,6 @@
 //! Theme `sizes`: allocation-pool boundaries and size-driven paths.
 //!
-//! Ground truth (services/pddb/src/backend), all verified by reading the
-//! actual source (not assumed):
+//! Ground truth (services/pddb/src/backend):
 //!
 //! - `VPAGE_SIZE = PAGE_SIZE - size_of::<Nonce>() - size_of::<Tag>() - size_of::<JournalType>()`
 //!   (backend/hw.rs:60). `PAGE_SIZE = SPINOR_ERASE_SIZE = 0x1000 = 4096` (services/spinor/src/api.rs:6).
@@ -18,9 +17,7 @@
 //!   (backend/dictionary.rs ~595-644) detects `kcache.reserved < (data.len() + offset)`, extracts the key's
 //!   full current content, removes it, and recurses with the complete data at offset 0, at which point the
 //!   *fresh-key* branch above decides the pool again. This is the internal small->large "graduation" path
-//!   exercised by several tests below; it is a `key_update` growth, not the user-level
-//!   `File::create`/`.truncate(true)`-over-an-existing-key SERVER-CRASH HAZARD (PFC-1) -- no test here ever
-//!   truncates an existing key in place.
+//!   exercised by several tests below.
 
 #![allow(unused_imports)]
 use std::fs::{self, File, OpenOptions};
@@ -132,10 +129,7 @@ pub fn one_byte_file() {
 /// SMALL_CAPACITY, which `key_update` handles by extracting the small-pool
 /// key's full content, removing it, and recursing with the complete data at
 /// offset 0 -- landing in the large pool (backend/dictionary.rs ~595-644,
-/// the "update/extend" path; see the module doc comment). This is the
-/// internal small->large graduation, *not* the user-level truncate/re-create
-/// SERVER-CRASH HAZARD (PFC-1) -- the handle here is never closed and
-/// reopened with truncate semantics.
+/// the "update/extend" path; see the module doc comment).
 pub fn growth_small_to_large_same_handle() {
     let tmp = TmpDict::new("growth_small_to_large_same_handle");
     let path = tmp.path("grow");
@@ -160,10 +154,7 @@ pub fn growth_small_to_large_same_handle() {
 /// reopened with `.append(true)` and extended by 8 KiB. Append never
 /// truncates -- services/pddb/src/libstd/mod.rs `open_key` sets `offset: if
 /// append { len } else { 0 }` and takes no truncate branch for a plain
-/// append open (see also rw::append_mode_multi_write) -- so re-opening the
-/// path here is safe even though it already holds content, unlike a
-/// `File::create`/`.truncate(true)` re-open of an existing >= 4 KiB key
-/// (PFC-1).
+/// append open (see also rw::append_mode_multi_write).
 pub fn growth_across_reopen_append() {
     let tmp = TmpDict::new("growth_across_reopen_append");
     let path = tmp.path("append_grow");
@@ -188,13 +179,9 @@ pub fn growth_across_reopen_append() {
     check!(fs::remove_file(&path));
 }
 
-/// Shrink via the SAFE pattern: `remove_file` (a full unlink -- never a
-/// truncate of an existing key in place) followed by a fresh `File::create`
-/// at a smaller size. This is the mandated workaround for
-/// the SERVER-CRASH HAZARD (truncating re-create of an existing large-pool
-/// key, PFC-1): `path` is fully unlinked before the smaller content is ever
-/// written, so the final `File::create` targets a genuinely non-existent
-/// key, not a truncate of an existing one.
+/// Shrink by unlink and re-create: `remove_file` a large-pool key, then a
+/// fresh `File::create` at a smaller size (the truncate-in-place shrink is
+/// smoke::overwrite_shorter_large).
 pub fn shrink_safe_pattern() {
     let tmp = TmpDict::new("shrink_safe_pattern");
     let path = tmp.path("shrink");
@@ -207,10 +194,10 @@ pub fn shrink_safe_pattern() {
     }
     assert_eq!(read_back(&path), big, "initial large content mismatch");
 
-    check!(fs::remove_file(&path)); // full unlink -- no truncate involved
+    check!(fs::remove_file(&path));
     assert!(File::open(&path).is_err(), "file still openable after remove_file");
 
-    let small = b"tiny-after-shrink"; // small pool, genuinely fresh key
+    let small = b"tiny-after-shrink"; // small pool, fresh key
     {
         let mut f = check!(File::create(&path));
         check!(f.write_all(small));
@@ -371,7 +358,7 @@ pub fn write_offset_spanning_pool_boundary() {
     check!(fs::remove_file(&path));
 }
 
-/// This theme's registry (aggregated by tests::all_tests / all_xfails).
+/// This theme's tests (aggregated by tests::all_tests).
 pub const TESTS: &[(&str, fn())] = &[
     ("sizes::boundary_below_threshold", boundary_below_threshold as fn()),
     ("sizes::boundary_at_threshold", boundary_at_threshold as fn()),
@@ -386,5 +373,3 @@ pub const TESTS: &[(&str, fn())] = &[
     ("sizes::seek_read_page_spanning_32kib", seek_read_page_spanning_32kib as fn()),
     ("sizes::write_offset_spanning_pool_boundary", write_offset_spanning_pool_boundary as fn()),
 ];
-
-pub const XFAILS: &[(&str, &str)] = &[];

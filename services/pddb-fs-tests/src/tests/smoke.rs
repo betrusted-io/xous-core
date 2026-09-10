@@ -1,6 +1,4 @@
-//! Seed tests exercising the harness machinery and pinning known PFC bugs.
-//! All assertions state the CORRECT behavior; known failures are registered in
-//! the XFAILS table in mod.rs — never weaken an assertion here.
+//! Seed tests exercising the harness machinery and the basic file lifecycle.
 
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Seek, SeekFrom, Write};
@@ -37,12 +35,8 @@ pub fn overwrite_shorter_small() {
 }
 
 /// Same as overwrite_shorter_small, but the first write lands the key in the
-/// large pool (>= ~4 KiB). Regression test for PFC-1: the truncating
-/// re-create used to PANIC the pddb server (`PageAlignedVa::from(0)` unwrap
-/// at services/pddb/src/backend/types.rs, killing pddb's main thread), so
-/// this test was DISABLED until the large-key truncate arm in
-/// backend/dictionary.rs was fixed to truncate the length only, like the
-/// small-pool arm. Now a normal expected-pass test.
+/// large pool (>= ~4 KiB), which takes a different truncate path in
+/// backend/dictionary.rs.
 pub fn overwrite_shorter_large() {
     let tmp = TmpDict::new("overwrite_shorter_large");
     let path = tmp.path("large");
@@ -51,10 +45,8 @@ pub fn overwrite_shorter_large() {
 }
 
 fn overwrite_shorter_inner(path: &str, first_len: usize) {
-    // Step logging (log::info is ignored by the sentinel parser): the large
-    // variant used to crash the WHOLE pddb server (PageAlignedVa::from(0)
-    // unwrap, backend/types.rs, bug PFC-1); the markers pinned down the
-    // killing request and stay useful if the truncate path ever regresses.
+    // Step logging (log::info is ignored by the sentinel parser) so a server
+    // crash can be pinned to the request that caused it.
     let mut rng = XorShift::new(first_len as u32);
     let mut first = vec![0u8; first_len];
     rng.fill(&mut first);
@@ -87,9 +79,7 @@ fn overwrite_shorter_inner(path: &str, first_len: usize) {
     assert_eq!(readback, second, "truncating overwrite did not read back intact");
 }
 
-/// SeekFrom::Current with a negative offset must rewind. Was XFAIL PFC-3
-/// (the server cast the offset with `as u64`, so any negative seek errored
-/// out); now pins the fix.
+/// SeekFrom::Current with a negative offset must rewind.
 pub fn seek_negative_current() {
     let tmp = TmpDict::new("seek_negative_current");
     let path = tmp.path("seek");
@@ -108,16 +98,10 @@ pub fn seek_negative_current() {
 }
 
 /// Closing one file must not affect other open handles in the same process.
-/// Pins the PFC-4 fix: CloseKeyStd used to drop the whole per-process fd
-/// table, killing B's handle when A closed.
 ///
-/// Ordering is load-bearing: all of B's I/O results are collected first and B
-/// is dropped explicitly BEFORE any panic. While PFC-4 was live, B's fd was
-/// dead after A closed, and PFC-7 makes `File::drop` panic on a failed close
-/// -- if that drop ran during panic-unwind (e.g. `check!` firing while B is
-/// still in scope) it would be a fatal double panic that aborts the whole
-/// runner. Dropped in a normal context, the drop panic is caught like any
-/// other.
+/// B's I/O results are collected first and B is dropped before any assertion:
+/// a `File::drop` that panics on a failed close would otherwise run during
+/// unwind and abort the whole runner as a double panic.
 pub fn two_files_close_one() {
     let tmp = TmpDict::new("two_files_close_one");
     let path_a = tmp.path("a");
@@ -129,7 +113,7 @@ pub fn two_files_close_one() {
     let seek_res = b.seek(SeekFrom::Start(0));
     let mut buf = Vec::new();
     let read_res = b.read_to_end(&mut buf);
-    drop(b); // may panic itself (PFC-7 close unwrap); catchable here
+    drop(b); // a panic here is caught like any other
     check!(write_res);
     assert_eq!(check!(seek_res), 0);
     check!(read_res);
@@ -138,7 +122,7 @@ pub fn two_files_close_one() {
     check!(fs::remove_file(&path_b));
 }
 
-/// This theme's registry (aggregated by tests::all_tests / all_xfails).
+/// This theme's tests (aggregated by tests::all_tests).
 pub const TESTS: &[(&str, fn())] = &[
     ("smoke::create_write_read", create_write_read as fn()),
     ("smoke::overwrite_shorter_small", overwrite_shorter_small as fn()),
@@ -146,16 +130,7 @@ pub const TESTS: &[(&str, fn())] = &[
     ("smoke::seek_negative_current", seek_negative_current as fn()),
     ("smoke::two_files_close_one", two_files_close_one as fn()),
     ("smoke::create_new_existing", create_new_existing as fn()),
-    // smoke::overwrite_shorter_large (registered above) was DISABLED, not
-    // XFAIL, from the 2026-07-07 harness pilot until the PFC-1 fix landed:
-    // the truncating re-create of an existing 8 KiB key panicked the pddb
-    // server (PageAlignedVa::from(0) unwrap in backend/types.rs), and a dead
-    // server hangs every subsequent test. The large-key truncate arm in
-    // backend/dictionary.rs now truncates the length only, mirroring the
-    // small-pool arm, so the test is a normal expected-pass entry.
 ];
-
-pub const XFAILS: &[(&str, &str)] = &[];
 
 /// `create_new` on an existing path must fail. Don't assert the ErrorKind: the
 /// xous backend surfaces the collision as an internal DiskFull retcode that

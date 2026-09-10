@@ -1,8 +1,7 @@
 //! Theme: directories (PDDB dicts) and metadata-kind (is_file/is_dir,
 //! exists, read_dir/DirEntry). Ported/adapted from upstream
 //! library/std/src/fs/tests.rs -- see the `tests` module header
-//! (services/pddb-fs-tests/src/tests/mod.rs) for the path grammar ('/'), the
-//! truncate hazard, and XFAIL discipline.
+//! (services/pddb-fs-tests/src/tests/mod.rs) for the path grammar ('/').
 //!
 //! PDDB dicts are FLAT, not a real directory tree: `create_dict`
 //! (services/pddb/src/libstd/mod.rs) takes the entire path remainder (after
@@ -40,8 +39,7 @@ pub fn stat_is_correct_on_is_file() {
         let fstat_res = check!(f.metadata());
         assert!(fstat_res.is_file(), "open handle metadata should report is_file()");
     }
-    // Every write path must be read-back verified, not
-    // just checked for success -- confirm the content before checking stat.
+    // Confirm the content before checking stat.
     assert_eq!(check!(fs::read(&path)), b"hw", "content should read back intact");
     let stat_res_fn = check!(fs::metadata(&path));
     assert!(stat_res_fn.is_file(), "fs::metadata should report is_file()");
@@ -79,8 +77,6 @@ pub fn fileinfo_check_exists_before_and_after_file_creation() {
     assert!(!Path::new(&path).exists(), "key should not exist before creation");
     check!(check!(File::create(&path)).write_all(b"foo"));
     assert!(Path::new(&path).exists(), "key should exist after creation");
-    // metadata().len() is always 0 on xous (PFC-5): verify content by
-    // read-back, never via metadata length.
     let content = check!(fs::read(&path));
     assert_eq!(content, b"foo", "content should read back intact");
     check!(fs::remove_file(&path));
@@ -99,10 +95,9 @@ pub fn directoryinfo_check_exists_before_and_after_mkdir() {
     assert!(!Path::new(&dir).exists(), "dict should not exist after removal");
 }
 
-/// Port of `file_test_directoryinfo_readdir`, adapted: `metadata().len()` is
-/// always 0 on xous (PFC-5), so content is verified by read-back instead of
-/// length; entries are asserted `is_file()` (a dict's own listing only ever
-/// contains keys -- see the module-level flatness note).
+/// Port of `file_test_directoryinfo_readdir`, adapted: entries are asserted
+/// `is_file()` (a dict's own listing only ever contains keys -- see the
+/// module-level flatness note).
 pub fn directoryinfo_readdir() {
     let tmp = TmpDict::new("directoryinfo_readdir");
     let prefix = "foo";
@@ -143,9 +138,7 @@ pub fn dir_entry_methods() {
         assert!(check!(entry.file_type()).is_file(), "file_type() should report is_file()");
         assert!(check!(entry.metadata()).is_file(), "metadata() should report is_file()");
         let name = entry.file_name().into_string().expect("utf8 filename");
-        // Read-back verification of the write behind this entry:
-        // don't just trust fs::write's Ok(()), confirm the content DirEntry::path()
-        // resolves to is exactly what was written for that key.
+        // Confirm the content DirEntry::path() resolves to is what was written.
         let expected_content: &[u8] = match name.as_str() {
             "a" => b"aaa",
             "b" => b"bbb",
@@ -161,25 +154,15 @@ pub fn dir_entry_methods() {
     check!(fs::remove_file(tmp.path("b")));
 }
 
-/// Port of `read_dir_not_found`. Don't assert a specific ErrorKind: the
-/// contract only requires that for `Unsupported`-characterization tests
-/// (most xous errors collapse to `ErrorKind::Other`). Still routed through a
-/// `TmpDict` (counter-unique prefix) rather than a bare string literal, per
-/// the isolation rules, even though nothing is created here:
-/// `_missing` is never created, so the dict genuinely does not exist.
-///
-/// XFAIL PFC-9: `fs::read_dir` on a nonexistent directory returns Ok with an
-/// EMPTY iterator instead of an error. The server's `list_path`
-/// (services/pddb/src/libstd/mod.rs ~184: "Ignore errors, since sometimes
-/// the dict doesn't exist" -- `key_list(...).unwrap_or_default()`) never
-/// reports a missing dict, and the client's `readdir` (rust fork
-/// sys/fs/xous.rs) has no retcode check either. POSIX requires ENOENT here;
-/// assert the error and expect the XFAIL until PFC-9 is fixed.
+/// Port of `read_dir_not_found`: `fs::read_dir` on a nonexistent dict must
+/// error, never return an empty iterator. Don't assert a specific ErrorKind
+/// (most xous errors collapse to `ErrorKind::Other`). The name comes from a
+/// `TmpDict` so it is unique, but `_missing` is never created.
 pub fn read_dir_not_found() {
     let tmp = TmpDict::new("read_dir_not_found");
     let missing = format!("{}_missing", tmp.dict());
     let res = fs::read_dir(&missing);
-    let err = res.expect_err("read_dir on a nonexistent dict should error (PFC-9)");
+    let err = res.expect_err("read_dir on a nonexistent dict should error");
     log::info!("read_dir on nonexistent dict returned ErrorKind::{:?}", err.kind());
 }
 
@@ -217,17 +200,13 @@ pub fn unicode_path_exists() {
 }
 
 /// Port of `mkdir_path_already_exists_error`: POSIX mkdir semantics require
-/// `create_dir` on an existing path to fail. XFAIL PFC-6: the xous client's
-/// `create_dir` discards the server's error retcode and returns Ok even when
-/// the dict already exists (rust fork sys/fs/xous.rs ~444-448; contrast
-/// unlink/rmdir, which do check it). Never weaken
-/// this to `is_ok()` -- the correct behavior is `is_err()`.
+/// `create_dir` on an existing path to fail.
 pub fn mkdir_path_already_exists_error() {
     let tmp = TmpDict::new("mkdir_path_already_exists_error");
     let dir = format!("{}_twice", tmp.dict());
     check!(fs::create_dir(&dir));
     let r = fs::create_dir(&dir);
-    assert!(r.is_err(), "create_dir on an already-existing dict must fail (PFC-6)");
+    assert!(r.is_err(), "create_dir on an already-existing dict must fail");
     check!(fs::remove_dir(&dir));
 }
 
@@ -242,8 +221,7 @@ pub fn recursive_rmdir() {
     for i in 0..3 {
         let key_path = victim.path(&format!("k{i}"));
         check!(fs::write(&key_path, format!("v{i}")));
-        // Read-back verification of every write before
-        // the key is destroyed by remove_dir_all below.
+        // Verify every write before remove_dir_all destroys the keys.
         assert_eq!(
             check!(fs::read_to_string(&key_path)),
             format!("v{i}"),
@@ -344,7 +322,7 @@ pub fn concurrent_recursive_mkdir() {
     check!(fs::remove_dir(nested.as_str()));
 }
 
-/// This theme's registry (aggregated by tests::all_tests / all_xfails).
+/// This theme's tests (aggregated by tests::all_tests).
 pub const TESTS: &[(&str, fn())] = &[
     ("dirs::stat_is_correct_on_is_file", stat_is_correct_on_is_file as fn()),
     ("dirs::stat_is_correct_on_is_dir", stat_is_correct_on_is_dir as fn()),
@@ -373,11 +351,4 @@ pub const TESTS: &[(&str, fn())] = &[
         create_dir_all_nested_single_level_visibility as fn(),
     ),
     ("dirs::concurrent_recursive_mkdir", concurrent_recursive_mkdir as fn()),
-];
-
-pub const XFAILS: &[(&str, &str)] = &[
-    ("dirs::mkdir_path_already_exists_error", "PFC-6"),
-    // read_dir on a missing dict returns Ok(empty) instead of an error --
-    // see the test's doc comment and PFC-9.
-    ("dirs::read_dir_not_found", "PFC-9"),
 ];

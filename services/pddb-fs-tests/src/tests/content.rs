@@ -77,17 +77,6 @@ pub fn binary_file() {
 }
 
 /// Test fs::copy with valid source and destination.
-///
-/// PASSES on target (empirically confirmed 2026-07-07; formerly registered
-/// XFAIL PFC-4). The predicted close cascade half-happens: fs::copy holds
-/// both files open, the writer drops first, and its successful CloseKeyStd
-/// really does drop the WHOLE per-process fd table (PFC-4 is real -- see
-/// smoke::two_files_close_one), so the reader's follow-up close is answered
-/// with an error retcode via `return_scalar`. But the fork's
-/// `blocking_scalar` (os/xous/ffi.rs) maps ANY Scalar1/Scalar2 reply to Ok,
-/// so `File::drop`'s unwrap (PFC-7) never observes the retcode -- the close
-/// error is silently discarded instead of panicking. `io::copy` completes
-/// before either close, so the copy and its content survive intact.
 pub fn copy_file_ok() {
     let tmp = TmpDict::new("copy_file_ok");
     let src = tmp.path("source");
@@ -190,23 +179,18 @@ pub fn copy_file_src_dir() {
     assert!(fs::metadata(&dst).is_err(), "destination should not be created for a failed copy");
 }
 
-/// Test fs::copy when destination file already exists (both files small < 4 KiB).
+/// Test fs::copy when destination file already exists.
 /// The copy should succeed and overwrite the destination with source content.
-///
-/// PASSES on target (empirically confirmed 2026-07-07; formerly registered
-/// XFAIL PFC-4): same silently-discarded close cascade as copy_file_ok --
-/// see its doc comment. (The truncating re-create of `dst` stays far under
-/// the 4 KiB PFC-1 hazard line.)
 pub fn copy_file_dst_exists() {
     let tmp = TmpDict::new("copy_file_dst_exists");
     let src = tmp.path("source");
     let dst = tmp.path("dest");
 
-    // Create source file with content (keep small < 4 KiB)
+    // Create source file with content
     let src_content = b"new content from source";
     check!(fs::write(&src, src_content));
 
-    // Create destination file with different content (keep small < 4 KiB)
+    // Create destination file with different content
     let dst_initial = b"old content at destination";
     check!(fs::write(&dst, dst_initial));
 
@@ -225,12 +209,8 @@ pub fn copy_file_dst_exists() {
 /// Multi-file test: create ~30 small keys in one dict, enumerate with read_dir,
 /// verify all names are present, spot-check 3 contents, remove all, verify empty.
 ///
-/// `readdir` is a single ListPathStd call with a 4096-byte senres reply, and
-/// truncation behavior past that size
-/// is unverified; this test's ~30 short names is deliberately in that
-/// unexplored range. Assert the CORRECT (full-enumeration) behavior as-is --
-/// if the reply truncates in practice, that is a new characterization to
-/// register as a PFC/XFAIL, not a reason to shrink the assertion here.
+/// `readdir` is a single ListPathStd call with a 4096-byte senres reply;
+/// this test's ~30 short names must all be enumerated.
 pub fn read_dir_enumerate() {
     let tmp = TmpDict::new("read_dir_enumerate");
 
@@ -244,11 +224,9 @@ pub fn read_dir_enumerate() {
         let content = format!("content_{}", i).into_bytes();
         check!(fs::write(&path, &content));
         expected_names.insert(name);
-        // Console liveness: a fresh key write emits NO console output and
-        // costs ~4-8 s host under Renode, so 30 silent writes overran the
-        // driver's 180 s inactivity reaper on the first suite cold run
-        // (the system was healthy; the reaper presumed the server dead).
-        // Any long fs-op loop must emit periodic diagnostics like this.
+        // Liveness: a key write emits no console output and costs seconds
+        // under Renode, so a silent loop would trip the driver's inactivity
+        // reaper.
         if (i + 1) % 5 == 0 {
             log::info!("read_dir_enumerate: created {}/{} files", i + 1, num_files);
         }
@@ -298,7 +276,7 @@ pub fn read_dir_enumerate() {
     assert_eq!(remaining_count, 0, "dict should be empty after removing all files");
 }
 
-/// This theme's registry (aggregated by tests::all_tests / all_xfails).
+/// This theme's tests (aggregated by tests::all_tests).
 pub const TESTS: &[(&str, fn())] = &[
     ("content::write_then_read", write_then_read as fn()),
     ("content::binary_file", binary_file as fn()),
@@ -309,13 +287,4 @@ pub const TESTS: &[(&str, fn())] = &[
     ("content::copy_file_src_dir", copy_file_src_dir as fn()),
     ("content::copy_file_dst_exists", copy_file_dst_exists as fn()),
     ("content::read_dir_enumerate", read_dir_enumerate as fn()),
-];
-
-pub const XFAILS: &[(&str, &str)] = &[
-    // content::copy_file_ok / copy_file_dst_exists were registered XFAIL
-    // PFC-4 on the theory that PFC-4's whole-fd-table drop on the first
-    // close plus PFC-7's drop unwrap panics every fs::copy; both XPASSed on
-    // target 2026-07-07 (the close-error retcode is silently discarded, not
-    // unwrapped -- see the tests' doc comments and PFC-7), so they are now
-    // expected to PASS.
 ];

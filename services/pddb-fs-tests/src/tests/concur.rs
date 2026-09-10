@@ -2,27 +2,15 @@
 //!
 //! std::thread works on xous (128 KiB default stacks; none of these tests need
 //! more). See the `tests` module header
-//! (services/pddb-fs-tests/src/tests/mod.rs) for authoring rules and
-//! services/pddb-fs-tests/README.md for the PFC registry.
+//! (services/pddb-fs-tests/src/tests/mod.rs) for authoring rules.
 //!
-//! KNOWN LANDMINE, source-confirmed (services/pddb/src/main.rs:601, 1467):
-//! `fd_mapping` is keyed by `msg.sender.pid()` ALONE, not by (pid, tid). Every
-//! thread of this process shares one PID, so PFC-4's "any successful close
-//! drops the WHOLE per-process fd table" (`fd_mapping.remove(&pid)`) is not
-//! just a same-thread, sequential-handles hazard (as smoke::two_files_close_one
-//! and concur::four_handles_close_one pin it) -- it generalizes structurally
-//! to CONCURRENT threads: if thread A closes any handle while thread B has a
-//! different handle open (even on a totally unrelated dict), B's handle can go
-//! dead. Tests below that run genuinely concurrent open/close cycles
+//! The server keys its per-process fd table by PID alone
+//! (services/pddb/src/main.rs), so every thread of this process shares one
+//! table. The tests that run concurrent open/close cycles
 //! (two_threads_separate_dicts_cycles, three_threads_same_dict_distinct_keys)
-//! are therefore written to TOLERATE isolated I/O errors as already-known
-//! PFC-4 noise (logged, counted, not asserted to be zero) while still
-//! strictly asserting the property that actually matters and that PFC-4 does
-//! NOT license: no thread may ever observe wrong/cross-contaminated DATA, and
-//! at least some concurrent work must get through cleanly (a total wedge would
-//! be a new, more severe bug). This is a deliberate design choice to keep the
-//! suite deterministic (registering a genuinely racy test as a hard XFAIL
-//! risks intermittent XPASS, which the driver treats as a failure).
+//! count isolated I/O errors instead of asserting zero, and assert strictly
+//! what matters: no thread may ever observe wrong or cross-contaminated data,
+//! and at least some concurrent work must get through cleanly.
 
 #![allow(unused_imports)]
 use std::collections::BTreeSet;
@@ -39,11 +27,9 @@ fn read_back(path: &str) -> Vec<u8> {
 }
 
 /// One thread's repeated create/write/read/delete cycle against its OWN key
-/// in its OWN dict. Returns (successful_cycles, tolerated_errors). A cycle
-/// error (e.g. a stale fd from the OTHER thread's concurrent close, PFC-4) is
-/// tolerated and counted; a WRONG value read back never is -- that would be
-/// actual cross-thread data corruption, not a clean I/O error, and is asserted
-/// against unconditionally.
+/// in its OWN dict. Returns (successful_cycles, tolerated_errors). A clean
+/// cycle error is counted; a WRONG value read back never is, since that would
+/// be cross-thread data corruption.
 fn cycle_worker(thread_id: &'static str, cycles: usize) -> (usize, usize) {
     let tmp = TmpDict::new(&format!("two_threads_{}", thread_id));
     let path = tmp.path("cycle");
@@ -67,15 +53,12 @@ fn cycle_worker(thread_id: &'static str, cycles: usize) -> (usize, usize) {
                         content.as_bytes()
                     );
                     ok += 1;
-                    // best-effort: a missing key here is itself PFC-4 noise
-                    // (a concurrent close from the other thread can also
-                    // invalidate the delete path's own fd-table lookups),
-                    // not asserted.
+                    // best-effort: a missing key here is counted, not asserted
                     let _ = fs::remove_file(&path);
                 }
-                Err(_) => errs += 1, // tolerated PFC-4 cross-thread noise (see module doc)
+                Err(_) => errs += 1,
             },
-            Err(_) => errs += 1, // tolerated PFC-4 cross-thread noise (see module doc)
+            Err(_) => errs += 1,
         }
         if (i + 1) % 5 == 0 {
             log::info!(
@@ -95,10 +78,7 @@ fn cycle_worker(thread_id: &'static str, cycles: usize) -> (usize, usize) {
 /// create/write/read/delete cycles concurrently. Asserts no cross-talk: every
 /// successful read-back must equal exactly what THAT thread itself wrote
 /// (thread-tagged content makes any cross-contamination immediately visible),
-/// and both threads must get at least some cycles through cleanly (a total
-/// wedge would be a new, more severe bug than PFC-4's already-documented
-/// noise). See the module doc for why isolated I/O errors are tolerated
-/// rather than hard-asserted to never happen.
+/// and both threads must get at least some cycles through cleanly.
 pub fn two_threads_separate_dicts_cycles() {
     let cycles = 15;
     let t1 = std::thread::spawn(move || cycle_worker("alpha", cycles));
@@ -117,13 +97,12 @@ pub fn two_threads_separate_dicts_cycles() {
 }
 
 /// (2) Three threads write three DISTINCT keys into the SAME dict
-/// concurrently (single open/write/close per thread -- the smallest possible
-/// exposure to the PFC-4 cross-thread landmine described in the module doc).
-/// The main thread then read_dir's the dict and reads back every key whose
-/// writer thread reported success. A reported success that turns out
-/// unreadable or wrong is real corruption and is never tolerated; an
-/// individual writer erroring out cleanly is tolerated PFC-4 noise, but not
-/// all three failing (that would mean the dict itself is wedged).
+/// concurrently (single open/write/close per thread). The main thread then
+/// read_dir's the dict and reads back every key whose writer thread reported
+/// success. A reported success that turns out unreadable or wrong is real
+/// corruption and is never tolerated; an individual writer erroring out
+/// cleanly is counted, but not all three failing (that would mean the dict
+/// itself is wedged).
 pub fn three_threads_same_dict_distinct_keys() {
     let tmp = TmpDict::new("three_threads_same_dict_distinct_keys");
     let dict = tmp.dict().to_string();
@@ -143,15 +122,12 @@ pub fn three_threads_same_dict_distinct_keys() {
             Ok(pair) => written.push(pair),
             Err(e) => log::info!(
                 "three_threads_same_dict_distinct_keys: a concurrent write errored ({}) -- \
-                 tolerated as PFC-4 cross-thread fd-table-wipe noise, see module doc",
+                 counted, not asserted",
                 e
             ),
         }
     }
-    assert!(
-        !written.is_empty(),
-        "every concurrent writer failed -- the dict looks wedged, not merely PFC-4-noisy"
-    );
+    assert!(!written.is_empty(), "every concurrent writer failed -- the dict looks wedged");
 
     let entries = check!(fs::read_dir(&dict));
     let found: BTreeSet<String> =
@@ -219,9 +195,8 @@ pub fn read_dir_races_writer() {
         racy_names.difference(&final_set).collect::<Vec<_>>()
     );
 
-    // Every write path must be verified by read-back:
-    // the race itself is only about read_dir's ENUMERATION, but each key the
-    // writer thread reported as written must still hold its exact content.
+    // The race is about read_dir's enumeration, but each key the writer
+    // thread reported as written must still hold its exact content.
     for (i, name) in writer_names.iter().enumerate() {
         let path = format!("{}/{}", dict, name);
         let content = check!(fs::read(&path));
@@ -236,23 +211,19 @@ pub fn read_dir_races_writer() {
 /// smoke::two_files_close_one: open 4 handles on 4 distinct keys, close the
 /// FIRST one, then probe the other three. Correct POSIX behavior: closing one
 /// fd never affects any other fd, so all three keep working exactly as
-/// before. Pins the PFC-4 fix: `CloseKeyStd`'s unconditional
-/// `fd_mapping.remove(&pid)` used to drop the WHOLE per-process fd table on
-/// that one successful close, failing all three probes.
+/// before.
 ///
-/// Ordering follows smoke::two_files_close_one's PFC-7 hazard rule: Results
-/// are collected first and ALL still-live handles are dropped in a normal
-/// (non-panicking) context before anything here is allowed to panic --
-/// panicking while a dead-fd `File` is still in scope would drop it during
-/// unwind, and a second panic there would abort the whole runner.
+/// As in smoke::two_files_close_one, Results are collected first and all
+/// still-live handles are dropped in a normal context before anything here
+/// is allowed to panic, so a close that panics cannot abort the runner as a
+/// double panic during unwind.
 pub fn four_handles_close_one() {
     let tmp = TmpDict::new("four_handles_close_one");
     let paths: Vec<String> = (0..4).map(|i| tmp.path(&format!("h{}", i))).collect();
     for (i, p) in paths.iter().enumerate() {
         check!(fs::write(p, format!("init-{}", i).as_bytes()));
-        // Every write path must be verified by read-back
-        // -- including handle 0's, even though it is about to be closed
-        // deliberately below and never probed again afterward.
+        // Verify every write, including handle 0's, which is closed below
+        // and never probed again.
         assert_eq!(
             &read_back(p)[..],
             format!("init-{}", i).as_bytes(),
@@ -268,8 +239,8 @@ pub fn four_handles_close_one() {
     let doomed = handles.remove(0);
     drop(doomed);
 
-    // Probe the remaining three WITHOUT panicking while any of them is still
-    // open (see the PFC-7 hazard note above): collect every Result first.
+    // Probe the remaining three without panicking while any of them is still
+    // open: collect every Result first.
     let mut seek_results = Vec::new();
     let mut read_results = Vec::new();
     for h in handles.iter_mut() {
@@ -297,36 +268,20 @@ pub fn four_handles_close_one() {
 }
 
 /// (5) Two independent handles opened on the SAME key, from two GENUINELY
-/// concurrent std::thread workers. (The brief scopes item (4)'s many-handles
-/// test explicitly to "sequential" characterization but says no such thing
-/// here, and a same-key multi-handle test that never actually runs on two
-/// threads would under-deliver the "concur" theme.) Each thread owns a
-/// DISJOINT byte range of the shared 10-byte key (A: 0-1 then 2-3; B: 4-5
-/// then 8-9), so the final layout is deterministic regardless of scheduling
-/// order -- the point under test is whether the server's shared-buffer
-/// writes stay non-overlapping-safe under real concurrent access, not
-/// scheduler order itself (no seeks past the seeded length, so this also
-/// stays outside PFC-5's stale-length territory).
+/// concurrent std::thread workers. Each thread owns a DISJOINT byte range of
+/// the shared 10-byte key (A: 0-1 then 2-3; B: 4-5 then 8-9), so the final
+/// layout is deterministic regardless of scheduling order. Neither handle is
+/// closed until both threads have finished their writes and been joined.
 ///
-/// Neither handle is closed until BOTH threads have finished all of their
-/// writes and been joined back into the main thread: PFC-4 (`CloseKeyStd`'s
-/// whole-process fd-table wipe, see the module doc) fires only on a
-/// successful CLOSE, so deferring both closes this way keeps the test about
-/// same-key write semantics rather than accidentally becoming another PFC-4
-/// reproducer.
-///
-/// Documents xous's actual semantics: the server holds one shared in-memory/
-/// on-disk copy of the key's bytes and each write opcode splices directly
-/// into it at the given offset (backend/dictionary.rs key_update) -- there is
-/// no per-handle private buffering, so two handles on the same key behave
-/// like two independent POSIX opens of the same inode with disjoint-range
-/// pwrite()s: whichever thread's writes the scheduler lands first, the final
-/// byte layout is the same. This matches POSIX and is asserted as-is (no
-/// XFAIL).
+/// The server holds one shared copy of the key's bytes and each write opcode
+/// splices directly into it at the given offset (backend/dictionary.rs
+/// key_update); there is no per-handle private buffering, so two handles on
+/// the same key behave like two independent POSIX opens of the same inode
+/// with disjoint-range pwrite()s.
 pub fn same_file_two_handles_interleaved_writes() {
     let tmp = TmpDict::new("same_file_two_handles_interleaved_writes");
     let path = tmp.path("shared");
-    check!(fs::write(&path, &[0u8; 10])); // seed: 10 zero bytes, well under 4 KiB
+    check!(fs::write(&path, &[0u8; 10])); // seed: 10 zero bytes
 
     let path_a = path.clone();
     let ta = std::thread::spawn(move || -> File {
@@ -355,9 +310,7 @@ pub fn same_file_two_handles_interleaved_writes() {
 
     let content = read_back(&path);
     // A owns bytes 0-3 (AACC), B owns bytes 4-5 and 8-9 (BB..DD); bytes 6-7
-    // stay the untouched 0x00 NUL bytes from the seed (NOT ASCII '0' -- the
-    // suite cold run caught exactly that authoring slip) -- disjoint ranges
-    // make this deterministic.
+    // stay the untouched 0x00 NUL bytes from the seed, not ASCII '0'.
     assert_eq!(
         &content[..],
         b"AACCBB\x00\x00DD",
@@ -374,17 +327,10 @@ pub fn same_file_two_handles_interleaved_writes() {
 /// works), so the worker thread's death must be fully contained to that
 /// thread.
 ///
-/// PFC-4 EXPOSURE (empirically hit on the suite warm run): the worker's
-/// `File` close -- explicit or via drop-during-unwind -- wipes this whole
-/// process's fd table, so a main-thread op caught mid-cycle (fs::write holds
-/// an fd between its open and close) can fail with a clean I/O error while
-/// the worker unwinds. Per this theme's design (module doc), the CONCURRENT
-/// phase therefore tolerates clean I/O errors as known PFC-4 noise (logged,
-/// counted, never wrong-data), and the STRICT health proof runs after join,
-/// when no concurrent closer can exist any more. The worker also drops its
-/// handle in normal (non-unwind) context before panicking, per the PFC-7
-/// drop-handles-before-panicking rule (so a close during unwind cannot
-/// double-panic and abort the runner).
+/// The concurrent phase counts clean I/O errors and never tolerates wrong
+/// data; the strict health check runs after join. The worker drops its
+/// handle in normal context before panicking, so a close during unwind
+/// cannot abort the runner as a double panic.
 pub fn thread_panic_mid_io_isolation() {
     let tmp = TmpDict::new("thread_panic_mid_io_isolation");
     let victim_path = tmp.path("victim");
@@ -397,9 +343,7 @@ pub fn thread_panic_mid_io_isolation() {
         let read_res = File::open(&worker_path).and_then(|mut f| f.read_to_end(&mut buf).map(|_| ()));
         // The handle is dropped inside and_then, in normal (non-unwind)
         // context. Whichever arm runs, this thread panics ON PURPOSE: that
-        // containment is the property under test. (The Err arm exists because
-        // the main thread's concurrent closes can kill this thread's fd first
-        // -- PFC-4 -- which must not turn into a different test outcome.)
+        // containment is the property under test.
         match read_res {
             Ok(()) => assert_eq!(
                 &buf[..],
@@ -407,14 +351,14 @@ pub fn thread_panic_mid_io_isolation() {
                 "deliberate panic to exercise harness thread isolation"
             ),
             Err(e) => {
-                panic!("deliberate panic (read errored first: {} -- tolerated PFC-4 noise)", e)
+                panic!("deliberate panic (read errored first: {})", e)
             }
         }
     });
 
     // Main thread keeps doing normal fs ops WHILE the worker thread panics.
-    // Clean I/O errors here are tolerated PFC-4 cross-thread noise (see the
-    // doc comment above); wrong DATA on a successful read never is.
+    // Clean I/O errors here are counted; wrong DATA on a successful read is
+    // never tolerated.
     let main_path = tmp.path("main");
     let mut ok = 0usize;
     let mut errs = 0usize;
@@ -431,9 +375,9 @@ pub fn thread_panic_mid_io_isolation() {
                     );
                     ok += 1;
                 }
-                Err(_) => errs += 1, // tolerated PFC-4 noise
+                Err(_) => errs += 1,
             },
-            Err(_) => errs += 1, // tolerated PFC-4 noise
+            Err(_) => errs += 1,
         }
     }
     log::info!("thread_panic_mid_io_isolation: concurrent phase done ({} ok, {} tolerated errs)", ok, errs);
@@ -458,7 +402,7 @@ pub fn thread_panic_mid_io_isolation() {
     check!(fs::remove_file(&victim_path));
 }
 
-/// This theme's registry (aggregated by tests::all_tests / all_xfails).
+/// This theme's tests (aggregated by tests::all_tests).
 pub const TESTS: &[(&str, fn())] = &[
     ("concur::two_threads_separate_dicts_cycles", two_threads_separate_dicts_cycles as fn()),
     ("concur::three_threads_same_dict_distinct_keys", three_threads_same_dict_distinct_keys as fn()),
@@ -467,5 +411,3 @@ pub const TESTS: &[(&str, fn())] = &[
     ("concur::same_file_two_handles_interleaved_writes", same_file_two_handles_interleaved_writes as fn()),
     ("concur::thread_panic_mid_io_isolation", thread_panic_mid_io_isolation as fn()),
 ];
-
-pub const XFAILS: &[(&str, &str)] = &[];
