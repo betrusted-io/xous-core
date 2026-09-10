@@ -53,6 +53,9 @@ hosted = ["utralib/hosted"]
 renode = ["utralib/renode"]
 atsama5d27 = ["utralib/atsama5d27"]
 
+# turns on USB console input by default - this is hazardous for release, but required for CI
+hazardous-usb-ci = []
+
 lcd-console = []
 debugprint = []  # adding this allocates the UART for debugging the logger
 logging = []     # adding this allocates the hardware UART for console interactions

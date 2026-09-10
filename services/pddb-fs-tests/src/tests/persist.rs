@@ -44,7 +44,7 @@ const DICT: &str = "pddbtest.persist";
 const SUBDICT: &str = "pddbtest.persist_sub";
 
 const MARKER_SMALL_LEN: usize = 100;
-const MARKER_MEDIUM_LEN: usize = 2 * 1024; // 2 KiB -- still under the 4 KiB truncate/re-create hazard line
+const MARKER_MEDIUM_LEN: usize = 2 * 1024;
 const MARKER_SMALL_SEED: u32 = 0x5EED_0064;
 const MARKER_MEDIUM_SEED: u32 = 0x5EED_0800;
 
@@ -76,11 +76,7 @@ fn sub_path(i: usize) -> String { format!("{}/sub_{}", SUBDICT, i) }
 pub fn verify_markers() {
     // The ghost check is unconditional: on a fresh flash it's trivially
     // absent (nothing ever created it), and on a warm run it must have
-    // stayed absent since last run's delete_then_persist removed it (PFC-11
-    // is about a stale-handle WRITE resurrecting a deleted key within the
-    // SAME run/process; a brand-new process has no such stale handle, so a
-    // clean disappearance across a restart is exactly the correct contract
-    // to assert here).
+    // stayed absent since last run's delete_then_persist removed it.
     assert!(
         !Path::new(&ghost_path()).exists(),
         "ghost key is present at process start -- it should have stayed deleted across the restart"
@@ -120,9 +116,7 @@ pub fn verify_markers() {
 
 /// VERIFY (runs second, before any writer in this process): the subdict
 /// doubles as a readdir-after-remount check. On the cold run the subdict
-/// doesn't exist yet (Path::exists() is unaffected by PFC-9 -- that bug is
-/// specifically about fs::read_dir on a MISSING dict returning an empty Ok
-/// instead of erroring, not about Path::exists()), so this logs and passes.
+/// doesn't exist yet, so this logs and passes.
 /// On the warm run the subdict must already hold exactly the 5 keys the
 /// previous process's write_markers left behind -- neither more nor fewer.
 pub fn dict_survives() {
@@ -152,23 +146,19 @@ pub fn dict_survives() {
 }
 
 /// WRITE (runs after the verifiers): (re)write every marker deterministically
-/// and read each back within this run. Every overwrite here targets a key
-/// that (if it exists at all) is well under the 4 KiB large-pool hazard line
-/// (100 B / 2 KiB / 64 B), so re-creating it is safe per the SERVER-CRASH
-/// HAZARD rule.
+/// and read each back within this run.
 pub fn write_markers() {
-    // create_dir on an already-existing dict is a (silent, PFC-6) no-op
-    // success on this backend, so calling it unconditionally on both the
-    // cold and the warm run is safe and idempotent.
-    check!(fs::create_dir(DICT));
-    check!(fs::create_dir(SUBDICT));
+    for dict in [DICT, SUBDICT] {
+        if !Path::new(dict).exists() {
+            check!(fs::create_dir(dict));
+        }
+    }
 
     let small = gen_marker(MARKER_SMALL_LEN, MARKER_SMALL_SEED);
     check!(fs::write(small_path(), &small));
     assert_eq!(check!(fs::read(small_path())), small, "marker_small did not read back intact this run");
 
     let medium = gen_marker(MARKER_MEDIUM_LEN, MARKER_MEDIUM_SEED);
-    assert!(medium.len() < 4096, "marker_medium must stay under the 4 KiB truncate hazard line");
     check!(fs::write(medium_path(), &medium));
     assert_eq!(check!(fs::read(medium_path())), medium, "marker_medium did not read back intact this run");
 
@@ -192,7 +182,7 @@ pub fn delete_then_persist() {
     assert!(!Path::new(&path).exists(), "ghost key still present immediately after remove_file");
 }
 
-/// This theme's registry (aggregated by tests::all_tests / all_xfails).
+/// This theme's tests (aggregated by tests::all_tests).
 /// Order is load-bearing: verifiers first, writers last (see file header).
 pub const TESTS: &[(&str, fn())] = &[
     ("persist::verify_markers", verify_markers as fn()),
@@ -200,5 +190,3 @@ pub const TESTS: &[(&str, fn())] = &[
     ("persist::write_markers", write_markers as fn()),
     ("persist::delete_then_persist", delete_then_persist as fn()),
 ];
-
-pub const XFAILS: &[(&str, &str)] = &[];

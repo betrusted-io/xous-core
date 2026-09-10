@@ -363,6 +363,8 @@ pub(crate) fn main_hw() -> ! {
     // Defer Keyboard::new until after SE0 High: KBD server sets SFR_IOX=1 (PF incl. SE0/PF5).
     let native_kbd = bao1x_api::keyboard::Keyboard::new(&xns).expect("couldn't connect to keyboard service");
 
+    let mut key_map = KeyMap::Qwerty;
+
     log::debug!("Entering main loop");
 
     let mut msg_opt = None;
@@ -788,21 +790,20 @@ pub(crate) fn main_hw() -> ! {
                     let code1 = scalar.arg2;
                     let code2 = scalar.arg3;
                     let autoup = scalar.arg4;
-                    let native_map = native_kbd.get_keymap().unwrap();
                     if code0 != 0 {
-                        cu.kbd_tx_queue.borrow_mut().push_back(match native_map {
+                        cu.kbd_tx_queue.borrow_mut().push_back(match key_map {
                             KeyMap::Dvorak => mappings::char_to_hid_code_dvorak(code0 as u8 as char)[0],
                             _ => mappings::char_to_hid_code_us101(code0 as u8 as char)[0],
                         });
                     }
                     if code1 != 0 {
-                        cu.kbd_tx_queue.borrow_mut().push_back(match native_map {
+                        cu.kbd_tx_queue.borrow_mut().push_back(match key_map {
                             KeyMap::Dvorak => mappings::char_to_hid_code_dvorak(code1 as u8 as char)[0],
                             _ => mappings::char_to_hid_code_us101(code1 as u8 as char)[0],
                         });
                     }
                     if code2 != 0 {
-                        cu.kbd_tx_queue.borrow_mut().push_back(match native_map {
+                        cu.kbd_tx_queue.borrow_mut().push_back(match key_map {
                             KeyMap::Dvorak => mappings::char_to_hid_code_dvorak(code2 as u8 as char)[0],
                             _ => mappings::char_to_hid_code_us101(code2 as u8 as char)[0],
                         });
@@ -836,10 +837,9 @@ pub(crate) fn main_hw() -> ! {
 
                 // check keymap on every call because we may need to toggle this for e.g. plugging
                 // into a new host with a different map
-                let native_map = native_kbd.get_keymap().unwrap();
                 for ch in usb_send.s.as_str().chars() {
                     // ASSUME: user's keyboard type matches the preference on their Precursor device.
-                    let codes = match native_map {
+                    let codes = match key_map {
                         KeyMap::Dvorak => mappings::char_to_hid_code_dvorak(ch),
                         _ => mappings::char_to_hid_code_us101(ch),
                     };
@@ -1201,6 +1201,11 @@ pub(crate) fn main_hw() -> ! {
                     let mut code = [0u8; 1];
                     cu.led_state.pack_to_slice(&mut code).unwrap();
                     scalar.arg1 = code[0] as usize;
+                }
+            }
+            Opcode::SetKeyMap => {
+                if let Some(scalar) = msg.body.scalar_message_mut() {
+                    key_map = KeyMap::from(scalar.arg1);
                 }
             }
             Opcode::InvalidCall => {

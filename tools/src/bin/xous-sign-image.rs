@@ -150,7 +150,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         };
 
     let arb_override = if let Some(arb_str) = matches.value_of("antirollback-override") {
-        parse_u32(arb_str).ok()
+        Some(parse_u32(arb_str).expect("Malformed antirollback override"))
     } else {
         None
     };

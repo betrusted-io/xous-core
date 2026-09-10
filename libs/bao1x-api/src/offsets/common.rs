@@ -121,6 +121,28 @@ pub const fn classic_to_pq_revocation(classic: usize) -> Option<usize> {
 // slots 0-17 are currently unallocated
 
 encode_oneway! {
+    #[offset = 17]
+    /// Used for boot1 developers. This flag is activated by running a command in the REPL
+    /// in the boot1 updater to trigger the staging sequence. However, it is incumbent on
+    /// the developer to *always* load a known good image into boot1, otherwise you can
+    /// end up in a trapped state where the altboot is corrupted state.
+    pub enum Boot1DeveloperState {
+        // boot1 is in a good state, no action to take
+        Good,
+        // boot1 is staged for update, but not yet tested
+        Staged,
+        // boot1 boot is about to be attempted. The next state is either Bad or Good. The
+        // transition to Good state happens when the signature check passes
+        // for the next stage and we're about to jump to it. Note this leaves an edge case of
+        // if you load a crap image in the next stage that can't pass signature check. Thus
+        // when doing development it's important to test the boot1 with a known good image.
+        Attempted,
+        // boot1 boot failed - this state is used by the updater to go into the fail-safe mode
+        Bad,
+    }
+}
+
+encode_oneway! {
     #[offset = 18]
     pub enum UsbDefaultSpeed {
         High,
@@ -349,14 +371,21 @@ pub const DEV_PUBKEY: SlotIndex = SlotIndex::Data(7, PartitionAccess::All, RwPer
 /// - The third-party firmware must generate and populate all the COLLATERAL data slots.
 /// - The third-party firmware must incorporate at least one of the keys in slots 261, 262, or 263 into their
 ///   root key mechanism.
-/// - Collateral key in slot 264 must be made disclosable through a public inspection mechanism. The purpose
-///   of the inspection is to verify that in fact the collateral keys have been populated with non-zero value
-///   by the third-party firmware, and to verify erase of the key range when necessary. Erasure always
-///   progresses from low slot to high slot, and thus one can infer the erasure state of the collateral by
-///   inspecting the value of the high key slot.
+/// - Collateral key in slot 264 is made disclosable through a public inspection mechanism. The purpose of the
+///   inspection is to verify that in fact the collateral keys have been populated with non-zero value by the
+///   third-party firmware, and to verify erase of the key range when necessary. Erasure always progresses
+///   from low slot to high slot, and thus one can infer the erasure state of the collateral by inspecting the
+///   value of the high key slot. `audit` when OEM_MODE is set will disclose this.
 ///
-/// <slot-map targets="all" registered="primary" in-data-slots="no" in-key-slots="no"/>
-pub const COLLATERAL: SlotIndex = SlotIndex::DataRange(261..265, PartitionAccess::Fw0, RwPerms::ReadWrite);
+/// <slot-map targets="all" registered="primary" in-data-slots="yes" in-key-slots="no"/>
+pub const COLLATERAL_SECRET: SlotIndex =
+    SlotIndex::DataRange(261..264, PartitionAccess::Fw0, RwPerms::ReadWrite);
+/// <slot-map targets="all" registered="primary" in-data-slots="yes" in-key-slots="no"/>
+pub const COLLATERAL_PUBLIC: SlotIndex = SlotIndex::Data(264, PartitionAccess::Open, RwPerms::ReadWrite);
+/// This is an alias - it's not tracked in the checker. It's meant to encompass the entire 4-slot range
+/// and is used to ensure that the whole range is one-shot handled for erasure
+pub const COLLATERAL_ERASURE_ALIAS: SlotIndex =
+    SlotIndex::DataRange(261..265, PartitionAccess::Fw0, RwPerms::ReadWrite);
 
 /// Boot1 pubkey `receipt` fields record the last accepted public key used when running boot1.
 /// If this changes, the collateral keys need to be erased. This prevents one third-party signed firmware

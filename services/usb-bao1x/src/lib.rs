@@ -4,7 +4,7 @@ pub mod api;
 pub mod ccid_framing;
 pub mod ep_budget;
 pub use api::*;
-pub use ep_budget::{CRG_EP_NUM as USB_EP_BUDGET_SLOTS, EpBudgetLedger, assert_class_ep_budget};
+use bao1x_api::keyboard::KeyMap;
 use num_traits::*;
 use packed_struct::PackedStruct;
 use rkyv::option::ArchivedOption;
@@ -433,6 +433,14 @@ impl UsbHid {
     }
 
     pub fn cid(&self) -> xous::CID { self.conn }
+
+    pub fn set_key_map(&self, map: KeyMap) {
+        send_message(
+            self.conn,
+            Message::new_blocking_scalar(Opcode::SetKeyMap.to_usize().unwrap(), map.into(), 0, 0, 0),
+        )
+        .unwrap();
+    }
 }
 
 use core::sync::atomic::{AtomicU32, Ordering};

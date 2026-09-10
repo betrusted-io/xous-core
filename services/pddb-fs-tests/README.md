@@ -31,22 +31,17 @@ is the equivalent `renode-test` suite used by `.github/workflows/pddb-renode-ci.
 
 The suite is green while every open bug stays visible: a test that reproduces a
 known defect asserts the *correct* behavior and is registered as an expected
-failure (`XFAIL`) rather than being weakened. If a bug is fixed, its test flips to
-`XPASS` and the run goes red until the registry is updated. One reproducer ships
-disabled because it panics the pddb server outright (a truncating `File::create`
-over an existing key ≥ 4 KiB — the same symptom as issue #297, whose 2023 fix
-touched only the shell command, not the server path std::fs uses).
-
-Each XFAIL test's doc comment states the defect, its mechanism, and the suspected
-code path; grep the theme files under `src/tests/` for `XFAIL`.
+failure in `XFAILS` (`src/tests/mod.rs`) rather than being weakened. If a bug is
+fixed, its test flips to `XPASS` and the run goes red until the registry is
+updated. The commit that registers an entry describes the defect; the commit that
+removes it says what fixed it. The registry is currently empty.
 
 ## Adding a test
 
 Write a `pub fn` in the appropriate `src/tests/<theme>.rs` (panic to fail, return
 to pass), then add it to that file's `TESTS` table; `src/tests/mod.rs` aggregates
 the per-theme tables. The important xous/PDDB gotchas — the `/` (not `:`) dict/key
-separator, that `File::create` does not auto-create its parent dict, that
-`metadata().len()` is always 0, and the ≥ 4 KiB truncate hazard — are documented
-at the top of `src/tests/mod.rs` and in the existing tests. Use `TmpDict` for
-isolation, verify every write by reading it back, and keep re-created files under
-4 KiB.
+separator and that `File::create` does not auto-create its parent dict — are
+documented at the top of `src/tests/mod.rs` and in the existing tests. Use
+`TmpDict` for isolation, verify every write by reading it back, and clean up what
+you create.

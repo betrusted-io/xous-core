@@ -256,8 +256,12 @@ impl SwapHal {
                     // boot to encrypt the swap memory to the local key. Once this is done, the TOCTOU is
                     // gone.
                     crate::println!("Fresh swap image found - checking signature before proceeding");
-                    match bao1x_hal::sigcheck::validate_image(LOADER_TO_SWAP, Some(&mut hal.flash_spim), None)
-                    {
+                    match bao1x_hal::sigcheck::validate_image(
+                        LOADER_TO_SWAP,
+                        Some(&mut hal.flash_spim),
+                        None,
+                        HardenedBool::FALSE,
+                    ) {
                         Ok((k, k2, tag, _target, pq_tag)) => {
                             let tag_owned;
                             println!(

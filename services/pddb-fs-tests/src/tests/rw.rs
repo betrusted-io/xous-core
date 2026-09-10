@@ -40,8 +40,7 @@ pub fn io_smoke_test() {
 }
 
 /// Ported from upstream `file_test_io_non_positional_read`: two sequential
-/// reads into disjoint halves of one buffer must land contiguously (no seeks
-/// involved, so no PFC-3 exposure).
+/// reads into disjoint halves of one buffer must land contiguously.
 pub fn io_non_positional_read() {
     let tmp = TmpDict::new("io_non_positional_read");
     let path = tmp.path("file");
@@ -67,9 +66,7 @@ pub fn io_non_positional_read() {
     assert_eq!(read_str, message);
 }
 
-/// Ported from upstream `file_test_io_seek_and_tell_smoke_test`. Only a
-/// forward `SeekFrom::Start` is used, so this stays outside PFC-3's blast
-/// radius and must pass.
+/// Ported from upstream `file_test_io_seek_and_tell_smoke_test`.
 pub fn io_seek_and_tell_smoke_test() {
     let tmp = TmpDict::new("io_seek_and_tell_smoke_test");
     let path = tmp.path("file");
@@ -96,14 +93,10 @@ pub fn io_seek_and_tell_smoke_test() {
     assert_eq!(tell_pos_post_read, message.len() as u64);
 }
 
-/// Ported faithfully from upstream `file_test_io_seek_and_write` -- this is
-/// the maintainer's exact overwrite-idiom symptom report: write, seek back
-/// into the middle, write again, and read the whole thing back through a
-/// fresh handle. The in-place overwrite lands entirely within the existing
-/// length (3 + 10 == 13 == the original length), so it never grows the key
-/// and never re-creates it -- small-pool in-place update is the one path
-/// PFC-1 does NOT afflict (backend/dictionary.rs ~748-751), so this must
-/// pass.
+/// Ported from upstream `file_test_io_seek_and_write`: write, seek back into
+/// the middle, write again, and read the whole thing back through a fresh
+/// handle. The overwrite lands within the existing length (3 + 10 == 13), so
+/// the key is updated in place and never grows.
 pub fn io_seek_and_write() {
     let tmp = TmpDict::new("io_seek_and_write");
     let path = tmp.path("file");
@@ -127,11 +120,8 @@ pub fn io_seek_and_write() {
     assert_eq!(read_str, final_msg);
 }
 
-/// Ported from upstream `file_test_io_seek_shakedown`. Exercises negative
-/// `SeekFrom::End`/`SeekFrom::Current` offsets, which is exactly PFC-3
-/// territory: the server casts the offset with `as u64` before
-/// `checked_sub`, so any negative seek errors out (services/pddb/src/
-/// libstd/mod.rs seek_key/seek_from_point). XFAIL PFC-3.
+/// Ported from upstream `file_test_io_seek_shakedown`: negative
+/// `SeekFrom::End` and `SeekFrom::Current` offsets.
 pub fn io_seek_shakedown() {
     let tmp = TmpDict::new("io_seek_shakedown");
     let path = tmp.path("file");
@@ -164,18 +154,13 @@ pub fn io_seek_shakedown() {
 }
 
 /// Ported from upstream `file_test_io_eof`: a freshly-created, never-written
-/// file reads back 0 bytes, repeatedly, at EOF. No seeks, no growth -- must
-/// pass. Fixture deviation from upstream (empirical, cold run 2026-07-07):
-/// `.create(true)` is added alongside `create_new` because on xous
-/// `create_new` alone can never create a missing file (PFC-10; the open
-/// errored and this test failed before reaching its EOF subject). PFC-10
-/// itself is pinned by openflags::create_new_creates_missing.
+/// file reads back 0 bytes, repeatedly, at EOF.
 pub fn io_eof() {
     let tmp = TmpDict::new("io_eof");
     let path = tmp.path("file");
     let mut buf = [0; 256];
     {
-        let oo = OpenOptions::new().create(true).create_new(true).write(true).read(true).clone();
+        let oo = OpenOptions::new().create_new(true).write(true).read(true).clone();
         let mut rw = check!(oo.open(&path));
         assert_eq!(check!(rw.read(&mut buf)), 0);
         assert_eq!(check!(rw.read(&mut buf)), 0);
@@ -184,12 +169,11 @@ pub fn io_eof() {
 }
 
 /// Xous-specific: a matrix of `SeekFrom::Start`-only seeks (0, mid, last
-/// byte, exactly at EOF). Never goes through the `by < 0` branch of
-/// seek_from_point, so this must pass regardless of PFC-3.
+/// byte, exactly at EOF).
 pub fn seek_start_matrix() {
     let tmp = TmpDict::new("seek_start_matrix");
     let path = tmp.path("file");
-    let content = b"0123456789ABCDEF"; // 16 bytes, well under the 4 KiB hazard line
+    let content = b"0123456789ABCDEF"; // 16 bytes
     {
         let mut f = check!(File::create(&path));
         check!(f.write_all(content));
@@ -210,9 +194,8 @@ pub fn seek_start_matrix() {
 
 /// Xous-specific: negative `SeekFrom::End`/`SeekFrom::Current` offsets in
 /// isolation (End coverage that smoke::seek_negative_current doesn't
-/// exercise). Correct POSIX behavior: `End(-3)` on a 10-byte file lands at 7;
-/// a subsequent `Current(-5)` from 10 lands at 5. XFAIL PFC-3: the server's
-/// `by as u64` cast before `checked_sub` makes every negative offset error.
+/// exercise). `End(-3)` on a 10-byte file lands at 7; a subsequent
+/// `Current(-5)` from 10 lands at 5.
 pub fn seek_negative_offsets() {
     let tmp = TmpDict::new("seek_negative_offsets");
     let path = tmp.path("file");
@@ -237,14 +220,10 @@ pub fn seek_negative_offsets() {
     check!(fs::remove_file(&path));
 }
 
-/// Xous-specific: open-time-length staleness (PFC-5). Confirmed by reading
-/// services/pddb/src/libstd/mod.rs: `write_key` only ever advances
-/// `file.offset`, never `file.length`; `seek_key`'s `SeekFrom::End` branch
-/// seeks from `file.length` (the length captured at *open* time). So on a
-/// freshly-created (open-time length 0) handle, writing bytes through that
-/// SAME handle and then asking `SeekFrom::End(0)` must -- per POSIX -- report
-/// the file's current true end, but the server instead reports the stale
-/// open-time value. XFAIL PFC-5.
+/// Xous-specific: `SeekFrom::End(0)` through the handle that just grew the
+/// file must report the current end, not the length captured at open time
+/// (`seek_key` in services/pddb/src/libstd/mod.rs seeks End from the
+/// handle's cached length).
 pub fn seek_end_after_write_staleness() {
     let tmp = TmpDict::new("seek_end_after_write_staleness");
     let path = tmp.path("file");
@@ -257,8 +236,7 @@ pub fn seek_end_after_write_staleness() {
          through this same handle, not the length captured when it was opened"
     );
     drop(f);
-    // A freshly-opened handle picks up the true persisted length correctly --
-    // this half is not the bug, and pins down that the data itself is intact.
+    // A freshly-opened handle sees the persisted length and content.
     let mut f2 = check!(File::open(&path));
     assert_eq!(check!(f2.seek(SeekFrom::End(0))), 5);
     check!(f2.seek(SeekFrom::Start(0)));
@@ -270,12 +248,10 @@ pub fn seek_end_after_write_staleness() {
 }
 
 /// Xous-specific: seek past the current EOF, write past the gap, and read
-/// the whole thing back through a fresh handle. Confirmed by reading
-/// backend/dictionary.rs `key_update`: extending a small-pool key zero-fills
-/// the vector out to `offset` before splicing in the new bytes, so the gap
-/// must read back as zeros (POSIX sparse-file semantics) -- and because this
-/// growth's `kcache.len` update is the *grow* path (not the truncate path),
-/// it is unaffected by PFC-1. Must pass.
+/// the whole thing back through a fresh handle. `key_update` in
+/// backend/dictionary.rs zero-fills a small-pool key out to `offset` before
+/// splicing in the new bytes, so the gap must read back as zeros (POSIX
+/// sparse-file semantics).
 pub fn seek_past_eof_write_gap() {
     let tmp = TmpDict::new("seek_past_eof_write_gap");
     let path = tmp.path("file");
@@ -295,7 +271,7 @@ pub fn seek_past_eof_write_gap() {
 /// extending a pre-existing small file (never truncating it -- append-mode
 /// open must not truncate; services/pddb/src/libstd/mod.rs open_key sets
 /// `offset: if append { len } else { 0 }` and takes no truncate branch for a
-/// plain append open). Total size stays well under 4 KiB.
+/// plain append open).
 pub fn append_mode_multi_write() {
     let tmp = TmpDict::new("append_mode_multi_write");
     let path = tmp.path("file");
@@ -313,7 +289,6 @@ pub fn append_mode_multi_write() {
         check!(f.write_all(b"CCC"));
     }
     let expected = [base.as_slice(), b"AAA", b"BBB", b"CCC"].concat();
-    assert!(expected.len() < 4096, "test data must stay under the 4 KiB large-pool hazard line");
     assert_eq!(read_back(&path), expected);
     check!(fs::remove_file(&path));
 }
@@ -338,7 +313,7 @@ pub fn read_zero_length_buffer_and_empty_file() {
     check!(fs::remove_file(&path));
 }
 
-/// This theme's registry (aggregated by tests::all_tests / all_xfails).
+/// This theme's tests (aggregated by tests::all_tests).
 pub const TESTS: &[(&str, fn())] = &[
     ("rw::io_smoke_test", io_smoke_test as fn()),
     ("rw::io_non_positional_read", io_non_positional_read as fn()),
@@ -352,10 +327,4 @@ pub const TESTS: &[(&str, fn())] = &[
     ("rw::seek_past_eof_write_gap", seek_past_eof_write_gap as fn()),
     ("rw::append_mode_multi_write", append_mode_multi_write as fn()),
     ("rw::read_zero_length_buffer_and_empty_file", read_zero_length_buffer_and_empty_file as fn()),
-];
-
-pub const XFAILS: &[(&str, &str)] = &[
-    ("rw::io_seek_shakedown", "PFC-3"),
-    ("rw::seek_negative_offsets", "PFC-3"),
-    ("rw::seek_end_after_write_staleness", "PFC-5"),
 ];

@@ -1,9 +1,10 @@
 // SPDX-FileCopyrightText: 2020 Sean Cross <sean@xobs.io>
 // SPDX-License-Identifier: Apache-2.0
 
-use core::sync::atomic::{AtomicU8, AtomicUsize, Ordering::Relaxed};
+use core::sync::atomic::{AtomicBool, AtomicU8, AtomicUsize, Ordering::Relaxed};
 
 use xous_kernel::arch::PAGE_SIZE;
+use xous_kernel::arch::USER_AREA_END;
 use xous_kernel::*;
 
 use crate::arch;
@@ -38,6 +39,8 @@ static mut SWITCHTO_CALLER: Option<(PID, TID)> = None;
 /// return control to the Client.
 static ORIGINAL_PID: AtomicU8 = AtomicU8::new(2);
 static ORIGINAL_TID: AtomicUsize = AtomicUsize::new(2);
+
+static NS_TOFU: AtomicBool = AtomicBool::new(false);
 
 #[derive(PartialEq)]
 enum ExecutionType {
@@ -98,45 +101,141 @@ fn send_message(pid: PID, tid: TID, cid: CID, message: Message) -> SysCallResult
         // process. Additionally, determine whether the call is blocking. If
         // so, switch to the server context right away.
         let blocking = message.is_blocking();
+
+        // helper for handling the error-recovery path
+        fn return_thread(ss: &mut SystemServices, sidx: usize, tid: Option<TID>) {
+            if let Some(st) = tid {
+                ss.server_from_sidx_mut(sidx)
+                    .expect("server couldn't be located")
+                    .return_available_thread(st);
+            }
+        }
+
+        // --- decide delivery path BEFORE touching memory ---
+        let has_memory =
+            matches!(&message, Message::Move(_) | Message::MutableBorrow(_) | Message::Borrow(_));
+
+        let (available_tid, can_deliver) = {
+            let (server_pid, avail_tid) = {
+                let server = ss.server_from_sidx_mut(sidx).expect("server couldn't be located");
+                let server_pid = server.pid;
+
+                let avail_tid = server.take_available_thread();
+                (server_pid, avail_tid)
+            };
+
+            // A delivered message consumes at most one slot of the server's
+            // queue:
+            //   * no available thread: the message itself is enqueued by queue_message() in the "queue it"
+            //     path below,
+            //   * available thread + blocking: queue_response() enqueues a WaitingReturn* token -- the
+            //     message goes to the thread directly, but the response bookkeeping still occupies a queue
+            //     slot,
+            //   * available thread + non-blocking: direct handoff, no slot.
+            // So an available thread only exempts *non-blocking* sends from
+            // the capacity probe. Erring toward "full" is cheap: the
+            // dispatcher retries ServerQueueFull once capacity frees. Erring
+            // toward "not full" is unrecoverable for memory messages, because
+            // send_memory() has already moved the client's pages by the time
+            // the enqueue fails, and the ServerQueueFull retry would move
+            // them a second time against a now-empty client mapping. Memory
+            // messages therefore run the authoritative predicate before any
+            // transfer: has_queue_capacity() is exactly queue_message()'s
+            // acceptance rule, and strictly stricter than queue_response()'s.
+            let needs_slot = avail_tid.is_none() || blocking;
+
+            if has_memory {
+                let capacity = if needs_slot {
+                    // The queue array lives in the server's address space.
+                    let current_pid = ss.current_pid();
+                    let server_process = match ss.get_process(server_pid) {
+                        Ok(v) => v,
+                        Err(e) => {
+                            // Give the thread back before returning the error
+                            return_thread(ss, sidx, avail_tid);
+                            return Err(e);
+                        }
+                    };
+                    server_process.mapping.activate().unwrap();
+
+                    let server = ss.server_from_sidx_mut(sidx).expect("server couldn't be located");
+                    let capacity = server.has_queue_capacity();
+
+                    let current_process = ss.get_process(current_pid).expect("client process");
+                    current_process.mapping.activate().unwrap();
+                    capacity
+                } else {
+                    true
+                };
+                (avail_tid, capacity)
+            } else {
+                // Scalar / BlockingScalar: no memory to protect, and the
+                // generation counters live in the kernel-static Server
+                // struct, so this costs no address-space switch. It can miss
+                // a queue full of WaitingReturn* tokens (tokens never move
+                // the generations), but a late ServerQueueFull there merely
+                // retries an idempotent syscall.
+                let server = ss.server_from_sidx_mut(sidx).expect("server couldn't be located");
+                (avail_tid, !needs_slot || server.has_queue_capacity_scalar())
+            }
+        };
+
+        if !can_deliver {
+            return Err(xous_kernel::Error::ServerQueueFull);
+        }
+
+        // --- Memory transfer (now guaranteed to be deliverable) ---
         let message = match message {
             Message::Scalar(_) | Message::BlockingScalar(_) => message,
             Message::Move(msg) => {
-                let new_virt = ss.send_memory(
-                    msg.buf.as_mut_ptr() as *mut usize,
-                    server_pid,
-                    core::ptr::null_mut(),
-                    msg.buf.len(),
-                )?;
+                let new_virt = ss
+                    .send_memory(
+                        msg.buf.as_mut_ptr() as *mut usize,
+                        server_pid,
+                        core::ptr::null_mut(),
+                        msg.buf.len(),
+                    )
+                    .inspect_err(|_| return_thread(ss, sidx, available_tid))?;
                 Message::Move(MemoryMessage {
                     id: msg.id,
-                    buf: unsafe { MemoryRange::new(new_virt as usize, msg.buf.len()) }?,
+                    buf: unsafe { MemoryRange::new(new_virt as usize, msg.buf.len()) }.map_err(|e| {
+                        return_thread(ss, sidx, available_tid);
+                        e
+                    })?,
                     offset: msg.offset,
                     valid: msg.valid,
                 })
             }
             Message::MutableBorrow(msg) => {
-                let new_virt = ss.lend_memory(
-                    msg.buf.as_mut_ptr() as *mut usize,
-                    server_pid,
-                    core::ptr::null_mut(),
-                    msg.buf.len(),
-                    true,
-                )?;
+                let new_virt = ss
+                    .lend_memory(
+                        msg.buf.as_mut_ptr() as *mut usize,
+                        server_pid,
+                        core::ptr::null_mut(),
+                        msg.buf.len(),
+                        true,
+                    )
+                    .inspect_err(|_| return_thread(ss, sidx, available_tid))?;
                 Message::MutableBorrow(MemoryMessage {
                     id: msg.id,
-                    buf: unsafe { MemoryRange::new(new_virt as usize, msg.buf.len()) }?,
+                    buf: unsafe { MemoryRange::new(new_virt as usize, msg.buf.len()) }.map_err(|e| {
+                        return_thread(ss, sidx, available_tid);
+                        e
+                    })?,
                     offset: msg.offset,
                     valid: msg.valid,
                 })
             }
             Message::Borrow(msg) => {
-                let new_virt = ss.lend_memory(
-                    msg.buf.as_mut_ptr() as *mut usize,
-                    server_pid,
-                    core::ptr::null_mut(),
-                    msg.buf.len(),
-                    false,
-                )?;
+                let new_virt = ss
+                    .lend_memory(
+                        msg.buf.as_mut_ptr() as *mut usize,
+                        server_pid,
+                        core::ptr::null_mut(),
+                        msg.buf.len(),
+                        false,
+                    )
+                    .inspect_err(|_| return_thread(ss, sidx, available_tid))?;
                 // println!(
                 //     "Lending {} bytes from {:08x} in PID {} to {:08x} in PID {}",
                 //     msg.buf.len(),
@@ -147,17 +246,20 @@ fn send_message(pid: PID, tid: TID, cid: CID, message: Message) -> SysCallResult
                 // );
                 Message::Borrow(MemoryMessage {
                     id: msg.id,
-                    buf: unsafe { MemoryRange::new(new_virt as usize, msg.buf.len()) }?,
+                    buf: unsafe { MemoryRange::new(new_virt as usize, msg.buf.len()) }.map_err(|e| {
+                        return_thread(ss, sidx, available_tid);
+                        e
+                    })?,
                     offset: msg.offset,
                     valid: msg.valid,
                 })
             }
         };
 
+        // --- Deliver ---
         // If the server has an available thread to receive the message,
         // transfer it right away.
-        let server = ss.server_from_sidx_mut(sidx).expect("server couldn't be located");
-        if let Some(server_tid) = server.take_available_thread() {
+        if let Some(server_tid) = available_tid {
             // klog!(
             //     "there are threads available in PID {} to handle this message -- marking as Ready",
             //     server_pid
@@ -213,6 +315,10 @@ fn send_message(pid: PID, tid: TID, cid: CID, message: Message) -> SysCallResult
                         .map(|_| Ok(xous_kernel::Result::ResumeProcess))
                         .unwrap_or(Err(xous_kernel::Error::ProcessNotFound));
 
+                    if result.is_err() {
+                        return_thread(ss, sidx, available_tid);
+                    }
+
                     // Keep track of which process owned the quantum. This ensures that the next
                     // thread in sequence gets to run when this process is activated again.
                     ss.set_last_thread(
@@ -244,7 +350,10 @@ fn send_message(pid: PID, tid: TID, cid: CID, message: Message) -> SysCallResult
                             let envelope = MessageEnvelope { sender: sender.into(), body: message };
                             Ok(xous_kernel::Result::MessageEnvelope(envelope))
                         }
-                        _ => Err(xous_kernel::Error::ProcessNotFound),
+                        _ => {
+                            return_thread(ss, sidx, available_tid);
+                            Err(xous_kernel::Error::ProcessNotFound)
+                        }
                     }
                 }
             } else if blocking && !cfg!(baremetal) {
@@ -738,7 +847,11 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
 
                 // Don't let the address exceed the user area (unless it's PID 1)
                 if pid.get() != 1
-                    && virt.map(|x| x.get() >= xous_kernel::arch::USER_AREA_END).unwrap_or(false)
+                    && virt.is_some_and(|x| {
+                        x.get()
+                            .checked_add(size.get())
+                            .is_none_or(|end| end >= xous_kernel::arch::USER_AREA_END)
+                    })
                 {
                     klog!("Exceeded user area");
                     return Err(xous_kernel::Error::BadAddress);
@@ -772,11 +885,7 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
 
                 if !phys_ptr.is_null() {
                     if mm.is_main_memory(phys_ptr) {
-                        let range_start = range.as_mut_ptr() as *mut usize;
-                        let range_end = range_start.wrapping_add(range.len() / core::mem::size_of::<usize>());
-                        unsafe {
-                            crate::mem::bzero(range_start, range_end);
-                        };
+                        unsafe { core::ptr::write_bytes(range.as_mut_ptr(), 0, range.len()) };
                     }
                     for offset in
                         (range.as_ptr() as usize..(range.as_ptr() as usize + range.len())).step_by(PAGE_SIZE)
@@ -796,6 +905,11 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
             let size = range.len();
             if cfg!(baremetal) && virt & 0xfff != 0 {
                 return Err(xous_kernel::Error::BadAlignment);
+            }
+            if cfg!(baremetal) && (virt >= USER_AREA_END || virt.saturating_add(size) >= USER_AREA_END) {
+                // don't allow processes to unmap kernel or page table memory; however, these addresses
+                // only have meaning on actual hardware (baremetal), and not in hosted mode.
+                return Err(xous_kernel::Error::BadAddress);
             }
             for addr in (virt..(virt + size)).step_by(PAGE_SIZE) {
                 if let Err(e) = mm.unmap_page(addr as *mut usize) {
@@ -853,7 +967,7 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
             }
             let (start, length, end) = ArchProcess::with_inner_mut(|process_inner| {
                 // Don't allow decreasing the heap beyond the current allocation
-                if delta > process_inner.mem_heap_size {
+                if delta >= process_inner.mem_heap_size {
                     return Err(xous_kernel::Error::OutOfMemory);
                 }
 
@@ -944,6 +1058,20 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
             ss.create_process(process_init).map(xous_kernel::Result::NewProcess)
         }),
         SysCall::CreateServerWithAddress(name) => SystemServices::with_mut(|ss| {
+            const NS_SID: SID = SID::from_u32(
+                u32::from_le_bytes(*b"xous"),
+                u32::from_le_bytes(*b"-nam"),
+                u32::from_le_bytes(*b"e-se"),
+                u32::from_le_bytes(*b"rver"),
+            );
+            // This counts on the `name==NS_SID` short-circuiting the NS_TOFU call. Short-circuit evaluation
+            // is the specified behavior in Rust, so this should always be correct.
+            if name == NS_SID && NS_TOFU.swap(true, Relaxed) {
+                return Err(xous_kernel::Error::ServerExists);
+            }
+            // note: if create_server_with_address() fails on the legitimate boot, it fails-closed forever.
+            // this should never happen - on early boot there is no reason for server creation to fail -
+            // so this is a deliberate choice to simplify the check logic.
             ss.create_server_with_address(pid, name, true)
                 .map(|(sid, cid)| xous_kernel::Result::NewServerID(sid, cid))
         }),
@@ -1022,6 +1150,9 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
             SystemServices::with_mut(|ss| ss.destroy_server(pid, sid).and(Ok(xous_kernel::Result::Ok)))
         }
         SysCall::JoinThread(other_tid) => {
+            if other_tid >= crate::arch::process::MAX_THREAD {
+                return Err(xous_kernel::Error::ThreadNotAvailable);
+            }
             SystemServices::with_mut(|ss| ss.join_thread(pid, tid, other_tid)).map(|ret| {
                 // Successfully joining a thread causes this thread to sleep while the parent process
                 // is resumed. This is the same as a `Yield`
@@ -1057,18 +1188,28 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
         },
         #[cfg(feature = "v2p")]
         SysCall::VirtToPhys(vaddr) => {
-            let phys_addr = crate::arch::mem::virt_to_phys(vaddr as usize);
-            match phys_addr {
-                Ok(pa) => Ok(xous_kernel::Result::Scalar1(pa)),
-                Err(_) => Err(xous_kernel::Error::BadAddress),
+            if vaddr < USER_AREA_END {
+                let phys_addr = crate::arch::mem::virt_to_phys(vaddr as usize);
+                match phys_addr {
+                    Ok(pa) => Ok(xous_kernel::Result::Scalar1(pa)),
+                    Err(_) => Err(xous_kernel::Error::BadAddress),
+                }
+            } else {
+                // don't allow discovery of kernel or page tables
+                Err(xous_kernel::Error::BadAddress)
             }
         }
         #[cfg(feature = "v2p")]
         SysCall::VirtToPhysPid(pid, vaddr) => {
-            let phys_addr = crate::arch::mem::virt_to_phys_pid(pid, vaddr as usize);
-            match phys_addr {
-                Ok(pa) => Ok(xous_kernel::Result::Scalar1(pa)),
-                Err(_) => Err(xous_kernel::Error::BadAddress),
+            if vaddr < USER_AREA_END {
+                let phys_addr = crate::arch::mem::virt_to_phys_pid(pid, vaddr as usize);
+                match phys_addr {
+                    Ok(pa) => Ok(xous_kernel::Result::Scalar1(pa)),
+                    Err(_) => Err(xous_kernel::Error::BadAddress),
+                }
+            } else {
+                // don't allow discovery of kernel or page tables
+                Err(xous_kernel::Error::BadAddress)
             }
         }
         #[cfg(feature = "swap")]
@@ -1127,15 +1268,21 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
                         let paddr = crate::arch::mem::virt_to_phys(vaddr_to_release).unwrap() as usize;
                         #[cfg(feature = "debug-swap-verbose")]
                         println!("ReleaseMemory - paddr {:x}", paddr);
-                        // this call unmaps the virtual page from the page table
-                        crate::arch::mem::unmap_page_inner(mm, vaddr_to_release)
-                            .expect("couldn't unmap page");
-                        // This call releases the physical page from the RPT - the pid has to match that of
-                        // the original owner. This is the "pointy end" of the stick;
-                        // after this call, the memory is now back into the free pool.
-                        mm.release_page_swap(paddr as *mut usize, PID::new(original_pid).unwrap())
-                            .expect("couldn't free page that was swapped out");
-                        Ok(xous_kernel::Result::Ok)
+                        if mm.is_main_memory(paddr as *mut u8) || mm.is_peripheral_ram(paddr) {
+                            // this call unmaps the virtual page from the page table
+                            crate::arch::mem::unmap_page_inner(mm, vaddr_to_release)
+                                .expect("couldn't unmap page");
+                            // This call releases the physical page from the RPT - the pid has to match that
+                            // of the original owner. This is the "pointy end" of
+                            // the stick; after this call, the memory is now back
+                            // into the free pool.
+                            mm.release_page_swap(paddr as *mut usize, PID::new(original_pid).unwrap())
+                                .expect("couldn't free page that was swapped out");
+                            Ok(xous_kernel::Result::Ok)
+                        } else {
+                            // you are not allowed to unmap a peripheral address space once you have mapped it
+                            Err(xous_kernel::Error::InvalidArgument)
+                        }
                     })
                 }
                 SwapAbi::HardOom => {
@@ -1285,6 +1432,13 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
                                 for process in &system_services.processes {
                                     if !process.free() {
                                         process.activate().unwrap();
+
+                                        // Uncommenting this will cause all pages to dump to DUART. This can
+                                        // take several seconds and freeze the system while this happens,
+                                        // but it's a useful trick for debugging.
+                                        //
+                                        // crate::arch::mem::MemoryMapping::current().print_map();
+
                                         let mut connection_count = 0;
                                         ArchProcess::with_inner(|process_inner| {
                                             for conn in &process_inner.connection_map {

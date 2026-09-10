@@ -360,7 +360,6 @@ fn main() -> ! {
 
     let mut name_table = CheckedHashMap::new();
 
-    info!("started");
     loop {
         let mut msg = xous::receive_message(name_server).unwrap();
         log::trace!("received message: {:?}", msg);
@@ -506,6 +505,13 @@ fn main() -> ! {
                 unimplemented!("AuthenticatedLookup not yet implemented");
             }
             Some(api::Opcode::TrustedInitDone) => {
+                #[cfg(feature = "debug-xns-init")]
+                for (server, info) in &name_table.map {
+                    if let Ok(name) = server.as_str() {
+                        log::info!("{:?} : {:?}", name, info.current_conns);
+                    }
+                }
+
                 if name_table.trusted_init_done() {
                     xous::return_scalar(msg.sender, 1).expect("couldn't return trusted_init_done");
                 } else {
@@ -525,14 +531,8 @@ fn main() -> ! {
                 buffer.replace(response).expect("Can't return buffer");
             }
             None => {
-                error!("couldn't decode message: {:?}", msg);
-                break;
+                error!("Couldn't decode message: {:?}", msg);
             }
         }
     }
-    // clean up our program
-    log::trace!("main loop exit, destroying servers");
-    xous::destroy_server(name_server).unwrap();
-    log::trace!("quitting");
-    xous::terminate_process(0);
 }
