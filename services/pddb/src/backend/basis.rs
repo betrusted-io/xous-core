@@ -509,8 +509,17 @@ impl BasisCache {
                         if kcache.start < SMALL_POOL_END {
                             // small pool fetch
                             if kcache.data.is_none() {
+                                if needs_fill {
+                                    // we already tried to refill once and it didn't produce data. This can
+                                    // happen if data is corrupted - user powered down the device during a
+                                    // previous write, for example.
+                                    log::error!("Small key {}:{} data unreadable after refill", dict, key);
+                                    return Err(Error::new(
+                                        ErrorKind::InvalidData,
+                                        "small key data unreadable",
+                                    ));
+                                }
                                 needs_fill = true;
-                                // loop starts again at the top, but this time filling the key first.
                                 continue;
                             }
                             // at this point, if we have a small key, we also have its data in cache.
