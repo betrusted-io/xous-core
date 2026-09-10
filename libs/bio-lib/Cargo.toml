@@ -28,6 +28,7 @@ ws2812 = []
 captouch = []
 av-trng = []
 dali = []
+yiwire = []
 
 # This shouldn't be a default - but provided so that code automation
 # targets can easily crawl the whole library with a single flag.
@@ -39,6 +40,7 @@ all = [
     "av-trng",
     "c-colorwheel",
 	"dali",
+	"yiwire",
 ]
 
 default = []
