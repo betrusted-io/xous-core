@@ -57,7 +57,6 @@ fn main() -> ! {
     // let the rest of the boot sequence quiesce before hammering the PDDB server
     tt.sleep_ms(1000).unwrap();
     let all_tests = tests::all_tests();
-    let all_xfails = tests::all_xfails();
     log::info!("PDDB mounted; running {} tests", all_tests.len());
 
     let mut pass = 0usize;
@@ -67,7 +66,8 @@ fn main() -> ! {
     for &(name, test) in all_tests.iter() {
         PANIC_MSG.lock().unwrap().take();
         let result = panic::catch_unwind(AssertUnwindSafe(test));
-        let expected_bug = all_xfails.iter().find_map(|&(n, bug)| if n == name { Some(bug) } else { None });
+        let expected_bug =
+            tests::XFAILS.iter().find_map(|&(n, bug)| if n == name { Some(bug) } else { None });
         match (result, expected_bug) {
             (Ok(()), None) => {
                 pass += 1;

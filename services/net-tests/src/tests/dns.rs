@@ -255,7 +255,8 @@ pub fn dns_a_record_response_ok() {
 /// A CNAME + A response whose A records compress to a mid-message offset must
 /// resolve to the A records: the resolver chases the CNAME server-side, so the
 /// client only skips the CNAME and follows the non-qname pointer.
-/// XFAIL: dev's answer walker rejects non-{A,AAAA} types and offsets != 0x0c as FormatError, services/dns/src/main.rs:140-159.
+/// XFAIL: dev's answer walker rejects non-{A,AAAA} types and offsets != 0x0c as FormatError,
+/// services/dns/src/main.rs:140-159.
 pub fn dns_cname_chain_response() {
     const NAME: &str = "t4.cn.test";
     const IPS: [[u8; 4]; 2] = [[198, 51, 100, 7], [198, 51, 100, 8]];
@@ -387,7 +388,8 @@ pub fn dns_a_rdlength_not_4() {
 /// A NOERROR response with zero answers must surface as a lookup error
 /// (getaddrinfo EAI_NODATA analog), never as a success carrying no addresses;
 /// the error kind is left unconstrained (platform-defined).
-/// XFAIL: dev encodes an empty resolve as SUCCESS entry_count=0 and caches it, so the lookup returns Ok([]), services/dns/src/main.rs:401-444.
+/// XFAIL: dev encodes an empty resolve as SUCCESS entry_count=0 and caches it, so the lookup returns Ok([]),
+/// services/dns/src/main.rs:401-444.
 pub fn dns_zero_answers_is_error() {
     const NAME: &str = "t10.zero.test";
     let port = next_port();
@@ -442,7 +444,8 @@ pub fn dns_error_kind_via_std() {
 /// A response with a mismatched transaction id must not satisfy the query: the
 /// resolver keeps listening and returns the right-id answer. The worker sends a
 /// wrong-id decoy then the right-id answer; registered LAST (see the drain below).
-/// XFAIL: dev does a single recv per lookup, so an id mismatch errors immediately, services/dns/src/main.rs:351-367.
+/// XFAIL: dev does a single recv per lookup, so an id mismatch errors immediately,
+/// services/dns/src/main.rs:351-367.
 pub fn dns_wrong_txn_id_ignored() {
     const NAME: &str = "t9.id.test";
     const DECOY_IP: [u8; 4] = [192, 0, 2, 66];

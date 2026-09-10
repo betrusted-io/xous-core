@@ -85,7 +85,8 @@ pub fn tcp_read_eof_after_peer_drop() {
 
 /// Writes on the accepted socket after the client drops must eventually fail
 /// (early Ok()s allowed; xous-pinned kind BrokenPipe).
-/// XFAIL: the write parks in tcp_tx_waiting forever, the state-Closed tx reaper never running on a quiet pump, services/net/src/main.rs.
+/// XFAIL: the write parks in tcp_tx_waiting forever, the state-Closed tx reaper never running on a quiet
+/// pump, services/net/src/main.rs.
 pub fn tcp_write_after_peer_drop() {
     let (client, served, listener, _addr) = connected_pair();
     discard(client); // FIN + auto-close of `served`
@@ -344,7 +345,8 @@ pub fn tcp_peek_shorter_buffer() {
 
 /// Half-close: the client sends a request then drops (FIN); the server reads it,
 /// sees EOF, and its reply write must succeed (full drop since shutdown(Write) emits no FIN — NTC-4).
-/// XFAIL: the request read itself parks forever, the same FIN-adjacent rx gap as smoke::tcp_drop_close_delivers_eof, services/net/src/main.rs.
+/// XFAIL: the request read itself parks forever, the same FIN-adjacent rx gap as
+/// smoke::tcp_drop_close_delivers_eof, services/net/src/main.rs.
 pub fn tcp_half_close_server_replies_after_client_fin() {
     let (mut client, served, listener, _addr) = connected_pair();
     check!(client.write_all(b"req?"));
@@ -369,7 +371,8 @@ pub fn tcp_half_close_server_replies_after_client_fin() {
 
 /// Reverse half-close: the accepted stream drops (graceful FIN), the client
 /// reads Ok(0), and its first small write after EOF still completes locally.
-/// XFAIL: the client read parks forever; the EOF gap is in the rx wait path itself, not the accepted-socket auto-close, services/net/src/main.rs.
+/// XFAIL: the client read parks forever; the EOF gap is in the rx wait path itself, not the accepted-socket
+/// auto-close, services/net/src/main.rs.
 pub fn tcp_half_close_server_fin_client_still_writes() {
     let (client, served, listener, _addr) = connected_pair();
     discard(served); // graceful FIN from the accepted side
@@ -437,7 +440,8 @@ pub fn tcp_socket_and_peer_name() {
 
 /// Binding port 0 assigns a real ephemeral port in [49152, 65535] and two
 /// listeners get distinct ports (the only sanctioned exception to next_port()).
-/// The distinct-ports assert has 1-in-16384 collision odds — a lone failure means rerun, a repeat means broken trng.
+/// The distinct-ports assert has 1-in-16384 collision odds — a lone failure means rerun, a repeat means
+/// broken trng.
 pub fn tcp_listener_port_zero_assigned() {
     let l1 = check!(TcpListener::bind(SocketAddr::new(LOOPBACK, 0)));
     let a1 = l1.local_addr();
@@ -462,7 +466,8 @@ pub fn tcp_listener_port_zero_assigned() {
 
 /// connect_timeout(addr, Duration::MAX) to a live listener must succeed, not
 /// overflow into an immediate failure.
-/// XFAIL: the saturated u64 timeout-ms overflow smoltcp's i64-ms Instant math and poison the connect before the SYN, services/net/src/std_tcpstream.rs.
+/// XFAIL: the saturated u64 timeout-ms overflow smoltcp's i64-ms Instant math and poison the connect before
+/// the SYN, services/net/src/std_tcpstream.rs.
 pub fn tcp_connect_timeout_duration_max_ok() {
     let port = next_port();
     let addr = SocketAddr::new(LOOPBACK, port);
@@ -693,7 +698,8 @@ pub fn tcp_read_zero_len_buffer_quiet() {
 
 /// write(&[]) returns Ok(0), the peer receives NOTHING, and a following 1-byte
 /// marker arrives alone and first.
-/// XFAIL: on valid=0 the server falls back to length=data.len() and send_slice injects up to 1530 garbage bytes, services/net/src/std_tcpstream.rs.
+/// XFAIL: on valid=0 the server falls back to length=data.len() and send_slice injects up to 1530 garbage
+/// bytes, services/net/src/std_tcpstream.rs.
 pub fn tcp_write_zero_len() {
     let (client, served, listener, _addr) = connected_pair();
     let mut served = ManuallyDrop::new(served);

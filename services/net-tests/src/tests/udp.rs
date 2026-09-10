@@ -64,7 +64,8 @@ pub fn udp_peek_from_does_not_consume() {
 
 /// recv_from into a buffer smaller than the datagram (10-byte buffer, 100-byte
 /// datagram) must return Ok(n <= 10) with the excess discarded.
-/// XFAIL: the client copies min(buf, rxlen) bytes but returns the full datagram length — Ok(100) from a 10-byte buffer (client-side), xous udp.rs.
+/// XFAIL: the client copies min(buf, rxlen) bytes but returns the full datagram length — Ok(100) from a
+/// 10-byte buffer (client-side), xous udp.rs.
 pub fn udp_recv_buffer_smaller_than_datagram() {
     let (tx, tx_addr) = bind_self();
     let (rx, rx_addr) = bind_self();

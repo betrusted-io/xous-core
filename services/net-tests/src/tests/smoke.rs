@@ -45,7 +45,8 @@ fn tcp_echo_roundtrip(ip: IpAddr) {
 
 /// A dropped (closed) TcpStream must deliver EOF to its peer: the echo
 /// server's blocking read returns Ok(0) and the thread exits.
-/// XFAIL: a reader parked in tcp_rx_waiting is never completed with EOF across CloseWait, services/net/src/main.rs NetPump.
+/// XFAIL: a reader parked in tcp_rx_waiting is never completed with EOF across CloseWait,
+/// services/net/src/main.rs NetPump.
 pub fn tcp_drop_close_delivers_eof() {
     let port = next_port();
     let addr = SocketAddr::new(LOOPBACK, port);
@@ -107,7 +108,8 @@ pub fn tcp_accept_two_sequential() {
 
 /// Connecting to a port nobody listens on must fail with ConnectionRefused,
 /// quickly (the local stack RSTs the SYN over loopback).
-/// XFAIL: the connect fails up front as AddrNotAvailable via ConnectError::Unaddressable, services/net/src/std_tcpstream.rs.
+/// XFAIL: the connect fails up front as AddrNotAvailable via ConnectError::Unaddressable,
+/// services/net/src/std_tcpstream.rs.
 pub fn tcp_connect_refused() {
     let addr = SocketAddr::new(self_ip(), next_port()); // never listened on
     let started = Instant::now();
@@ -177,7 +179,8 @@ pub fn tcp_shutdown_write() {
 
 /// Closing a TCP socket that generated no traffic must complete: dropping a
 /// never-connected listener returns promptly.
-/// XFAIL: StdTcpClose parks in tcp_tx_closing, serviced only when the pump poll() reports activity — never on a quiet socket, services/net/src/main.rs.
+/// XFAIL: StdTcpClose parks in tcp_tx_closing, serviced only when the pump poll() reports activity — never on
+/// a quiet socket, services/net/src/main.rs.
 pub fn tcp_close_idle_listener() {
     let port = next_port();
     let listener = check!(TcpListener::bind(SocketAddr::new(LOOPBACK, port)));
@@ -255,7 +258,8 @@ fn udp_roundtrip(ip: IpAddr) {
 
 /// A 2 s read timeout on a quiet connected socket must surface as WouldBlock
 /// or TimedOut after roughly 2 s.
-/// XFAIL: the timeout reapers run only past the pump poll() early-return that a quiet socket never trips, services/net/src/main.rs.
+/// XFAIL: the timeout reapers run only past the pump poll() early-return that a quiet socket never trips,
+/// services/net/src/main.rs.
 pub fn tcp_read_timeout_quiet() {
     let port = next_port();
     let addr = SocketAddr::new(LOOPBACK, port);
