@@ -87,8 +87,9 @@ fn overwrite_shorter_inner(path: &str, first_len: usize) {
     assert_eq!(readback, second, "truncating overwrite did not read back intact");
 }
 
-/// SeekFrom::Current with a negative offset must rewind. XFAIL PFC-3: the
-/// server casts the offset with `as u64`, so any negative seek errors out.
+/// SeekFrom::Current with a negative offset must rewind. Was XFAIL PFC-3
+/// (the server cast the offset with `as u64`, so any negative seek errored
+/// out); now pins the fix.
 pub fn seek_negative_current() {
     let tmp = TmpDict::new("seek_negative_current");
     let path = tmp.path("seek");
@@ -107,15 +108,16 @@ pub fn seek_negative_current() {
 }
 
 /// Closing one file must not affect other open handles in the same process.
-/// XFAIL PFC-4: CloseKeyStd drops the whole per-process fd table, killing B's
-/// handle when A closes.
+/// Pins the PFC-4 fix: CloseKeyStd used to drop the whole per-process fd
+/// table, killing B's handle when A closed.
 ///
 /// Ordering is load-bearing: all of B's I/O results are collected first and B
-/// is dropped explicitly BEFORE any panic. With PFC-4 live, B's fd is dead
-/// after A closes, and PFC-7 makes `File::drop` panic on a failed close -- if
-/// that drop ran during panic-unwind (e.g. `check!` firing while B is still
-/// in scope) it would be a fatal double panic that aborts the whole runner.
-/// Dropped in a normal context, the drop panic is caught like any other.
+/// is dropped explicitly BEFORE any panic. While PFC-4 was live, B's fd was
+/// dead after A closed, and PFC-7 makes `File::drop` panic on a failed close
+/// -- if that drop ran during panic-unwind (e.g. `check!` firing while B is
+/// still in scope) it would be a fatal double panic that aborts the whole
+/// runner. Dropped in a normal context, the drop panic is caught like any
+/// other.
 pub fn two_files_close_one() {
     let tmp = TmpDict::new("two_files_close_one");
     let path_a = tmp.path("a");
@@ -154,8 +156,6 @@ pub const TESTS: &[(&str, fn())] = &[
 pub const XFAILS: &[(&str, &str)] = &[
     // smoke::overwrite_shorter_large (PFC-1) is not here: it crashes the pddb
     // server outright and is disabled above.
-    ("smoke::seek_negative_current", "PFC-3"),
-    ("smoke::two_files_close_one", "PFC-4"),
 ];
 
 /// `create_new` on an existing path must fail. Don't assert the ErrorKind: the

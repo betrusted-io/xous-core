@@ -292,7 +292,7 @@ impl Adc {
     fn delay_us(us: u64) {
         // abuse the d11ctime timer to create some time-out like thing
         let mut d11c = CSR::new(utra::d11ctime::HW_D11CTIME_BASE as *mut u32);
-        d11c.wfo(utra::d11ctime::CONTROL_COUNT, 333); // 1.0us per interval
+        d11c.wfo(utra::d11ctime::CONTROL_COUNT, 12000); // empirically tested; if values seem too low adjust higher
         let mut polarity = d11c.rf(utra::d11ctime::HEARTBEAT_BEAT);
         for _ in 0..us {
             while polarity == d11c.rf(utra::d11ctime::HEARTBEAT_BEAT) {}

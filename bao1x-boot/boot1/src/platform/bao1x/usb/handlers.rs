@@ -12,7 +12,9 @@ use bao1x_hal::usb::driver::*;
 use utralib::*;
 
 use super::*;
-use crate::{APP_BYTES, BAREMETAL_BYTES, IS_BAOSEC, KERNEL_BYTES, SWAP_BYTES, udc_pointer_check};
+use crate::{
+    APP_BYTES, BAREMETAL_BYTES, IS_BAOSEC, KERNEL_BYTES, RX_BUFFER_LIMIT, SWAP_BYTES, udc_pointer_check,
+};
 
 pub static TX_IDLE: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicBool::new(true);
 
@@ -46,10 +48,16 @@ fn fill_sparse_data(dest: &mut [u8], offset: usize) {
 
         dest[write_start_in_dest..write_start_in_dest + copy_len].copy_from_slice(&block[..copy_len]);
         #[cfg(feature = "alt-boot1")]
-        // patch the volume name so we can tell alt-boot apart
-        if addr == 0x410000 {
-            // patch ALT over BAO. Assumes that the block is aligned.
-            dest[write_start_in_dest..write_start_in_dest + 3].copy_from_slice(&[0x41, 0x4c, 0x54])
+        // Patch volume name "BAO" -> "ALT", tolerating short/partial reads
+        if (0x410000..=0x410002).contains(&addr) {
+            const ALT: [u8; 3] = [0x41, 0x4c, 0x54];
+            let skip = addr - 0x410000; // 0, 1, or 2
+            for i in 0..(3 - skip) {
+                let pos = write_start_in_dest + i;
+                if pos < dest.len() {
+                    dest[pos] = ALT[skip + i];
+                }
+            }
         }
     }
 }
@@ -239,15 +247,20 @@ pub fn usb_ep1_bulk_out_complete(
 
                 #[cfg(not(feature = "alt-boot1"))]
                 const START_RANGE: usize = bao1x_api::BAREMETAL_START;
+                #[cfg(not(feature = "alt-boot1"))]
+                const END_RANGE: usize = STORAGE_END_ADDR;
                 #[cfg(feature = "alt-boot1")]
                 const START_RANGE: usize = bao1x_api::BOOT1_START;
+                #[cfg(feature = "alt-boot1")]
+                const END_RANGE: usize = bao1x_api::BAREMETAL_START;
                 // program the flash if a valid u2f block was found
                 if let Some(record) = uf2_data {
                     bollard!(die, 4);
                     // This range check prevents UF2 from being an arbitrary-write primitive to e.g. RAM
                     // or sensitive bootloader code.
-                    if matches!(record.address() as usize, START_RANGE..=STORAGE_END_ADDR)
+                    if matches!(record.address() as usize, START_RANGE..END_RANGE)
                         && record.family() == bao1x_api::BAOCHIP_1X_UF2_FAMILY
+                        && record.address() as usize + record.data().len() <= END_RANGE
                     {
                         let mut rram = bao1x_hal::rram::Reram::new();
                         let offset = record.address() as usize - utralib::HW_RERAM_MEM;
@@ -280,7 +293,11 @@ pub fn usb_ep1_bulk_out_complete(
                         match critical_section::with(|cs| {
                             if let Some(assembler) = &mut *super::glue::SECTOR_TRACKER.borrow(cs).borrow_mut()
                             {
-                                assembler.add_page(spim_addr as usize, record.data().try_into().unwrap())
+                                if record.data().len() == crate::platform::usb::page_defrag::PAGE_SIZE {
+                                    assembler.add_page(spim_addr as usize, record.data().try_into().unwrap())
+                                } else {
+                                    Err("Truncated UF2 packet received, skipping the packet")
+                                }
                             } else {
                                 Err(
                                     "Write to swap received but no swap is available on this board. Ignoring!",
@@ -295,24 +312,24 @@ pub fn usb_ep1_bulk_out_complete(
                     }
                     // do some bookkeeping for the UI
                     let (partition, status) = if !IS_BAOSEC.load(Ordering::SeqCst) {
-                        if matches!(record.address() as usize, START_RANGE..=APP_RAM_ADDR) {
+                        if matches!(record.address() as usize, START_RANGE..APP_RAM_ADDR) {
                             ("core", BAREMETAL_BYTES.fetch_add(record.data().len() as u32, Ordering::SeqCst))
-                        } else if matches!(record.address() as usize, APP_RAM_ADDR..=STORAGE_END_ADDR) {
+                        } else if matches!(record.address() as usize, APP_RAM_ADDR..STORAGE_END_ADDR) {
                             ("app", APP_BYTES.fetch_add(record.data().len() as u32, Ordering::SeqCst))
                         } else {
                             ("none", 0)
                         }
                     } else {
-                        if matches!(record.address() as usize, START_RANGE..=KERNEL_START) {
+                        if matches!(record.address() as usize, START_RANGE..KERNEL_START) {
                             (
                                 "loader",
                                 BAREMETAL_BYTES.fetch_add(record.data().len() as u32, Ordering::SeqCst),
                             )
-                        } else if matches!(record.address() as usize, KERNEL_START..=STORAGE_END_ADDR) {
+                        } else if matches!(record.address() as usize, KERNEL_START..STORAGE_END_ADDR) {
                             ("kernel", KERNEL_BYTES.fetch_add(record.data().len() as u32, Ordering::SeqCst))
                         } else if matches!(
                             record.address() as usize,
-                            bao1x_api::offsets::SWAP_START_UF2..=SWAP_END_ADDR
+                            bao1x_api::offsets::SWAP_START_UF2..SWAP_END_ADDR
                         ) {
                             ("swap", SWAP_BYTES.fetch_add(record.data().len() as u32, Ordering::SeqCst))
                         } else {
@@ -463,7 +480,9 @@ pub fn usb_ep3_bulk_out_complete(
     critical_section::with(|cs| {
         let mut queue = crate::USB_RX.borrow(cs).borrow_mut();
         for &d in buf {
-            queue.push_back(d);
+            if queue.len() < RX_BUFFER_LIMIT {
+                queue.push_back(d);
+            }
         }
     });
 

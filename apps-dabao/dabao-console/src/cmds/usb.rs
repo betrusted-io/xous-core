@@ -48,7 +48,7 @@ impl<'a> ShellCmdApi<'a> for Usb {
                 "sersend" => {
                     let mut val = String::new();
                     join_tokens(&mut val, &mut tokens);
-                    let sent = self.usb_dev.serial_send(val.as_bytes()).unwrap_or(0);
+                    let sent = self.usb_dev.serial_send_nb(val.as_bytes()).unwrap_or(0);
                     write!(ret, "Sent {} bytes", sent).ok();
                 }
                 _ => {

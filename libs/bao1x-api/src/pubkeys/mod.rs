@@ -1,4 +1,4 @@
-use crate::signatures::{FunctionCode, Pubkey};
+use crate::signatures::{FunctionCode, Pubkey, PubkeyPq};
 
 pub mod bao1;
 pub mod bao2;
@@ -38,6 +38,8 @@ const fn pad_array<const N: usize, const M: usize>(input: &[u8; N]) -> [u8; M] {
 
 /// This is the exported record that should be copied into the header of all boot images
 pub const PUBKEY_HEADER: [Pubkey; 4] = [bao1::PUBKEY, bao2::PUBKEY, beta::PUBKEY, developer::PUBKEY];
+pub const PUBKEY_PQ_HEADER: [PubkeyPq; 4] =
+    [bao1::SLH_DSA_PUBKEY, bao2::SLH_DSA_PUBKEY, beta::SLH_DSA_PUBKEY, developer::SLH_DSA_PUBKEY];
 
 /// This structure defines a security configuration
 ///

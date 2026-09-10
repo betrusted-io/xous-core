@@ -410,9 +410,35 @@ impl MemoryMapping {
         let l0_pt = &mut unsafe { &mut (*(l0pt_virt as *mut LeafPageTable)) };
         let current_mapping = l0_pt.entries[vpn0];
         if current_mapping & 1 == 1 {
-            return Ok(());
+            // can't double-reserve pages
+            return Err(xous_kernel::Error::ShareViolation);
         }
         l0_pt.entries[vpn0] = translate_flags(flags).bits();
+        Ok(())
+    }
+
+    pub fn unreserve_address(&self, addr: usize) -> Result<(), xous_kernel::Error> {
+        let vpn1 = (addr >> 22) & ((1 << 10) - 1);
+        let vpn0 = (addr >> 12) & ((1 << 10) - 1);
+
+        let l1_pt = unsafe { &mut (*(PAGE_TABLE_ROOT_OFFSET as *mut RootPageTable)) };
+        if l1_pt.entries[vpn1] & MMUFlags::VALID.bits() == 0 {
+            // No leaf table, so nothing was ever reserved here.
+            return Ok(());
+        }
+
+        let l0pt_virt = PAGE_TABLE_OFFSET + vpn1 * PAGE_SIZE;
+        let l0_pt = unsafe { &mut (*(l0pt_virt as *mut LeafPageTable)) };
+
+        // Refuse to touch a live mapping. Only undo reservations.
+        // This works under the assumption that the flags going into reserve_address don't already include the
+        // valid bit, which I believe is correct because reservations can't mark a page as valid as it
+        // hasn't been zero'd yet.
+        if l0_pt.entries[vpn0] & MMUFlags::VALID.bits() != 0 {
+            return Err(xous_kernel::Error::ShareViolation);
+        }
+
+        l0_pt.entries[vpn0] = 0;
         Ok(())
     }
 }
@@ -1011,9 +1037,31 @@ pub fn virt_to_phys(virt: usize) -> Result<usize, xous_kernel::Error> {
     Ok((l0_pt.entries[vpn0] >> 10) << 12)
 }
 
-#[allow(dead_code)]
-pub fn virt_to_phys_pid(_pid: PID, _virt: usize) -> Result<usize, xous_kernel::Error> {
-    todo!("virt_to_phys_pid is not yet implemented for riscv");
+pub fn virt_to_phys_pid(pid: PID, virt: usize) -> Result<usize, xous_kernel::Error> {
+    use crate::services::SystemServices;
+
+    let current_pid = SystemServices::with(|ss| ss.current_pid());
+
+    /// Ensures switching back to the source memory space whenever this function returns
+    /// in successful and error cases
+    struct SwitchBackGuard(PID);
+    impl Drop for SwitchBackGuard {
+        fn drop(&mut self) {
+            SystemServices::with(|ss| {
+                let p = ss.get_process(self.0).expect("current process");
+                p.mapping.activate().ok();
+            });
+        }
+    }
+
+    let _guard = SwitchBackGuard(current_pid);
+
+    SystemServices::with(|ss| {
+        let target_process = ss.get_process(pid).or_else(|_| Err(xous_kernel::Error::InvalidPID))?;
+        target_process.mapping.activate().or_else(|_| Err(xous_kernel::Error::InvalidPID))?;
+
+        virt_to_phys(virt)
+    })
 }
 
 pub fn ensure_page_exists_inner(address: usize) -> Result<usize, xous_kernel::Error> {

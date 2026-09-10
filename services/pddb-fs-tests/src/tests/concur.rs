@@ -236,9 +236,9 @@ pub fn read_dir_races_writer() {
 /// smoke::two_files_close_one: open 4 handles on 4 distinct keys, close the
 /// FIRST one, then probe the other three. Correct POSIX behavior: closing one
 /// fd never affects any other fd, so all three keep working exactly as
-/// before. XFAIL PFC-4: `CloseKeyStd`'s `fd_mapping.remove(&pid)` drops the
-/// WHOLE per-process fd table on that one successful close, so all three
-/// probes are expected to fail.
+/// before. Pins the PFC-4 fix: `CloseKeyStd`'s unconditional
+/// `fd_mapping.remove(&pid)` used to drop the WHOLE per-process fd table on
+/// that one successful close, failing all three probes.
 ///
 /// Ordering follows smoke::two_files_close_one's PFC-7 hazard rule: Results
 /// are collected first and ALL still-live handles are dropped in a normal
@@ -468,4 +468,4 @@ pub const TESTS: &[(&str, fn())] = &[
     ("concur::thread_panic_mid_io_isolation", thread_panic_mid_io_isolation as fn()),
 ];
 
-pub const XFAILS: &[(&str, &str)] = &[("concur::four_handles_close_one", "PFC-4")];
+pub const XFAILS: &[(&str, &str)] = &[];

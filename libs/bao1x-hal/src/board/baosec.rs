@@ -552,7 +552,6 @@ pub fn setup_trng_input_pin<T: IoSetup + IoGpio>(iox: &T) -> (IoxPort, u8) {
     (port, pin)
 }
 
-#[cfg(feature = "oem-baosec-lite")]
 pub fn get_power_off_pin() -> (IoxPort, u8) {
     let (port, pin) = (IoxPort::PF, 0);
     (port, pin)

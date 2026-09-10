@@ -267,8 +267,10 @@ pub unsafe extern "C" fn rust_entry(signed_buffer: *const usize, signature: u32)
     // Run kernel image validation now that the heap is set up.
     #[cfg(feature = "bao1x")]
     let detached_app = {
-        use bao1x_api::{PARANOID_MODE, PARANOID_MODE_DUPE, bollard, pubkeys::LOADER_TO_KERNEL};
-        use bao1x_hal::{buram::ERASURE_PROOF_RANGE_BYTES, sigcheck::ERASE_VALUE};
+        use bao1x_api::{
+            HardenedBool, PARANOID_MODE, PARANOID_MODE_DUPE, bollard, pubkeys::LOADER_TO_KERNEL,
+        };
+        use bao1x_hal::{ERASE_VALUE, buram::ERASURE_PROOF_RANGE_BYTES};
 
         let owc = bao1x_hal::acram::OneWayCounter::new();
         let backup = bao1x_hal::buram::BackupManager::new();
@@ -278,15 +280,27 @@ pub unsafe extern "C" fn rust_entry(signed_buffer: *const usize, signature: u32)
         csprng.random_delay();
         bollard!(bao1x_hal::sigcheck::die_no_std, 4);
         // validate using the bao1x signature scheme
-        match bao1x_hal::sigcheck::validate_image(LOADER_TO_KERNEL, None, Some(&mut csprng)) {
-            Ok((key, key_inv, tag, _target)) => {
+        match bao1x_hal::sigcheck::validate_image(
+            LOADER_TO_KERNEL,
+            None,
+            Some(&mut csprng),
+            HardenedBool::FALSE,
+        ) {
+            Ok((key, key_inv, tag, _target, pq_tag)) => {
                 if paranoid1 == 0 && paranoid2 == 0 {
+                    let tag_owned;
                     // only print if not in paranoid mode; the DUART output can be used to align a glitch
                     println!(
-                        "*** Kernel signature check by key @ {}/{}({}) OK ***",
+                        "*** Kernel signature check by key @ {}/{}({}) pq {} OK ***",
                         key,
                         !key_inv,
-                        core::str::from_utf8(&tag).unwrap_or("invalid tag")
+                        core::str::from_utf8(&tag).unwrap_or("invalid tag"),
+                        if let Some(tag) = pq_tag {
+                            tag_owned = tag;
+                            core::str::from_utf8(&tag_owned).unwrap_or("invalid tag")
+                        } else {
+                            "No PQ sig"
+                        }
                     );
                 }
                 if key != !key_inv {
@@ -302,6 +316,10 @@ pub unsafe extern "C" fn rust_entry(signed_buffer: *const usize, signature: u32)
                 // this has to gate on keys being initialized, because without key setup nothing gets erased
                 if tag == *bao1x_api::pubkeys::KEYSLOT_INITIAL_TAGS[bao1x_api::pubkeys::DEVELOPER_KEY_SLOT]
                     || key == bao1x_api::pubkeys::DEVELOPER_KEY_SLOT
+                    || pq_tag
+                        == Some(
+                            *bao1x_api::pubkeys::KEYSLOT_INITIAL_TAGS[bao1x_api::pubkeys::DEVELOPER_KEY_SLOT],
+                        )
                 {
                     csprng.random_delay();
                     let erase_proof: &[u8; 32] =
@@ -359,14 +377,26 @@ pub unsafe extern "C" fn rust_entry(signed_buffer: *const usize, signature: u32)
             use bao1x_api::pubkeys::LOADER_TO_DETACHED_APP;
 
             csprng.random_delay();
-            match bao1x_hal::sigcheck::validate_image(LOADER_TO_DETACHED_APP, None, Some(&mut csprng)) {
-                Ok((key, key_inv, tag, _target)) => {
+            match bao1x_hal::sigcheck::validate_image(
+                LOADER_TO_DETACHED_APP,
+                None,
+                Some(&mut csprng),
+                HardenedBool::FALSE,
+            ) {
+                Ok((key, key_inv, tag, _target, pq_tag)) => {
                     if paranoid1 == 0 && paranoid2 == 0 {
+                        let tag_owned;
                         println!(
-                            "*** Detached app signature check by key @ {}/{}({}) OK ***",
+                            "*** Detached app signature check by key @ {}/{}({}) pq {} OK ***",
                             key,
                             !key_inv,
-                            core::str::from_utf8(&tag).unwrap_or("invalid tag")
+                            core::str::from_utf8(&tag).unwrap_or("invalid tag"),
+                            if let Some(tag) = pq_tag {
+                                tag_owned = tag;
+                                core::str::from_utf8(&tag_owned).unwrap_or("invalid tag")
+                            } else {
+                                "No PQ sig"
+                            }
                         );
                     }
                     // k is just a nominal slot number. If either match, assume we are dealing with a
@@ -378,7 +408,12 @@ pub unsafe extern "C" fn rust_entry(signed_buffer: *const usize, signature: u32)
                     bollard!(bao1x_hal::sigcheck::die_no_std, 4);
                     if (tag
                         == *bao1x_api::pubkeys::KEYSLOT_INITIAL_TAGS[bao1x_api::pubkeys::DEVELOPER_KEY_SLOT]
-                        || key == bao1x_api::pubkeys::DEVELOPER_KEY_SLOT)
+                        || key == bao1x_api::pubkeys::DEVELOPER_KEY_SLOT
+                        || pq_tag
+                            == Some(
+                                *bao1x_api::pubkeys::KEYSLOT_INITIAL_TAGS
+                                    [bao1x_api::pubkeys::DEVELOPER_KEY_SLOT],
+                            ))
                         && (init1 != 0)
                     {
                         let erase_proof: &[u8; 32] =
@@ -653,6 +688,34 @@ fn boot_sequence(
         let rpt_offset =
             cfg.runtime_page_tracker.as_ptr() as usize - krn_struct_start + KERNEL_ARGUMENT_OFFSET;
         let xpt_offset = cfg.extra_page_tracker.as_ptr() as usize - krn_struct_start + KERNEL_ARGUMENT_OFFSET;
+
+        // this can help debug XPT allocation issues
+        #[cfg(feature = "verbose-debug")]
+        {
+            println!(
+                "RPT len: {:x} / XPT len: {:x}",
+                cfg.runtime_page_tracker.len(),
+                cfg.extra_page_tracker.len()
+            );
+            fn xpt_index_to_addr(cfg: &BootConfig, idx: usize) -> Option<usize> {
+                let mut offset = 0;
+                for region in cfg.regions.iter() {
+                    let pages_in_region = (region.length as usize + PAGE_SIZE - 1) / PAGE_SIZE;
+                    if idx < offset + pages_in_region {
+                        let within = idx - offset;
+                        return Some(region.start as usize + within * PAGE_SIZE);
+                    }
+                    offset += pages_in_region;
+                }
+                None
+            }
+            for (i, chunk) in cfg.extra_page_tracker.chunks(16).enumerate() {
+                if !chunk.iter().all(|&x| x == 0) {
+                    println!("{:08x} ({:x?}): {:x?}", i * 16, xpt_index_to_addr(&cfg, i * 16), chunk);
+                }
+            }
+        }
+
         #[cfg(not(feature = "atsama5d27"))]
         let _tt_addr = { cfg.processes[0].satp };
         #[cfg(feature = "atsama5d27")]
@@ -837,7 +900,7 @@ pub fn read_initial_config(cfg: &mut BootConfig) {
 #[cfg(feature = "swap")]
 pub fn read_swap_config(cfg: &mut BootConfig) {
     // Read in the swap arguments: should be located at beginning of the encrypted image in swap.
-    let page0 = cfg.swap_hal.as_mut().unwrap().decrypt_src_page_at(0x0).unwrap();
+    let page0 = cfg.swap_hal.as_mut().unwrap().decrypt_src_page_at::<sha2_bao1x::Sha512>(0x0, None).unwrap();
     let swap_args = KernelArguments::new(page0.as_ptr() as *const usize);
     for tag in swap_args.iter() {
         if tag.name == u32::from_le_bytes(*b"IniS") {

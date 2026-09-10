@@ -8,6 +8,9 @@ use std::io::{Cursor, Write};
 use std::str::FromStr;
 
 use clap::{App, Arg};
+use slh_dsa::Sha2_128_24;
+use slh_dsa::SigningKey;
+use slh_dsa::signature::Keypair;
 use xous_semver::SemVer;
 use xous_tools::elf::read_minielf;
 use xous_tools::sign_image::bin_to_uf2;
@@ -21,6 +24,13 @@ use xous_tools::xous_arguments::XousArguments;
 
 // this must match exactly what's in devkey/dev.key
 const DEV_KEY_PEM: &'static str = "-----BEGIN PRIVATE KEY-----\nMC4CAQAwBQYDK2VwBCIEIKindlyNoteThisIsADevKeyDontUseForProduction\n-----END PRIVATE KEY-----";
+
+const DEV_KEY_PQ: [u8; 0x40] = [
+    0x68, 0x97, 0x31, 0x10, 0x6D, 0x28, 0x42, 0x86, 0x4A, 0xA8, 0x02, 0xD2, 0x65, 0xCE, 0xFF, 0x10, 0x0D,
+    0x8E, 0x92, 0x7C, 0x5D, 0xDC, 0xEA, 0xA4, 0xEB, 0x4A, 0xD3, 0x2A, 0x60, 0x14, 0x98, 0x91, 0xD7, 0xA6,
+    0x8F, 0xCD, 0xC5, 0xC4, 0x78, 0xF1, 0x95, 0xD6, 0x52, 0x37, 0x08, 0xF9, 0xC9, 0xA5, 0x5E, 0xE4, 0xC9,
+    0x05, 0x37, 0x49, 0x2D, 0xCE, 0x2F, 0x8B, 0xAC, 0x8D, 0x61, 0x83, 0x99, 0x28,
+];
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     env_logger::init();
@@ -148,6 +158,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Programs: {}", args);
 
     let private_key = pem::parse(DEV_KEY_PEM)?;
+    let pq_sq = SigningKey::<Params>::try_from(DEV_KEY_PQ.as_slice()).unwrap_or_else(|_| {
+        die(&format!("invalid Test key: expected 64 bytes (4*n for SHA2-128-24), got {}", DEV_KEY_PQ.len()))
+    });
 
     let git_rev = matches.value_of("git-rev");
     let semver: Option<[u8; 16]> = if let Some(git_describe_str) = matches.value_of("git-describe") {
@@ -204,6 +217,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             Some("app"),
             Some(anti_rollback as usize),
             false,
+            Some((DEV_KEY_PQ, None)),
         )?;
 
         let app_uf2 = "apps.uf2";

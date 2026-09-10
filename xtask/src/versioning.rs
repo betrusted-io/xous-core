@@ -32,7 +32,7 @@ pub(crate) fn generate_version(add_timestamp: bool, forced_version: Option<Strin
         if let Some(ver) = forced_version {
             ver.as_bytes().to_vec()
         } else {
-            let cmd = format!("git describe --long --abbrev={}", GIT_ABBREV_LEN);
+            let cmd = format!("git describe --long --tags --abbrev={}", GIT_ABBREV_LEN);
             let output = if cfg!(target_os = "windows") {
                 Command::new("cmd").args(["/C", &cmd]).output().expect("failed to execute process")
             } else {

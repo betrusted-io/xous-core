@@ -2,11 +2,8 @@
 
 These are applications targeting a minimal set of Xous services for hardware configurations that are basically "just the chip".
 
-## Building with Docker
-From the root of the repository, run:
+The image flashed onto dabao was built using the following command:
 
-```shell
-mkdir -p target && docker build --file apps-dabao/Dockerfile --build-arg app=helloworld --output target .
-```
+`cargo xtask dabao dabao-console --no-timestamp --kernel-feature debug-proc`
 
-The `uf2` files will be under `target/`.
+See [the Baochip README](../README-baochip.md) for more details.

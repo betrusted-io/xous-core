@@ -50,7 +50,7 @@ fn shell() {
             Some(ConsoleOp::Keypress) => msg_scalar_unpack!(msg, k1, _k2, _k3, _k4, {
                 let k = char::from_u32(k1 as u32).unwrap_or('\u{0000}');
                 if echo.load(std::sync::atomic::Ordering::SeqCst) {
-                    usb.serial_send(&[k1 as u8]).ok();
+                    usb.serial_send_nb(&[k1 as u8]).ok();
                 }
                 if k1 == 0x08 {
                     // backspace character

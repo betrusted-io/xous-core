@@ -1,6 +1,9 @@
 use core::fmt::{Error, Write};
 use std::sync::mpsc::{Receiver, Sender, channel};
 
+#[cfg(feature = "usb")]
+pub static KBD_ENA: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
+
 enum ControlMessage {
     Text(String),
     Byte(u8),

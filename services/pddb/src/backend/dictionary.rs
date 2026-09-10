@@ -586,6 +586,9 @@ impl DictCacheEntry {
         truncate: bool,
         large_alloc_ptr: PageAlignedVa,
     ) -> Result<PageAlignedVa> {
+        // validate before any cache mutation: a key that dict_sync would later reject
+        // must not be left dirty in self.keys, where it would fail every future sync
+        KeyName::try_from_str(name)?;
         self.age = self.age.saturating_add(1);
         self.clean = false;
         if self.ensure_key_entry(hw, v2p_map, cipher, name) {

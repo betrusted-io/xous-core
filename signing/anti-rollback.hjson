@@ -12,8 +12,8 @@
 // and more device types; this might have to be handled with the reserved rollback counters and/or
 // reserved function codes in the future.
 {
-    "boot0": "1",
-    "boot1": "1",
+    "boot0": "2",
+    "boot1": "2",
     "loader": "1",
     "kernel": "1",
     "app": "1",

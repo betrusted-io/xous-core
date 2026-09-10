@@ -1,0 +1,14 @@
+param_set        = sphincs-sha2-192-24
+n                = 24
+pk_bytes         = 48
+sig_bytes        = 7752
+sk_seed          = 000102030405060708090a0b0c0d0e0f1011121314151617
+sk_prf           = 404142434445464748494a4b4c4d4e4f5051525354555657
+pk_seed          = 808182838485868788898a8b8c8d8e8f9091929394959697
+opt_rand         = c0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7
+message_ascii    = "NIST SP 800-230 SLH-DSA vector\n"
+message_hex      = 4e495354205350203830302d32333020534c482d44534120766563746f720a
+pk               = 808182838485868788898a8b8c8d8e8f909192939495969702b6f334e75c21762c7dda5f3f5b70fef2d9134e39043e77
+randomizer_R     = 208167f8f5fcb88fff9332e915d56533906410495645378b
+sig_digest       = bbb52b5cfc43d29f8b110a3fac426a57a83037189e73720b9e530c6bf7cdee15
+sig_digest_alg   = sha256

@@ -1,0 +1,12 @@
+{
+    "rust-analyzer.cargo.features": [
+        "bao1x",
+        "board-baosec",
+        "oem-baosec-lite",
+    ],
+    "rust-analyzer.rustfmt.extraArgs": [
+        "+nightly"
+    ],
+    "files.trimTrailingWhitespace": true,
+    "editor.formatOnSave": true
+}

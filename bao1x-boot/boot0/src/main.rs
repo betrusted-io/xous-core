@@ -21,7 +21,7 @@ use bao1x_api::{
 use bao1x_api::{PARANOID_MODE, PARANOID_MODE_DUPE};
 use bao1x_hal::acram::OneWayCounter;
 use bao1x_hal::hardening::{
-    check_pll, die, disable_clock_skipping, mesh_setup, reseed_skipping, setup_clock_skipping,
+    Csprng, check_pll, die, disable_clock_skipping, mesh_setup, reseed_skipping, setup_clock_skipping,
 };
 use bao1x_hal::sigcheck::{hardened_erase_policy, jump_to};
 #[cfg(feature = "unsafe-dev")]
@@ -145,145 +145,13 @@ pub unsafe extern "C" fn rust_entry() -> ! {
     };
     bollard!(die, 4);
 
-    // check that the pubkeys in boot1 matches the reference keys
-    match bao1x_hal::hardening::compare_refkeys(
-        &owc,
-        &slot_mgr,
-        &mut csprng,
-        bao1x_api::BOOT1_START as *const bao1x_api::signatures::SignatureInFlash,
-        BOOT1_PUBKEY_FAIL,
-    )
-    .is_true()
-    {
-        Some(true) => (),
-        // if comparison is false or None, erase secrets
-        _ => {
-            bao1x_hal::sigcheck::erase_secrets(&mut Some(&mut csprng))
-                .inspect_err(|e| crate::println!("{}", e))
-                .ok(); // "ok" because the expected error is a check on logic/configuration bugs, not attacks
-        }
-    };
-    bollard!(die, 4);
-
-    // mutual distrust - don't trust Baochip. If any boot1 keys match those in the indelible array, erase the
-    // collateral
-
-    // The IFR (indelible) copy is weird, because the highest byte doesn't match (it's actually a flag that
-    // indicates the region has to be write protected). Thus, the IFR keys are a set of four, disjointed
-    // 31-byte memory areas, plus a collection of 4 bytes that correspond to the missing MSB.
-    let ifr_keys = [
-        unsafe { core::slice::from_raw_parts(0x6040_01A0 as *const u8, 31) },
-        unsafe { core::slice::from_raw_parts(0x6040_01C0 as *const u8, 31) },
-        unsafe { core::slice::from_raw_parts(0x6040_01E0 as *const u8, 31) },
-        unsafe { core::slice::from_raw_parts(0x6040_0200 as *const u8, 31) },
-    ];
-    let ifr_msb = unsafe { core::slice::from_raw_parts(0x6040_0240 as *const u8, 4) };
-    let boot1_block_ptr = bao1x_api::BOOT1_START as *const bao1x_api::signatures::SignatureInFlash;
-    let boot1_block: &bao1x_api::signatures::SignatureInFlash = unsafe { boot1_block_ptr.as_ref().unwrap() };
-    let mut any_matches = HardenedBool::FALSE;
-    bollard!(die, 4);
-    for (i, &ifr_key) in ifr_keys.iter().enumerate() {
-        bollard!(die, 4);
-        for boot1_key in boot1_block.sealed_data.pubkeys.iter() {
-            csprng.random_delay();
-            bollard!(die, 4);
-            if ifr_key == &boot1_key.pk[..31] && ifr_msb[i] == boot1_key.pk[31] {
-                any_matches = HardenedBool::TRUE;
-                // crate::println!("Got IFR match");
-                break;
-            }
-        }
-        if Some(true) == any_matches.is_true() {
-            break;
-        }
-    }
-    bollard!(die, 4);
-    csprng.random_delay();
-    match any_matches.is_true() {
-        Some(false) => {
-            // crate::println!("Preserve collateral!");
-        }
-        _ => {
-            // crate::println!("Collateral erase check!");
-            bao1x_hal::sigcheck::erase_collateral(&mut Some(&mut csprng))
-                .inspect_err(|e| crate::println!("{}", e))
-                .ok(); // "ok" because the expected error is a check on logic/configuration bugs, not attacks
-        }
-    }
-    bollard!(die, 4);
-
-    // now do a check of the consistency of IFR vs boot1 block keys
-    let mut all_matches = HardenedBool::TRUE;
-    // check the LSBs
-    for (&a, b) in ifr_keys.iter().zip(boot1_block.sealed_data.pubkeys.iter()) {
-        bollard!(die, 4);
-        csprng.random_delay();
-        if a != &b.pk[..31] {
-            bollard!(die, 4);
-            all_matches = HardenedBool::FALSE;
-            bollard!(die, 4);
-        }
-    }
-    bollard!(die, 4);
-    // check the MSB
-    for (a, b) in ifr_msb.iter().zip(boot1_block.sealed_data.pubkeys.iter()) {
-        bollard!(die, 4);
-        csprng.random_delay();
-        if *a != b.pk[31] {
-            bollard!(die, 4);
-            all_matches = HardenedBool::FALSE;
-            bollard!(die, 4);
-        }
-    }
-    bollard!(die, 4);
-    csprng.random_delay();
-    match all_matches.is_true() {
-        Some(true) => {
-            // matched, don't do anything
-        }
-        _ => {
-            // all other cases, erase secrets
-            bao1x_hal::sigcheck::erase_secrets(&mut Some(&mut csprng))
-                .inspect_err(|e| crate::println!("{}", e))
-                .ok(); // "ok" because the expected error is a check on logic/configuration bugs, not attacks
-        }
-    }
-
-    // mutual distrust - don't trust other third party firmware. If the boot1 key block doesn't match the
-    // previously captured receipt, erase collateral
-    for (key, slot) in boot1_block.sealed_data.pubkeys.iter().zip(BOOT1_RECEIPT_SLOTS) {
-        csprng.random_delay();
-        bollard!(die, 4);
-        let receipt = slot_mgr.read(&slot).unwrap();
-        if &key.pk != receipt {
-            // first, erase collateral
-            bao1x_hal::sigcheck::erase_collateral(&mut Some(&mut csprng))
-                .inspect_err(|e| crate::println!("{}", e))
-                .ok(); // "ok" because the expected error is a check on logic/configuration bugs, not attacks
-
-            // next, copy all the keys into the receipt array
-            let mut rram = bao1x_hal::rram::Reram::new();
-            for (key, slot) in boot1_block.sealed_data.pubkeys.iter().zip(BOOT1_RECEIPT_SLOTS) {
-                csprng.random_delay();
-                bollard!(die, 4);
-                // make the error handling permissive so we don't fail to boot on coding errors
-                match slot_mgr.write(&mut rram, &slot, &key.pk) {
-                    Ok(_) => {}
-                    Err(e) => crate::println!("Warning: couldn't update receipt slots {:?}", e),
-                };
-            }
-
-            // finally break out of the loop - no need to compare any further
-            break;
-        }
-    }
-
     let use_skipping = setup_clock_skipping(csprng.get_u32());
     let (paranoid1, paranoid2) = owc.hardened_get2(PARANOID_MODE, PARANOID_MODE_DUPE).unwrap();
 
     // == self-validate the image with the keys we put in, just to make sure our code wasn't tampered with ==
-    let boot0_check1 = bao1x_hal::sigcheck::validate_image(BOOT0_SELF_CHECK, None, Some(&mut csprng))
-        .unwrap_or_else(|_| die());
+    let boot0_check1 =
+        bao1x_hal::sigcheck::validate_image(BOOT0_SELF_CHECK, None, Some(&mut csprng), HardenedBool::FALSE)
+            .unwrap_or_else(|_| die());
     csprng.random_delay();
     if paranoid1 != paranoid2 || boot0_check1.0 != !boot0_check1.1 {
         die();
@@ -292,8 +160,13 @@ pub unsafe extern "C" fn rust_entry() -> ! {
     csprng.random_delay();
     if paranoid1 != 0 || paranoid2 != 0 {
         // do a redundant boot0 check if paranoid mode.
-        let boot0_check2 = bao1x_hal::sigcheck::validate_image(BOOT0_SELF_CHECK, None, Some(&mut csprng))
-            .unwrap_or_else(|_| die());
+        let boot0_check2 = bao1x_hal::sigcheck::validate_image(
+            BOOT0_SELF_CHECK,
+            None,
+            Some(&mut csprng),
+            HardenedBool::FALSE,
+        )
+        .unwrap_or_else(|_| die());
         csprng.random_delay();
         if boot0_check2.0 != !boot0_check2.1 {
             die();
@@ -324,7 +197,35 @@ pub unsafe extern "C" fn rust_entry() -> ! {
     bollard!(die, 4);
     let boot_order = match owc.get_decoded::<bao1x_api::AltBootCoding>() {
         // Primary boot selected. Check Boot1 first, then fall back to LOADER/BAREMETAL.
-        Ok(bao1x_api::AltBootCoding::PrimaryPartition) => [BOOT0_TO_BOOT1, BOOT0_TO_ALTBOOT1],
+        Ok(bao1x_api::AltBootCoding::PrimaryPartition) => {
+            match owc.get_decoded::<bao1x_api::Boot1DeveloperState>() {
+                // no print on the Good case
+                Ok(bao1x_api::Boot1DeveloperState::Good) => [BOOT0_TO_BOOT1, BOOT0_TO_ALTBOOT1],
+                Ok(bao1x_api::Boot1DeveloperState::Staged) => {
+                    crate::println!("Boot1DeveloperState Staged -> Attempted");
+                    // roll forward to the attempted state. This should go from Staged -> Attempted
+                    // a successful boot1 boot will bring us to Good
+                    owc.inc_coded::<bao1x_api::Boot1DeveloperState>().ok();
+                    [BOOT0_TO_BOOT1, BOOT0_TO_ALTBOOT1]
+                }
+                Ok(bao1x_api::Boot1DeveloperState::Attempted) => {
+                    crate::println!("Boot1DeveloperState Attempted -> Bad");
+                    // roll forward to the attempted state. This should go from Attempted -> Bad
+                    owc.inc_coded::<bao1x_api::Boot1DeveloperState>().ok();
+                    // if we return in an Attempted state, then, it was a failed boot. Fall back
+                    // to the updater
+                    [BOOT0_TO_ALTBOOT1, BOOT0_TO_BOOT1]
+                }
+                Ok(bao1x_api::Boot1DeveloperState::Bad) => {
+                    crate::println!("Boot1DeveloperState is Bad");
+                    [BOOT0_TO_ALTBOOT1, BOOT0_TO_BOOT1]
+                }
+                Err(_) => {
+                    crate::println!("Internal error: boot1 update encoding is invalid!");
+                    bao1x_hal::sigcheck::die_no_std();
+                }
+            }
+        }
         // Alternate boot selected. Check LOADER/BAREMETAL, then fall back to Boot1.
         Ok(bao1x_api::AltBootCoding::AlternatePartition) => [BOOT0_TO_ALTBOOT1, BOOT0_TO_BOOT1],
         Err(_) => {
@@ -338,13 +239,38 @@ pub unsafe extern "C" fn rust_entry() -> ! {
         if use_skipping {
             reseed_skipping(csprng.get_u32());
         }
-        match bao1x_hal::sigcheck::validate_image(configuration, None, Some(&mut csprng)) {
-            Ok((key, key_inv, tag, target)) => {
+        match bao1x_hal::sigcheck::validate_image(configuration, None, Some(&mut csprng), HardenedBool::FALSE)
+        {
+            Ok((key, key_inv, tag, target, pq_tag)) => {
                 if key != !key_inv {
                     die();
                 }
+
+                // check that the pubkeys in booting partition matches the reference keys
+                match bao1x_hal::hardening::compare_refkeys(
+                    &owc,
+                    &slot_mgr,
+                    &mut csprng,
+                    configuration.image_ptr as *const bao1x_api::signatures::SignatureInFlash,
+                    BOOT1_PUBKEY_FAIL,
+                )
+                .is_true()
+                {
+                    Some(true) => (),
+                    // if comparison is false or None, erase secrets
+                    _ => {
+                        bao1x_hal::sigcheck::erase_secrets(&mut Some(&mut csprng))
+                            .inspect_err(|e| crate::println!("{}", e))
+                            .ok(); // "ok" because the expected error is a check on logic/configuration bugs, not attacks
+                    }
+                };
+                bollard!(die, 4);
+
+                // implement mutual distrust comparison
+                mutual_distrust(configuration.image_ptr as usize, &slot_mgr, &mut csprng);
+
                 // implement the hardened erase policy. This is marked #[inline(always)].
-                hardened_erase_policy(paranoid1, paranoid2, key, key_inv, tag, &mut csprng)
+                hardened_erase_policy(paranoid1, paranoid2, key, key_inv, tag, &mut csprng, pq_tag)
                     .inspect_err(|e| crate::println!("{}", e))
                     .ok(); // "ok" because the expected error is a check on logic/configuration bugs, not attacks
                 // second check if paranoid is not 0. While this branch can be glitched over, to get here,
@@ -353,8 +279,13 @@ pub unsafe extern "C" fn rust_entry() -> ! {
                 csprng.random_delay();
                 if paranoid1 != 0 || paranoid2 != 0 {
                     // re-check the image: it *should* pass. If not, die.
-                    bao1x_hal::sigcheck::validate_image(configuration, None, Some(&mut csprng))
-                        .unwrap_or_else(|_| die());
+                    bao1x_hal::sigcheck::validate_image(
+                        configuration,
+                        None,
+                        Some(&mut csprng),
+                        HardenedBool::FALSE,
+                    )
+                    .unwrap_or_else(|_| die());
                 }
                 csprng.random_delay();
                 bollard!(die, 4);
@@ -390,4 +321,107 @@ fn print_ifr() {
         crate::print!("{:08x} ", d);
     }
     crate::println!("");
+}
+
+#[inline(always)]
+fn mutual_distrust(block_start: usize, slot_mgr: &bao1x_hal::acram::SlotManager, mut csprng: &mut Csprng) {
+    let block_ptr = block_start as *const bao1x_api::signatures::SignatureInFlash;
+    let sig_block: &bao1x_api::signatures::SignatureInFlash = unsafe { block_ptr.as_ref().unwrap() };
+
+    // mutual distrust - don't trust Baochip. If any boot1 keys match those in the indelible array, erase the
+    // collateral
+
+    // The IFR (indelible) copy is weird, because the highest byte doesn't match (it's actually a flag that
+    // indicates the region has to be write protected). Thus, the IFR keys are a set of four, disjointed
+    // 31-byte memory areas, plus a collection of 4 bytes that correspond to the missing MSB.
+    let ifr_keys = [
+        unsafe { core::slice::from_raw_parts(0x6040_01A0 as *const u8, 31) },
+        unsafe { core::slice::from_raw_parts(0x6040_01C0 as *const u8, 31) },
+        unsafe { core::slice::from_raw_parts(0x6040_01E0 as *const u8, 31) },
+        unsafe { core::slice::from_raw_parts(0x6040_0200 as *const u8, 31) },
+    ];
+    let ifr_msb = unsafe { core::slice::from_raw_parts(0x6040_0240 as *const u8, 4) };
+    let mut any_matches = HardenedBool::FALSE;
+    bollard!(die, 4);
+    for (i, &ifr_key) in ifr_keys.iter().enumerate() {
+        bollard!(die, 4);
+        for boot1_key in sig_block.sealed_data.pubkeys.iter() {
+            csprng.random_delay();
+            bollard!(die, 4);
+            if ifr_key == &boot1_key.pk[..31] && ifr_msb[i] == boot1_key.pk[31] {
+                any_matches = HardenedBool::TRUE;
+                // crate::println!("Got IFR match");
+                break;
+            }
+        }
+        if Some(true) == any_matches.is_true() {
+            break;
+        }
+    }
+    bollard!(die, 4);
+    csprng.random_delay();
+    match any_matches.is_true() {
+        Some(false) => {
+            // Third-party manifest counter-signature. Require it to be countersigned by one of its own keys,
+            // otherwise a compromised Baochip key could staple a victim's manifest onto
+            // hostile code and inherit their collateral.
+            if Some(true)
+                != bao1x_hal::sigcheck::check_counter_sig(block_start, &mut Some(&mut csprng)).is_true()
+            {
+                bao1x_hal::sigcheck::erase_collateral(&mut Some(&mut csprng))
+                    .inspect_err(|e| crate::println!("{}", e))
+                    .ok();
+            }
+            // mild hardening: do it twice. This is a relatively fast check because the hash is short.
+            csprng.random_delay();
+            bollard!(die, 4);
+            if Some(true)
+                != bao1x_hal::sigcheck::check_counter_sig(block_start, &mut Some(&mut csprng)).is_true()
+            {
+                bao1x_hal::sigcheck::erase_collateral(&mut Some(&mut csprng))
+                    .inspect_err(|e| crate::println!("{}", e))
+                    .ok();
+                // this is printed after the second instance check, to avoid this being a glitch trigger
+                // but this gives useful diagnostics in case the third party forgot to apply their
+                // counter-signature
+                crate::println!("Invalid counter-signature, erasing collateral.");
+            }
+        }
+        _ => {
+            // crate::println!("Collateral erase check!");
+            bao1x_hal::sigcheck::erase_collateral(&mut Some(&mut csprng))
+                .inspect_err(|e| crate::println!("{}", e))
+                .ok(); // "ok" because the expected error is a check on logic/configuration bugs, not attacks
+        }
+    }
+    bollard!(die, 4);
+
+    // mutual distrust - don't trust other third party firmware. If the boot1 key block doesn't match the
+    // previously captured receipt, erase collateral
+    for (key, slot) in sig_block.sealed_data.pubkeys.iter().zip(BOOT1_RECEIPT_SLOTS) {
+        csprng.random_delay();
+        bollard!(die, 4);
+        let receipt = slot_mgr.read(&slot).unwrap();
+        if &key.pk != receipt {
+            // first, erase collateral
+            bao1x_hal::sigcheck::erase_collateral(&mut Some(&mut csprng))
+                .inspect_err(|e| crate::println!("{}", e))
+                .ok(); // "ok" because the expected error is a check on logic/configuration bugs, not attacks
+
+            // next, copy all the keys into the receipt array
+            let mut rram = bao1x_hal::rram::Reram::new();
+            for (key, slot) in sig_block.sealed_data.pubkeys.iter().zip(BOOT1_RECEIPT_SLOTS) {
+                csprng.random_delay();
+                bollard!(die, 4);
+                // make the error handling permissive so we don't fail to boot on coding errors
+                match slot_mgr.write(&mut rram, &slot, &key.pk) {
+                    Ok(_) => {}
+                    Err(e) => crate::println!("Warning: couldn't update receipt slots {:?}", e),
+                };
+            }
+
+            // finally break out of the loop - no need to compare any further
+            break;
+        }
+    }
 }
