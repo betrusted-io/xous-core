@@ -3,8 +3,8 @@ use core::convert::TryInto;
 use bao1x_api::pubkeys::{BOOT0_SELF_CHECK, BOOT0_TO_BOOT1, BOOT1_TO_LOADER_OR_BAREMETAL};
 use bao1x_api::signatures::{SIGBLOCK_LEN, SignatureInFlash, UNSIGNED_LEN};
 use bao1x_api::*;
+use bao1x_hal::ERASE_VALUE;
 use bao1x_hal::acram::OneWayCounter;
-use bao1x_hal::sigcheck::ERASE_VALUE;
 use digest::Digest;
 use sha2_bao1x::Sha512;
 
@@ -67,7 +67,8 @@ pub fn audit() {
     let owc = OneWayCounter::new();
     let boardtype = owc.get_decoded::<BoardTypeCoding>().unwrap();
     crate::println!("Board type reads as: {:?}", boardtype);
-    crate::println!("Boot partition is: {:?}", owc.get_decoded::<AltBootCoding>());
+    crate::println!("First-try boot partition is: {:?}", owc.get_decoded::<AltBootCoding>());
+    crate::println!("Program counter is in: {:?}", current_pc_loc());
     crate::println!("Semver is: {}", crate::version::SEMVER);
     crate::println!("Description is: {}", crate::RELEASE_DESCRIPTION);
     crate::println!("Stepping is: {}", detect_stepping());
@@ -94,6 +95,7 @@ pub fn audit() {
         owc.get(PARANOID_MODE).unwrap(),
         owc.get(PARANOID_MODE_DUPE).unwrap()
     );
+    crate::println!("PQ required: {}/{}", owc.get(REQUIRE_PQ).unwrap(), owc.get(REQUIRE_PQ_DUPE).unwrap());
     // this number may be non-zero because some of the sensors are on a hair-trigger
     crate::println!("Possible attack attempts: {}", owc.get(POSSIBLE_ATTACKS).unwrap());
     crate::println!("Revocations:");
@@ -116,35 +118,69 @@ pub fn audit() {
         crate::println!("");
     }
 
-    match bao1x_hal::sigcheck::validate_image(BOOT0_SELF_CHECK, None, None) {
-        Ok((k, k2, tag, target)) => crate::println!(
-            "Boot0: key {}/{} ({}) -> {:x}",
+    let tag_owned;
+    match bao1x_hal::sigcheck::validate_image(BOOT0_SELF_CHECK, None, None, HardenedBool::TRUE) {
+        Ok((k, k2, tag, target, pq_tag)) => crate::println!(
+            "Boot0: arb {}, key {}/{} ({}), pq {:?} -> {:x}",
+            owc.get(BOOT0_ANTI_ROLLBACK).unwrap(),
             k,
             !k2,
             core::str::from_utf8(&tag).unwrap_or("invalid tag"),
+            if let Some(tag) = pq_tag {
+                tag_owned = tag;
+                core::str::from_utf8(&tag_owned).unwrap_or("invalid tag")
+            } else {
+                "No PQ sig"
+            },
             target ^ u32::from_le_bytes(tag)
         ),
         Err(e) => crate::println!("Boot0 did not validate: {:?}", e),
     }
-    match bao1x_hal::sigcheck::validate_image(BOOT0_TO_BOOT1, None, None) {
-        Ok((k, k2, tag, target)) => crate::println!(
-            "Boot1: key {}/{} ({}) -> {:x}",
+    let tag_owned;
+    match bao1x_hal::sigcheck::validate_image(BOOT0_TO_BOOT1, None, None, HardenedBool::TRUE) {
+        Ok((k, k2, tag, target, pq_tag)) => crate::println!(
+            "Boot1: arb {}, key {}/{} ({}), pq {:?} -> {:x}",
+            owc.get(BOOT1_ANTI_ROLLBACK).unwrap(),
             k,
             !k2,
             core::str::from_utf8(&tag).unwrap_or("invalid tag"),
+            if let Some(tag) = pq_tag {
+                tag_owned = tag;
+                core::str::from_utf8(&tag_owned).unwrap_or("invalid tag")
+            } else {
+                "No PQ sig"
+            },
             target ^ u32::from_le_bytes(tag)
         ),
         Err(e) => crate::println!("Boot1 did not validate: {:?}", e),
     }
-    match bao1x_hal::sigcheck::validate_image(BOOT1_TO_LOADER_OR_BAREMETAL, None, None) {
-        Ok((k, k2, tag, target)) => crate::println!(
-            "Next stage: key {}/{} ({}) -> {:x}",
+    let tag_owned;
+    match bao1x_hal::sigcheck::validate_image(BOOT1_TO_LOADER_OR_BAREMETAL, None, None, HardenedBool::TRUE) {
+        // anti-rollbacks for next stage are either loader or baremetal: print both as loader|baremetal in the
+        // audit
+        Ok((k, k2, tag, target, pq_tag)) => crate::println!(
+            "Next stage: arb {}|{}, key {}/{} ({}), pq {:?} -> {:x}",
+            owc.get(LOADER_ANTI_ROLLBACK).unwrap(),
+            owc.get(BAREMETAL_ANTI_ROLLBACK).unwrap(),
             k,
             !k2,
             core::str::from_utf8(&tag).unwrap_or("invalid tag"),
+            if let Some(tag) = pq_tag {
+                tag_owned = tag;
+                core::str::from_utf8(&tag_owned).unwrap_or("invalid tag")
+            } else {
+                "No PQ sig"
+            },
             target ^ u32::from_le_bytes(tag)
         ),
         Err(e) => crate::println!("Next stage did not validate: {:?}", e),
+    }
+
+    let swap_key = slot_mgr.read(&bao1x_hal::board::SWAP_KEY).unwrap();
+    if swap_key == [0u8; 32] || swap_key == [ERASE_VALUE; 32] {
+        crate::println!("Swap key is not set, not required, or erased");
+    } else {
+        crate::println!("Swap key is set");
     }
 
     // leak info about the erase proof coupon - this makes CI testing *so much easier*
@@ -236,6 +272,11 @@ pub fn audit() {
         crate::println!("== IN DEVELOPER MODE ==");
         secure = false;
     }
+    if owc.get(OEM_MODE).unwrap() != 0 {
+        crate::println!("== THIRD PARTY MODE ACTIVE ==");
+        // print out the discloseable collateral key
+        crate::println!("Collateral evidence: {:x?}", slot_mgr.read(&bao1x_api::COLLATERAL_PUBLIC));
+    }
     if owc.get(BOOT0_PUBKEY_FAIL).unwrap() != 0 {
         crate::println!("== BOOT0 REPORTED PUBKEY CHECK FAILURE ==");
         secure = false;
@@ -263,9 +304,10 @@ pub fn audit() {
         crate::println!("Factory configuration error - CM7 or debug is enabled!");
         secure = false;
     }
-    let collateral = slot_mgr.read(&COLLATERAL).unwrap();
-    let check_val = alloc::vec![bao1x_hal::sigcheck::ERASE_VALUE; COLLATERAL.len() * SLOT_ELEMENT_LEN_BYTES];
-    let uninit_val = alloc::vec![0; COLLATERAL.len() * SLOT_ELEMENT_LEN_BYTES];
+    // we can only check the public value revealed for sampling
+    let collateral = slot_mgr.read(&COLLATERAL_PUBLIC).unwrap();
+    let check_val = alloc::vec![bao1x_hal::ERASE_VALUE; COLLATERAL_PUBLIC.len() * SLOT_ELEMENT_LEN_BYTES];
+    let uninit_val = alloc::vec![0; COLLATERAL_PUBLIC.len() * SLOT_ELEMENT_LEN_BYTES];
     // these strings below are used in CI. If they are changed, CI needs to be updated
     if collateral == &check_val {
         crate::println!("Collateral erased");
@@ -318,5 +360,36 @@ pub fn audit() {
 
     if !secure {
         crate::println!("** System did not meet minimum requirements for security **");
+    }
+}
+
+/// Returns the address of the instruction that reads the PC.
+///
+/// MUST be `#[inline(always)]`: if the compiler emits this as a real call, you get the
+/// address inside this function rather than the caller's.
+#[inline(always)]
+pub fn get_pc() -> usize {
+    let pc: usize;
+    unsafe {
+        core::arch::asm!(
+            "auipc {0}, 0",
+            out(reg) pc,
+            options(nomem, nostack),
+        );
+    }
+    pc
+}
+
+/// Base address of the signature block of the image currently executing.
+#[inline(always)]
+pub fn current_pc_loc() -> &'static str {
+    let pc = get_pc();
+    // substitute whatever your region-length constants are called
+    if pc >= bao1x_api::BOOT1_START && pc < BAREMETAL_START {
+        "boot1"
+    } else if pc >= bao1x_api::BAREMETAL_START {
+        "altboot1"
+    } else {
+        "illegal"
     }
 }

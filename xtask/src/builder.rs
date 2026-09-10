@@ -185,6 +185,15 @@ pub(crate) struct Builder {
     git_describe: Option<String>,
     git_rev: Option<String>,
     cargo_configs: Vec<String>,
+    pq_key: String,
+    pq_cache: Option<String>,
+    no_pq: bool,
+    boot0: Option<String>,
+    boot1: Option<String>,
+    uses_boot0_path: bool,
+    uses_boot1_path: bool,
+    thirdparty_test: bool,
+    arb_override: Option<usize>,
 }
 
 impl Builder {
@@ -221,6 +230,15 @@ impl Builder {
             git_describe: None,
             git_rev: None,
             cargo_configs: Vec::new(),
+            pq_key: "devkey/dev-pq.key".into(),
+            pq_cache: Some("devkey/dev-pq.cache".into()),
+            no_pq: false,
+            boot0: None,
+            boot1: None,
+            uses_boot0_path: false,
+            uses_boot1_path: false,
+            thirdparty_test: false,
+            arb_override: None,
         }
     }
 
@@ -253,7 +271,6 @@ impl Builder {
 
     /// Specify an alternate loader key, as a String that can encode a file name
     /// in the local directory, or a path + filename.
-    #[allow(dead_code)]
     pub fn loader_key_file(&mut self, filename: String) -> &mut Builder {
         self.loader_key = filename;
         self
@@ -261,9 +278,35 @@ impl Builder {
 
     /// Specify an alternate loader key, as a String that can encode a file name
     /// in the local directory, or a path + filename.
-    #[allow(dead_code)]
     pub fn kernel_key_file(&mut self, filename: String) -> &mut Builder {
         self.kernel_key = filename;
+        self
+    }
+
+    pub fn pq_key_file(&mut self, filename: String) -> &mut Builder {
+        self.pq_key = filename;
+        self
+    }
+
+    pub fn pq_cache_file(&mut self, filename: Option<String>) -> &mut Builder {
+        self.pq_cache = filename;
+        self
+    }
+
+    pub fn skip_pq(&mut self, skip: bool) -> &mut Builder {
+        self.no_pq = skip;
+        self
+    }
+
+    pub fn set_thirdparty_test(&mut self, fake_keys: bool) -> &mut Builder {
+        self.thirdparty_test = fake_keys;
+        self
+    }
+
+    pub fn thirdparty_test(&self) -> bool { self.thirdparty_test }
+
+    pub fn set_antirollback_override(&mut self, value: usize) -> &mut Builder {
+        self.arb_override = Some(value);
         self
     }
 
@@ -271,6 +314,28 @@ impl Builder {
         self.swap = Some(SwapSpec { offchip_ram_offset: offset, offchip_ram_len: size });
         self
     }
+
+    pub fn is_updater<'a>(&'a mut self, boot0: bool, boot1: bool) -> &'a mut Builder {
+        self.uses_boot0_path = boot0;
+        self.uses_boot1_path = boot1;
+        self
+    }
+
+    pub fn set_boot0<'a>(&'a mut self, target: String) -> &'a mut Builder {
+        self.boot0 = Some(target);
+        self.uses_boot0_path = true;
+        self
+    }
+
+    pub fn set_boot1<'a>(&'a mut self, target: String) -> &'a mut Builder {
+        self.boot1 = Some(target);
+        self.uses_boot1_path = true;
+        self
+    }
+
+    pub fn uses_boot0_path(&self) -> bool { self.uses_boot0_path }
+
+    pub fn uses_boot1_path(&self) -> bool { self.uses_boot1_path }
 
     pub fn is_swap_set(&self) -> bool { self.swap.is_some() }
 
@@ -584,6 +649,21 @@ impl Builder {
     pub fn hosted_build_only(&mut self) -> &mut Builder {
         self.dry_run = true;
         self
+    }
+
+    fn format_pq_arg(&self) -> Vec<&str> {
+        let mut arg = Vec::new();
+
+        if !self.no_pq {
+            arg.push("--pq-key");
+            arg.push(&self.pq_key);
+            if let Some(cache) = &self.pq_cache {
+                arg.push("--pq-key-cache");
+                arg.push(&cache);
+            }
+        }
+
+        arg
     }
 
     /// The builder sets up all the cargo arguments to build a set of packages with features for a respective
@@ -949,6 +1029,20 @@ impl Builder {
             // these settings will generate the most compact code (but also the hardest to debug)
             env::set_var("CARGO_PROFILE_RELEASE_LTO", "true");
             env::set_var("CARGO_PROFILE_RELEASE_CODEGEN_UNITS", "1");
+
+            if self.uses_boot0_path {
+                env::set_var(
+                    "BOOT0_BIN",
+                    self.boot0.clone().unwrap_or(crate::DEFAULT_BOOT0_PATH.to_string()),
+                );
+            }
+            if self.uses_boot1_path {
+                env::set_var(
+                    "BOOT1_BIN",
+                    self.boot1.clone().unwrap_or(crate::DEFAULT_BOOT1_PATH.to_string()),
+                );
+            }
+
             let mut loader_extra = vec![];
             if self.loader_disable_defaults {
                 loader_extra.push("--no-default-features".to_string());
@@ -1011,12 +1105,15 @@ impl Builder {
                 } else {
                     // bao1x bootloader targets. Figure out if it's boot0 or boot1
                     let function_code = match self.loader {
-                        CrateSpec::Local(name, _) => {
+                        CrateSpec::Local(ref name, _) => {
                             if name == "bao1x-boot0" {
                                 "boot0"
                             } else if name == "bao1x-boot1" {
                                 "boot1"
-                            } else if name == "baremetal" || name == "bao1x-alt-boot1" {
+                            } else if name == "baremetal"
+                                || name == "bao1x-alt-boot1"
+                                || name == "boot-updater"
+                            {
                                 "baremetal"
                             } else {
                                 return Err(String::from("Target subtype not supported").into());
@@ -1028,32 +1125,49 @@ impl Builder {
                         Some(gd) => vec!["--git-describe", gd],
                         None => vec![],
                     };
-                    cargo(&self.cargo_configs)
-                        .current_dir(project_root())
-                        .args([
-                            "run",
-                            "--package",
-                            "xous-tools",
-                            "--bin",
-                            "xous-sign-image",
-                            "--",
-                            "--loader-image",
-                            presign_file.to_str().unwrap(),
-                            "--loader-key",
-                            &self.loader_key,
-                            "--loader-output",
-                            output_file.to_str().unwrap(),
-                            "--min-xous-ver",
-                            &self.min_ver,
-                            "--sig-length",
-                            &self.sigblock_size.to_string(),
-                            "--with-jump", // bao1x target has a jump inserted in the loader sig block
-                            "--bao1x",
-                            "--function-code",
-                            function_code,
-                        ])
-                        .args(&git_describe_args)
-                        .status()?;
+                    let mut cmd = cargo(&self.cargo_configs);
+                    cmd.current_dir(project_root())
+                        .args(
+                            [
+                                "run",
+                                "--release",
+                                "--package",
+                                "xous-tools",
+                                "--bin",
+                                "xous-sign-image",
+                                "--",
+                                "--loader-image",
+                                presign_file.to_str().unwrap(),
+                                "--loader-key",
+                                &self.loader_key,
+                                "--loader-output",
+                                output_file.to_str().unwrap(),
+                                "--min-xous-ver",
+                                &self.min_ver,
+                                "--sig-length",
+                                &self.sigblock_size.to_string(),
+                                "--with-jump", // bao1x target has a jump inserted in the loader sig block
+                                "--bao1x",
+                                "--function-code",
+                                function_code,
+                            ]
+                            .iter()
+                            .chain(self.format_pq_arg().iter())
+                            .copied(),
+                        )
+                        .args(&git_describe_args);
+                    // this will speed up PQ signing if you're running on x86. Other hosts may require other
+                    // flags
+                    if cfg!(target_arch = "x86_64") {
+                        cmd.env("RUSTFLAGS", r#"--cfg sha2_256_backend="x86_sha""#);
+                    }
+                    if self.thirdparty_test {
+                        cmd.arg("--fake-pubkeys");
+                    }
+                    if let Some(arb_override) = self.arb_override {
+                        cmd.args(["--antirollback-override", &arb_override.to_string()]);
+                    }
+                    cmd.status()?;
                     return Ok(());
                 }
             }
@@ -1146,53 +1260,71 @@ impl Builder {
                 None => vec![],
             };
             let status = if self.utra_target.contains("bao1x") {
-                cargo(&self.cargo_configs)
-                    .current_dir(project_root())
-                    .args([
-                        "run",
-                        "--package",
-                        "xous-tools",
-                        "--bin",
-                        "xous-sign-image",
-                        "--",
-                        "--loader-image",
-                        loader_presign.to_str().unwrap(),
-                        "--loader-key",
-                        &self.loader_key,
-                        "--loader-output",
-                        loader_bin.to_str().unwrap(),
-                        "--min-xous-ver",
-                        &self.min_ver,
-                        "--sig-length",
-                        &self.sigblock_size.to_string(),
-                        "--with-jump", // bao1x target has a jump inserted in the loader sig block
-                        "--bao1x",
-                        "--function-code",
-                        "loader",
-                    ])
-                    .args(&git_describe_args)
-                    .status()?
+                let mut cmd = cargo(&self.cargo_configs);
+                cmd.current_dir(project_root())
+                    .args(
+                        [
+                            "run",
+                            "--release",
+                            "--package",
+                            "xous-tools",
+                            "--bin",
+                            "xous-sign-image",
+                            "--",
+                            "--loader-image",
+                            loader_presign.to_str().unwrap(),
+                            "--loader-key",
+                            &self.loader_key,
+                            "--loader-output",
+                            loader_bin.to_str().unwrap(),
+                            "--min-xous-ver",
+                            &self.min_ver,
+                            "--sig-length",
+                            &self.sigblock_size.to_string(),
+                            "--with-jump", // bao1x target has a jump inserted in the loader sig block
+                            "--bao1x",
+                            "--function-code",
+                            "loader",
+                        ]
+                        .iter()
+                        .chain(self.format_pq_arg().iter())
+                        .copied(),
+                    )
+                    .args(&git_describe_args);
+                if cfg!(target_arch = "x86_64") {
+                    cmd.env("RUSTFLAGS", r#"--cfg sha2_256_backend="x86_sha""#);
+                }
+                cmd.status()?
             } else {
-                cargo(&self.cargo_configs)
-                    .current_dir(project_root())
-                    .args([
-                        "run",
-                        "--package",
-                        "xous-tools",
-                        "--bin",
-                        "xous-sign-image",
-                        "--",
-                        "--loader-image",
-                        loader_presign.to_str().unwrap(),
-                        "--loader-key",
-                        &self.loader_key,
-                        "--loader-output",
-                        loader_bin.to_str().unwrap(),
-                        "--min-xous-ver",
-                        &self.min_ver,
-                    ])
-                    .args(&git_describe_args)
-                    .status()?
+                let mut cmd = cargo(&self.cargo_configs);
+                cmd.current_dir(project_root())
+                    .args(
+                        [
+                            "run",
+                            "--release",
+                            "--package",
+                            "xous-tools",
+                            "--bin",
+                            "xous-sign-image",
+                            "--",
+                            "--loader-image",
+                            loader_presign.to_str().unwrap(),
+                            "--loader-key",
+                            &self.loader_key,
+                            "--loader-output",
+                            loader_bin.to_str().unwrap(),
+                            "--min-xous-ver",
+                            &self.min_ver,
+                        ]
+                        .iter()
+                        .chain(self.format_pq_arg().iter())
+                        .copied(),
+                    )
+                    .args(&git_describe_args);
+                if cfg!(target_arch = "x86_64") {
+                    cmd.env("RUSTFLAGS", r#"--cfg sha2_256_backend="x86_sha""#);
+                }
+                cmd.status()?
             };
             if !status.success() {
                 return Err("loader image sign failed".into());
@@ -1202,55 +1334,73 @@ impl Builder {
             xous_img_path.push("xous.img");
 
             let status = if self.utra_target.contains("bao1x") {
-                cargo(&self.cargo_configs)
-                    .current_dir(project_root())
-                    .args([
-                        "run",
-                        "--package",
-                        "xous-tools",
-                        "--bin",
-                        "xous-sign-image",
-                        "--",
-                        "--kernel-image",
-                        output_bundle.to_str().unwrap(),
-                        "--kernel-key",
-                        &self.kernel_key,
-                        "--kernel-output",
-                        xous_img_path.to_str().unwrap(),
-                        "--min-xous-ver",
-                        &self.min_ver,
-                        "--sig-length",
-                        &self.sigblock_size.to_string(),
-                        "--with-jump", // bao1x target has a jump inserted in the sig block
-                        "--bao1x",
-                        "--function-code",
-                        "kernel",
-                        // "--defile",
-                    ])
-                    .args(&git_describe_args)
-                    .status()?
+                let mut cmd = cargo(&self.cargo_configs);
+                cmd.current_dir(project_root())
+                    .args(
+                        [
+                            "run",
+                            "--release",
+                            "--package",
+                            "xous-tools",
+                            "--bin",
+                            "xous-sign-image",
+                            "--",
+                            "--kernel-image",
+                            output_bundle.to_str().unwrap(),
+                            "--kernel-key",
+                            &self.kernel_key,
+                            "--kernel-output",
+                            xous_img_path.to_str().unwrap(),
+                            "--min-xous-ver",
+                            &self.min_ver,
+                            "--sig-length",
+                            &self.sigblock_size.to_string(),
+                            "--with-jump", // bao1x target has a jump inserted in the sig block
+                            "--bao1x",
+                            "--function-code",
+                            "kernel",
+                            // "--defile",
+                        ]
+                        .iter()
+                        .chain(self.format_pq_arg().iter())
+                        .copied(),
+                    )
+                    .args(&git_describe_args);
+                if cfg!(target_arch = "x86_64") {
+                    cmd.env("RUSTFLAGS", r#"--cfg sha2_256_backend="x86_sha""#);
+                }
+                cmd.status()?
             } else {
-                cargo(&self.cargo_configs)
-                    .current_dir(project_root())
-                    .args([
-                        "run",
-                        "--package",
-                        "xous-tools",
-                        "--bin",
-                        "xous-sign-image",
-                        "--",
-                        "--kernel-image",
-                        output_bundle.to_str().unwrap(),
-                        "--kernel-key",
-                        &self.kernel_key,
-                        "--kernel-output",
-                        xous_img_path.to_str().unwrap(),
-                        "--min-xous-ver",
-                        &self.min_ver,
-                        // "--defile",
-                    ])
-                    .args(&git_describe_args)
-                    .status()?
+                let mut cmd = cargo(&self.cargo_configs);
+                cmd.current_dir(project_root())
+                    .args(
+                        [
+                            "run",
+                            "--release",
+                            "--package",
+                            "xous-tools",
+                            "--bin",
+                            "xous-sign-image",
+                            "--",
+                            "--kernel-image",
+                            output_bundle.to_str().unwrap(),
+                            "--kernel-key",
+                            &self.kernel_key,
+                            "--kernel-output",
+                            xous_img_path.to_str().unwrap(),
+                            "--min-xous-ver",
+                            &self.min_ver,
+                            // "--defile",
+                        ]
+                        .iter()
+                        .chain(self.format_pq_arg().iter())
+                        .copied(),
+                    )
+                    .args(&git_describe_args);
+                if cfg!(target_arch = "x86_64") {
+                    cmd.env("RUSTFLAGS", r#"--cfg sha2_256_backend="x86_sha""#);
+                }
+                cmd.status()?
             };
             if !status.success() {
                 return Err("kernel image sign failed".into());
@@ -1274,7 +1424,7 @@ impl Builder {
         memory_spec: Vec<String>,
     ) -> Result<PathBuf, DynError> {
         let stream = self.stream.as_str();
-        let mut args = vec!["run", "--package", "xous-tools", "--bin", "xous-create-image"];
+        let mut args = vec!["run", "--release", "--package", "xous-tools", "--bin", "xous-create-image"];
         args.push("--features");
         if self.utra_target.contains("renode") {
             args.push("renode");
@@ -1364,7 +1514,15 @@ impl Builder {
             args.push(git_describe);
         }
 
-        let status = cargo(&self.cargo_configs).current_dir(project_root()).args(&args).status()?;
+        // add the pq arguments
+        args.extend(self.format_pq_arg());
+
+        let mut cmd = cargo(&self.cargo_configs);
+        cmd.current_dir(project_root()).args(&args);
+        if cfg!(target_arch = "x86_64") {
+            cmd.env("RUSTFLAGS", r#"--cfg sha2_256_backend="x86_sha""#);
+        }
+        let status = cmd.status()?;
 
         if !status.success() {
             return Err("cargo build failed".into());

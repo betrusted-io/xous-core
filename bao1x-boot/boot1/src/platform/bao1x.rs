@@ -1,5 +1,6 @@
 pub mod bao1x;
 pub use bao1x::*;
+pub mod ate;
 pub mod debug;
 pub mod gfx;
 pub mod irq;

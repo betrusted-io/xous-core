@@ -1,0 +1,14 @@
+param_set        = sphincs-shake-256-24
+n                = 32
+pk_bytes         = 64
+sig_bytes        = 14944
+sk_seed          = 000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f
+sk_prf           = 404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f
+pk_seed          = 808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9f
+opt_rand         = c0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedf
+message_ascii    = "NIST SP 800-230 SLH-DSA vector\n"
+message_hex      = 4e495354205350203830302d32333020534c482d44534120766563746f720a
+pk               = 808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9f1f55ef9d8c303eb4dc49b5c7e6e995db5c249a87a9b01c8cbf9e8e539ae0be04
+randomizer_R     = b0c60c6be2ca75f218e949fac552a35df2b00d62a3711a89b648e41c60266d3d
+sig_digest       = 5df4ffa2fab40ce293fba50feebdc9bee1e08a78f88ec9c8fee6d57f7367902f
+sig_digest_alg   = shake256

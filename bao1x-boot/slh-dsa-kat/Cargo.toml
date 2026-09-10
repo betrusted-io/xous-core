@@ -1,0 +1,28 @@
+[package]
+name = "slh-dsa-test"
+description = """
+KAT test for slh-dsa, written in Rust, for testing NIST SP 800-230.ipd extensions
+
+Build with
+
+RUSTFLAGS='--cfg sha2_256_backend="x86_sha"' cargo test --release
+
+For best performance on x86 machines.
+"""
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+license = "Apache-2.0"
+
+[dependencies]
+slh-dsa = { path = "../slh-dsa-bao1x", features = [
+    "parallel",
+    "tree-cache",
+    "hardened-verify",
+] }
+hex = "0.4.3"
+
+[features]
+tree-cache = []
+hardened-verify = []
+default = ["tree-cache", "hardened-verify"]

@@ -101,6 +101,7 @@ pub(crate) fn stat_path(
     let dict_list = basis_cache.dict_list(pddb_os, basis.as_deref());
     let is_dict = dict_list.contains(stripped_path);
     let mut is_key = false;
+    let mut len = 0u64;
 
     // Find all keys that are in this dict. Ignore errors, since sometimes
     // the dict doesn't exist, which is fine.
@@ -115,6 +116,9 @@ pub(crate) fn stat_path(
         {
             if key_list.contains(key_path) {
                 is_key = true;
+                if let Ok(attr) = basis_cache.key_attributes(pddb_os, dict_path, key_path, basis.as_deref()) {
+                    len = attr.len as u64;
+                }
             }
         }
     }
@@ -127,8 +131,8 @@ pub(crate) fn stat_path(
         (false, false) => FileType::None,
     };
     writer.append(val as u8);
-    // Placeholder for file length
-    writer.append(0u64);
+    // File length: the key's true length, or 0 for dicts
+    writer.append(len);
 
     Ok(())
 }
@@ -179,15 +183,12 @@ pub(crate) fn list_path(
 
     // Find all dicts that match this string
     let dict_list = basis_cache.dict_list(pddb_os, basis.as_deref());
-    // Find all keys that are in this dict. Ignore errors, since sometimes
-    // the dict doesn't exist, which is fine.
-    let (key_list, _, _) = basis_cache
-        .key_list(pddb_os, dict, basis.as_deref())
-        .map_err(|e| {
-            // log::error!("unable to get key list: {:?}", e);
-            e
-        })
-        .unwrap_or_default();
+    // Find all keys that are in this dict. A missing dict is not an error yet:
+    // the root listing uses dict == "", and a ':'-hierarchy intermediate may
+    // exist only through its children (scanned below).
+    let key_list_result = basis_cache.key_list(pddb_os, dict, basis.as_deref());
+    let dict_found = key_list_result.is_ok();
+    let (key_list, _, _) = key_list_result.unwrap_or_default();
 
     let mut entries_count = 0u32;
 
@@ -217,6 +218,13 @@ pub(crate) fn list_path(
 
     // Add the count of entries
     writer.do_delayed_append(entry_len_pos, entries_count);
+
+    // A dict that no open basis contains is a genuine not-found (BasisLost is this
+    // interface's NotFound). This must stay after do_delayed_append so the reply
+    // still carries a well-formed zero count for clients that ignore the retcode.
+    if !dict_found && entries_count == 0 && !dict.is_empty() {
+        return Err(crate::PddbRetcode::BasisLost);
+    }
 
     Ok(())
 }
@@ -396,6 +404,8 @@ pub(crate) fn open_key(
                     );
                     crate::PddbRetcode::InternalError
                 })?;
+            // the truncate above emptied the key; don't carry the stale length forward
+            len = 0;
         }
 
         // The basis exists for sure.
@@ -512,10 +522,14 @@ pub(crate) fn delete_key(
         Err(crate::PddbRetcode::UnexpectedEof)
     })?;
 
+    // Open handles record a concrete basis name, so resolve a None basis the same
+    // way key_remove's select_basis(None) just did: the most recently opened basis.
+    let removed_basis = basis.or_else(|| basis_cache.basis_latest().map(|s| s.to_owned()));
+
     // Mark the entry as deleted in all remaining file handles in the entire system
     for fds in all_fds.values_mut() {
         for fd in fds.iter_mut().filter(|f| f.is_some()).map(|f| f.as_mut().unwrap()) {
-            if fd.basis == basis && fd.key == key && fd.dict == dict {
+            if fd.basis == removed_basis && fd.key == key && fd.dict == dict {
                 fd.deleted = true;
             }
         }
@@ -564,6 +578,11 @@ pub(crate) fn write_key(
             .is_ok()
         {
             file.offset += length_to_write as u64;
+            // a write can grow the key; keep the handle's cached length in sync
+            // so SeekFrom::End is based on the current end, not the open-time end
+            if file.length < file.offset {
+                file.length = file.offset;
+            }
             mem.valid = xous::MemorySize::new(length_to_write);
             return Ok(());
         }
@@ -581,23 +600,14 @@ pub(crate) fn seek_key(
     let file = get_fd(fds, fd)?;
 
     fn seek_from_point(this: &mut FileHandle, point: u64, by: i64) -> Result<u64, crate::PddbRetcode> {
-        let by64 = by as u64;
         // Note that it's possible to seek past the end of a key, and in this case
         // the `offset` will be greater than the `len`. This is fine, and `len` will
-        // be updated as soon as `write()` is called.
-        if by < 0 {
-            this.offset = point.checked_sub(by64).ok_or_else(|| {
-                // std::io::Error::new(std::io::ErrorKind::InvalidInput, "cannot seek before 0")
-                log::error!("cannot seek before 0");
-                crate::PddbRetcode::UnexpectedEof
-            })?;
-        } else {
-            this.offset = point.checked_add(by64).ok_or_else(|| {
-                // std::io::Error::new(std::io::ErrorKind::InvalidInput, "seek overflowed")
-                log::error!("seek overflowed");
-                crate::PddbRetcode::UnexpectedEof
-            })?;
-        }
+        // be updated as soon as `write()` is called. `None` covers both
+        // seek-before-0 and u64 overflow.
+        this.offset = point.checked_add_signed(by).ok_or_else(|| {
+            log::error!("seek out of range");
+            crate::PddbRetcode::UnexpectedEof
+        })?;
         Ok(this.offset)
     }
 

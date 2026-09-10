@@ -32,7 +32,7 @@ pub const DEFAULT_FCLK_FREQUENCY: u32 = 700_000_000;
 
 /// All the slots of concern located in a single iterator. The idea is that everything is
 /// condensed here and used to check for access integrity using the array below.
-pub const DATA_SLOTS: [SlotIndex; 12] = [
+pub const DATA_SLOTS: [SlotIndex; 14] = [
     crate::offsets::SERIAL_NUMBER,
     crate::offsets::UUID,
     crate::offsets::IFR_HASH,
@@ -45,6 +45,8 @@ pub const DATA_SLOTS: [SlotIndex; 12] = [
     crate::offsets::BOOT1_PK_RECEIPT_SLOT1,
     crate::offsets::BOOT1_PK_RECEIPT_SLOT2,
     crate::offsets::BOOT1_PK_RECEIPT_SLOT3,
+    crate::offsets::COLLATERAL_SECRET,
+    crate::offsets::COLLATERAL_PUBLIC,
 ];
 
 pub use crate::baosec::ERASE_PROOF;
@@ -54,9 +56,6 @@ pub use crate::baosec::{
 
 pub const KEY_SLOTS: [SlotIndex; 6] =
     [THE_FLAG_1, ROOT_SEED, RMA_KEY, NUISANCE_KEYS_0, NUISANCE_KEYS_1, CHAFF_KEYS];
-
-// [384..=1919] are unused and available for third party use
-pub const APPLICATION: SlotIndex = crate::offsets::APPLICATION;
 
 // offsets into the application slot range for storing BIO config
 pub const APP_BIO_CLK_INDEX: usize = 0;

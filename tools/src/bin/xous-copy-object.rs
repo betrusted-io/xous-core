@@ -4,6 +4,8 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process;
 
+use bao1x_api::StaticsInRom;
+use bao1x_api::signatures::SIGBLOCK_LEN;
 use xous_tools::elf;
 
 fn main() {
@@ -92,5 +94,10 @@ fn main() {
     println!("Data reserved region: {:08x}", pd.clear_size);
     println!("Text offset: {:08x}", pd.text_offset);
     println!("Entrypoint: {:08x}", pd.entry_point);
+    // check to make sure that the entry point is what we expect it to be - this is important
+    // because if the entrypoint accidentally slips to 0, then we're running in unchecked code.
+    if bao1x_flag {
+        assert!(pd.entry_point as usize & 0xFFFF == SIGBLOCK_LEN + size_of::<StaticsInRom>());
+    }
     println!("Copied {} bytes of data to {}", pd.program.len(), output_filename.display());
 }

@@ -53,6 +53,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .default_value(DEVKEY_PATH),
         )
         .arg(
+            Arg::with_name("pq-key")
+            .long("pq-key")
+            .takes_value(true)
+            .required(false)
+            .help("Post quantum signing key; if non provided, defaults to the dev key")
+            .value_name("Post quantum signing key")
+        )
+        .arg(
+            Arg::with_name("pq-key-cache")
+            .long("pq-key-cache")
+            .takes_value(true)
+            .required(false)
+            .help("Post quantum signing key cache. When provided, accelerates the signing process.")
+            .value_name("Post quantum signing key")
+        )
+        .arg(
             Arg::with_name("loader-output")
                 .long("loader-output")
                 .takes_value(true)
@@ -134,7 +150,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         };
 
     let arb_override = if let Some(arb_str) = matches.value_of("antirollback-override") {
-        parse_u32(arb_str).ok()
+        Some(parse_u32(arb_str).expect("Malformed antirollback override"))
     } else {
         None
     };
@@ -145,6 +161,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .map_err(|_| Error::new(ErrorKind::InvalidInput, "git-describe format incorrect"))?
                 .into(),
         )
+    } else {
+        None
+    };
+
+    let pq_args = if let Some(pq_key) = matches.value_of("pq-key") {
+        if let Some(pq_cache) = matches.value_of("pq-key-cache") {
+            Some((pq_key, Some(pq_cache)))
+        } else {
+            Some((pq_key, None))
+        }
     } else {
         None
     };
@@ -183,6 +209,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             matches.value_of("function-code"),
             arb_override.map(|x| x as usize),
             matches.is_present("fake-pubkeys"),
+            pq_args,
         )?;
 
         if matches.is_present("bao1x") {
@@ -227,6 +254,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             Some(matches.value_of("function-code").unwrap_or("kernel")),
             arb_override.map(|x| x as usize),
             matches.is_present("fake-pubkeys"),
+            pq_args,
         )?;
 
         if matches.is_present("bao1x") {

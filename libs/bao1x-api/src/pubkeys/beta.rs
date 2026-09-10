@@ -1,5 +1,5 @@
 use super::*;
-use crate::signatures::Pubkey;
+use crate::signatures::{Pubkey, PubkeyPq};
 
 /// Beta public key. Extracted from signing/beta_id_ed25519_sk using extract_sk_credential.py
 pub const ID_ED25519_SK_PUB: [u8; 32] = [
@@ -31,3 +31,10 @@ pub const ID_ED25519_SK_CRED_ID: [u8; 241] = [
 pub const ID_ED25519_SK_RP: &'static str = "ssh:";
 
 pub const PUBKEY: Pubkey = Pubkey { pk: ID_ED25519_SK_PUB, tag: *KEYSLOT_INITIAL_TAGS[BETA_KEY_SLOT] };
+
+pub const SLH_DSA_PUB: [u8; 32] = [
+    0xD7, 0x60, 0x57, 0xC8, 0x61, 0x43, 0x83, 0xF9, 0xF8, 0x7A, 0x9F, 0x79, 0x1A, 0xBF, 0x47, 0xBD, 0x13,
+    0x6D, 0xC9, 0x35, 0x44, 0x31, 0xE2, 0x95, 0x66, 0xA5, 0xF9, 0x3F, 0x85, 0xA2, 0x01, 0xFD,
+];
+
+pub const SLH_DSA_PUBKEY: PubkeyPq = PubkeyPq { pk: SLH_DSA_PUB, tag: *KEYSLOT_INITIAL_TAGS[BETA_KEY_SLOT] };

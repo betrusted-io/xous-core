@@ -10,7 +10,18 @@ fn main() -> ! {
     log::info!("my PID is {}", xous::process::id());
 
     let xns = xous_names::XousNames::new().unwrap();
-    // TODO: limit connections to this server?? once we know all that will connect
+
+    // restrictive for baosec config. Verified handle list, all have lifetimes throughout correct runtime:
+    //  - dc34-vault:actions -> password store encryption
+    //  - dc34-vault:main -> check swap encryption state
+    //  - dc34-vault:ux -> trigger bootwait clear
+    //  - dc34-console:command shell -> bootwait clear
+    //  - pddb:PddbOs -> PDDB encryption
+    #[cfg(feature = "board-baosec")]
+    let keys_sid = xns.register_name(SERVER_NAME_KEYS, Some(5)).expect("can't register server");
+
+    // permissive default for e.g. Dabao
+    #[cfg(not(feature = "board-baosec"))]
     let keys_sid = xns.register_name(SERVER_NAME_KEYS, None).expect("can't register server");
 
     platform::keystore(keys_sid);

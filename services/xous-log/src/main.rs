@@ -286,10 +286,13 @@ fn reader_thread(arg: usize) {
                             writeln!(output, "USB serial connection failed, console mirror not established").ok();
                             xous::return_scalar(envelope.sender, 0).ok();
                         }
+                        crate::platform::implementation::KBD_ENA.store(true, core::sync::atomic::Ordering::SeqCst);
                     },
                     #[cfg(feature="usb")]
                     5 /* api::Opcode::UnhookUsbMirror */ => {
                         // Note: this routine should be coded so that it is never harmful if unhook is called in an already unhooked state.
+
+                        crate::platform::implementation::KBD_ENA.store(false, core::sync::atomic::Ordering::SeqCst);
                         usb_serial.take();
                         xous::return_scalar(envelope.sender, 1).ok();
                     },

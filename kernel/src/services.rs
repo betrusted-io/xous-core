@@ -482,6 +482,20 @@ impl SystemServices {
             if entry.state != ProcessState::Free {
                 continue;
             }
+            #[cfg(feature = "swap")]
+            if idx == xous_kernel::SWAPPER_PID as usize {
+                // don't allow re-allocation of the swapper PID. It has special privileges, if it crashes,
+                // it shall remain empty forever.
+                continue;
+            }
+            #[cfg(feature = "bao1x")]
+            if idx == 3 {
+                // don't allow re-allocation of PID 3 on all Baochip-1x targets. This is because PID 3 is the
+                // very special keystore process, which has elevated privileges in hardware to
+                // access secret data slots. This seals off an attack where an adversary crashes PID 3 and
+                // then tries to start a new process in its place.
+                continue;
+            }
             entry_idx = Some(idx);
             new_pid = Some(pid_from_usize(idx + 1)?);
             entry.pid = new_pid.unwrap();
@@ -513,6 +527,9 @@ impl SystemServices {
     pub fn get_process(&self, pid: PID) -> Result<&Process, xous_kernel::Error> {
         // PID0 doesn't exist -- process IDs are offset by 1.
         let pid_idx = pid.get() as usize - 1;
+        if pid_idx >= self.processes.len() {
+            return Err(xous_kernel::Error::ProcessNotFound);
+        }
         if cfg!(baremetal) && self.processes[pid_idx].mapping.get_pid() != Some(pid) {
             Err(xous_kernel::Error::ProcessNotFound)
         } else if self.processes[pid_idx].state == ProcessState::Free {
@@ -525,6 +542,9 @@ impl SystemServices {
     pub fn get_process_mut(&mut self, pid: PID) -> Result<&mut Process, xous_kernel::Error> {
         // PID0 doesn't exist -- process IDs are offset by 1.
         let pid_idx = pid.get() as usize - 1;
+        if pid_idx >= self.processes.len() {
+            return Err(xous_kernel::Error::ProcessNotFound);
+        }
         if cfg!(baremetal) && self.processes[pid_idx].mapping.get_pid() != Some(pid) {
             Err(xous_kernel::Error::ProcessNotFound)
         } else if self.processes[pid_idx].state == ProcessState::Free {
@@ -1379,7 +1399,7 @@ impl SystemServices {
         if dest_virt as usize & 0xfff != 0 {
             return Err(xous_kernel::Error::BadAddress);
         }
-        if (dest_virt as usize) + len > USER_AREA_END {
+        if (dest_virt as usize).saturating_add(len) > USER_AREA_END {
             return Err(xous_kernel::Error::BadAddress);
         }
 
@@ -2073,12 +2093,12 @@ impl SystemServices {
 
     /// Return a server based on the connection id and the current process
     pub fn server_from_sidx(&self, sidx: usize) -> Option<&Server> {
-        if sidx > self.servers.len() { None } else { self.servers[sidx].as_ref() }
+        if sidx >= self.servers.len() { None } else { self.servers[sidx].as_ref() }
     }
 
     /// Return a server based on the connection id and the current process
     pub fn server_from_sidx_mut(&mut self, sidx: usize) -> Option<&mut Server> {
-        if sidx > self.servers.len() { None } else { self.servers[sidx].as_mut() }
+        if sidx >= self.servers.len() { None } else { self.servers[sidx].as_mut() }
     }
 
     /// Retrieve a Server ID (Extended) value from the given Connection ID

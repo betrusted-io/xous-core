@@ -160,7 +160,6 @@ impl SwapAlloc {
 
     pub fn set_wired(&mut self) { self.vpn |= SWAP_FLG_WIRED; }
 
-    #[cfg(feature = "debug-swap-verbose")]
     pub fn get_raw_vpn(&self) -> u32 { self.vpn }
 
     pub fn get_timestamp(&self) -> u32 { self.timestamp }
@@ -922,7 +921,8 @@ impl Swap {
                 }
                 (pid, tid)
             }
-            None => panic!("No previous swap op was set"),
+            // No previous swap op was set
+            None => return Err(xous_kernel::Error::UseBeforeInit),
         };
 
         // return to the original pid memory space, now that we have memory

@@ -33,6 +33,10 @@ pub enum Opcode {
     #[cfg(feature = "app-keys")]
     AppKeyOp = 1024,
 
+    /// Call to trigger that swap is encrypted
+    #[cfg(feature = "swap")]
+    EnsureSwapEncryption = 1536,
+
     // ----- below are non-cryptographic opcodes but used to manipulate sensitive state -----
     /// Set bootwait parameters
     Bootwait = 4096,

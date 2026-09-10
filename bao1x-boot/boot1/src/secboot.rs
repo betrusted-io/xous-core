@@ -1,5 +1,6 @@
 use bao1x_api::{
-    DEVELOPER_MODE, PARANOID_MODE, PARANOID_MODE_DUPE, bollard, pubkeys::BOOT1_TO_LOADER_OR_BAREMETAL,
+    Boot1DeveloperState, DEVELOPER_MODE, HardenedBool, PARANOID_MODE, PARANOID_MODE_DUPE, bollard,
+    pubkeys::BOOT1_TO_LOADER_OR_BAREMETAL,
 };
 use bao1x_hal::hardening::{Csprng, disable_clock_skipping, reseed_skipping, setup_clock_skipping};
 
@@ -16,6 +17,11 @@ fn seal_boot1_keys() {
     // locks out future modifications to the Coreuser setting. Also inverts mm sense, which means you must
     // enter a virtual memory user state to access sealed keys.
     cu.protect();
+    bollard!(bao1x_hal::sigcheck::die_no_std, 4);
+    // call twice, in case someone tries to glitch past this. The second call should essentially be
+    // a no-op if the protection is active.
+    cu.protect();
+    bollard!(bao1x_hal::sigcheck::die_no_std, 4);
 }
 
 pub fn try_boot(or_die: bool, csprng: &mut Csprng) {
@@ -60,15 +66,27 @@ pub fn try_boot(or_die: bool, csprng: &mut Csprng) {
 
     // loader is at the same offset as baremetal. Accept either as valid boot.
     // This diverges if the signature check is successful
-    match bao1x_hal::sigcheck::validate_image(BOOT1_TO_LOADER_OR_BAREMETAL, None, Some(csprng)) {
-        Ok((key, key_inv, tag, target)) => {
+    match bao1x_hal::sigcheck::validate_image(
+        BOOT1_TO_LOADER_OR_BAREMETAL,
+        None,
+        Some(csprng),
+        HardenedBool::FALSE,
+    ) {
+        Ok((key, key_inv, tag, target, pq_tag)) => {
             if paranoid1 == 0 && paranoid2 == 0 {
+                let tag_owned;
                 // only emit prints if not in paranoid mode
                 crate::println!(
-                    "Booting with key {}/{}({})",
+                    "Booting with key {}/{}({}) pq: {}",
                     key,
                     !key_inv,
-                    core::str::from_utf8(&tag).unwrap_or("invalid tag")
+                    core::str::from_utf8(&tag).unwrap_or("invalid tag"),
+                    if let Some(tag) = pq_tag {
+                        tag_owned = tag;
+                        core::str::from_utf8(&tag_owned).unwrap_or("invalid tag")
+                    } else {
+                        "No PQ sig"
+                    }
                 );
             }
             if key != !key_inv {
@@ -81,9 +99,11 @@ pub fn try_boot(or_die: bool, csprng: &mut Csprng) {
             // the tag is from signed, trusted data
             // k is just a nominal slot number. If either match, assume we are dealing with a
             // developer image.
-            bao1x_hal::sigcheck::hardened_erase_policy(paranoid1, paranoid2, key, key_inv, tag, csprng)
-                .inspect_err(|e| crate::println!("{}", e))
-                .ok(); // "ok" because the expected error is a check on logic/configuration bugs, not attacks
+            bao1x_hal::sigcheck::hardened_erase_policy(
+                paranoid1, paranoid2, key, key_inv, tag, csprng, pq_tag,
+            )
+            .inspect_err(|e| crate::println!("{}", e))
+            .ok(); // "ok" because the expected error is a check on logic/configuration bugs, not attacks
 
             // this print message is not hardened, and it's actually retrospective of the policy
             // implementation
@@ -101,9 +121,18 @@ pub fn try_boot(or_die: bool, csprng: &mut Csprng) {
                     reseed_skipping(csprng.get_u32());
                 }
                 bollard!(bao1x_hal::sigcheck::die_no_std, 4);
-                bao1x_hal::sigcheck::validate_image(BOOT1_TO_LOADER_OR_BAREMETAL, None, Some(csprng))
-                    .unwrap_or_else(|_| bao1x_hal::hardening::die());
+                bao1x_hal::sigcheck::validate_image(
+                    BOOT1_TO_LOADER_OR_BAREMETAL,
+                    None,
+                    Some(csprng),
+                    HardenedBool::FALSE,
+                )
+                .unwrap_or_else(|_| bao1x_hal::hardening::die());
             }
+
+            // this must be called before secrets are sealed
+            #[cfg(feature = "fix-ifr")]
+            fix_ifr();
 
             csprng.random_delay();
             bollard!(bao1x_hal::sigcheck::die_no_std, 4);
@@ -115,6 +144,23 @@ pub fn try_boot(or_die: bool, csprng: &mut Csprng) {
             if use_skipping {
                 disable_clock_skipping();
             }
+
+            // before we do the actual jump, check the Boot1UpdateState, and ensure it's Good,
+            // because if we got here, Boot1 is as working as it can ever be. This is not security-critical,
+            // I think, so no hardening is done here.
+            loop {
+                let boot1_state = one_way.get_decoded::<Boot1DeveloperState>().unwrap();
+                if boot1_state == bao1x_api::Boot1DeveloperState::Good {
+                    break;
+                } else {
+                    crate::println!(
+                        "Incrementing Boot1UpdateState from {:?}",
+                        one_way.get_decoded::<Boot1DeveloperState>().unwrap()
+                    );
+                }
+                one_way.inc_coded::<Boot1DeveloperState>().ok();
+            }
+
             bao1x_hal::sigcheck::jump_to(target as usize, u32::from_le_bytes(tag) as usize);
         }
         Err(e) => crate::println!("Image did not validate: {:?}", e),
@@ -125,5 +171,73 @@ pub fn try_boot(or_die: bool, csprng: &mut Csprng) {
     }
     if use_skipping {
         disable_clock_skipping();
+    }
+}
+
+#[cfg(feature = "fix-ifr")]
+pub fn fix_ifr() {
+    crate::println!("fix-ifr present");
+    let mut rram = bao1x_hal::rram::Reram::new();
+    {
+        let mut ifr_0x280 = [0u8; 32];
+        ifr_0x280
+            .copy_from_slice(unsafe { core::slice::from_raw_parts((0x6040_0000 + 0x280) as *const u8, 32) });
+        if ifr_0x280
+            == [
+                0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xA8, 0x00,
+                0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                0x00, 0x00,
+            ]
+        {
+            // the 0x3a write protection is missing. Patch it.
+            ifr_0x280[31] = 0x3A;
+            if unsafe { rram.crazy_unsafe_write_slice(0x0040_0000 + 0x280, &ifr_0x280) }.is_err() {
+                crate::println!("Couldn't patch IFR 0x280");
+            } else {
+                crate::println!("IFR 0x280 patched");
+            }
+            bao1x_hal::cache_flush();
+        } else if ifr_0x280
+            == [
+                0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xA8, 0x00,
+                0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                0x00, 0x3A,
+            ]
+        {
+            // everything is OK, don't print anything
+        } else {
+            crate::println!("IFR 0x280 has an unexpected value, skipping patch");
+        }
+    }
+    {
+        let mut ifr_0x340 = [0u8; 32];
+        ifr_0x340
+            .copy_from_slice(unsafe { core::slice::from_raw_parts((0x6040_0000 + 0x340) as *const u8, 32) });
+        if ifr_0x340
+            == [
+                0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                0x00, 0x00,
+            ]
+        {
+            // the 0x3a write protection is missing. Patch it.
+            ifr_0x340[31] = 0x3A;
+            if unsafe { rram.crazy_unsafe_write_slice(0x0040_0000 + 0x340, &ifr_0x340) }.is_err() {
+                crate::println!("Couldn't patch IFR 0x340");
+            } else {
+                crate::println!("IFR 0x340 patched");
+            }
+            bao1x_hal::cache_flush();
+        } else if ifr_0x340
+            == [
+                0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                0x00, 0x3A,
+            ]
+        {
+            // everything is OK, don't print anything
+        } else {
+            crate::println!("IFR 0x340 has an unexpected value, skipping patch");
+        }
     }
 }
