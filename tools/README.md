@@ -157,6 +157,47 @@ image offline with `pddbdbg.py`. It exits non-zero if any test fails. A cold run
 ~15 minutes on a fast host. `--loglevel DEBUG` shows the boot choreography;
 `--help` lists the timeout flags. See `services/pddb-fs-tests/README.md`.
 
+### Running `std-net-ci.py` (on-target `std::net` tests under Renode)
+
+The sibling of `pddb-fs-ci.py`: `std-net-ci.py` runs the `services/net-tests` suite
+against the real riscv32 xous libstd inside Renode, exercising the actual
+`std::net`-over-`net`-service code path (smoltcp, over an emulated WF200 wifi link
+to the betrusted-ec). Requires Renode on the `PATH`; unlike the fs suite there is no
+`pddbdbg.py` analysis step and no PIN/format UX to drive.
+
+```sh
+# From the repository root
+cargo xtask std-net-ci --no-verify     # build the Renode test image (slow first time)
+python3 tools/std-net-ci.py            # boot, wait for net-ready, run the suite
+```
+
+The driver boots the emulator headless (no keyboard, no PDDB, fully unattended),
+watches the console for the boot banner and the net-ready marker, then the per-test
+result lines. It exits non-zero if any test fails. `--loglevel DEBUG` shows the
+milestone waits; `--help` lists the timeout flags.
+
+### Running `std-net-cross-host-ci.py` (cross-host `std::net` tests under Renode)
+
+The Cross-host counterpart: it boots the SoC + EC pair alongside a real Linux peer
+(`emulation/linux-server.resc`) on one Ethernet switch, so the DUT exchanges
+genuine packets with an independent stack instead of looping back inside itself.
+The DUT takes a real DHCP lease from the peer, and the cross-host theme exercises
+cross-host TCP/UDP echo, a real connect-refused RST, and DNS resolved by the
+peer's `dnsd`.
+
+```sh
+# From the repository root
+cargo xtask std-net-cross-host-ci --no-verify   # build the cross-host image
+python3 tools/std-net-cross-host-ci.py          # start all machines, provision the peer, run
+```
+
+Beyond the loopback driver's job, this one drives the peer's serial console (on a
+pty) to a passwordless root shell and starts its services — `dnsd`, a rewritten
+`udhcpd` advertising the peer as the resolver, and `nc` TCP/UDP echo servers —
+before the DUT boots far enough to take its lease. It copies the peer rootfs to
+a per-run scratch file (the peer's flash writes back). Exits non-zero on any
+failure.
+
 ## Contribution Guidelines
 
 [![Contributor Covenant](https://img.shields.io/badge/Contributor%20Covenant-v2.0%20adopted-ff69b4.svg)](../CODE_OF_CONDUCT.md)

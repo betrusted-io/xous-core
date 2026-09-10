@@ -134,10 +134,91 @@ fn set_com_ints(com_int_list: &mut Vec<ComIntSources>) {
     com_int_list.push(ComIntSources::Invalid);
 }
 
+/// Install an IPv4 configuration on the interface. The production caller is the
+/// `WlanIpConfigUpdate` COM interrupt handler, which invokes this when the EC's
+/// DHCP client binds; test images (renode-minimal) also call it once at boot to
+/// seed a static config, because no DHCP peer exists on the emulated network.
+fn apply_ipv4_config(
+    config: Ipv4Conf,
+    net_config: &mut Option<Ipv4Conf>,
+    iface: &mut Interface,
+    dns_allclear_hook: &mut XousScalarEndpoint,
+    dns_ipv4_hook: &mut XousScalarEndpoint,
+) {
+    log::info!("Network config acquired: {:?}", config);
+    log::info!(
+        "{}NET.OK,{:?},{}",
+        precursor_hal::board::BOOKEND_START,
+        std::net::IpAddr::from(config.addr),
+        precursor_hal::board::BOOKEND_END
+    );
+    *net_config = Some(config);
+    // update a static variable that tracks this, useful for e.g. UDP bind
+    // address checking
+    IPV4_ADDRESS.store(u32::from_be_bytes(config.addr), Ordering::SeqCst);
+
+    if config.addr != [127, 0, 0, 1] {
+        // note: ARP cache is stale. Maybe that's ok?
+        iface.update_ip_addrs(|ip_addrs| {
+            ip_addrs.clear();
+            ip_addrs
+                .push(IpCidr::new(
+                    IpAddress::v4(config.addr[0], config.addr[1], config.addr[2], config.addr[3]),
+                    24,
+                ))
+                .unwrap();
+            // ...and the loopback interface
+            ip_addrs.push(IpCidr::new(IpAddress::v4(127, 0, 0, 1), 8)).unwrap();
+        });
+    } else {
+        log::warn!("Attempt to update the loopback interface! Ignoring.");
+    }
+    // reset the default route, in case it has changed
+    iface.routes_mut().remove_default_ipv4_route();
+    iface
+        .routes_mut()
+        .add_default_ipv4_route(Ipv4Address::new(
+            config.gtwy[0],
+            config.gtwy[1],
+            config.gtwy[2],
+            config.gtwy[3],
+        ))
+        .unwrap();
+
+    dns_allclear_hook.notify();
+    dns_ipv4_hook.notify_custom_args([Some(u32::from_be_bytes(config.dns1)), None, None, None]);
+    // the current implementation always returns 0.0.0.0 as the second dns,
+    // ignore this if that's what we've got; otherwise, pass it on.
+    if config.dns2 != [0, 0, 0, 0] {
+        dns_ipv4_hook.notify_custom_args([Some(u32::from_be_bytes(config.dns2)), None, None, None]);
+    }
+}
+
 fn main() -> ! {
     log_server::init_wait().unwrap();
     log::set_max_level(log::LevelFilter::Info);
     log::info!("my PID is {}", xous::process::id());
+
+    // test images (renode-minimal): the on-target std::net suite deliberately
+    // leaks sockets while pinning close/timeout bugs (a leaked socket's rx/tx
+    // buffers stay allocated in this process, and a UDP socket alone costs
+    // ~128 KiB), which overruns the default heap ceiling partway through the
+    // run. Raise it the same way pddb does for its larger working set.
+    #[cfg(feature = "renode-minimal")]
+    {
+        const HEAP_LARGER_LIMIT: usize = 4096 * 1024;
+        if let Ok(xous::Result::Scalar2(1, current_limit)) = xous::rsyscall(
+            xous::SysCall::AdjustProcessLimit(xous::Limits::HeapMaximum as usize, 0, HEAP_LARGER_LIMIT),
+        ) {
+            xous::rsyscall(xous::SysCall::AdjustProcessLimit(
+                xous::Limits::HeapMaximum as usize,
+                current_limit,
+                HEAP_LARGER_LIMIT,
+            ))
+            .expect("couldn't adjust heap limit");
+            log::info!("heap limit increased to: {}", HEAP_LARGER_LIMIT);
+        }
+    }
 
     let xns = xous_names::XousNames::new().unwrap();
     let net_sid = xns.register_name(api::SERVER_NAME_NET, None).expect("can't register server");
@@ -369,6 +450,38 @@ fn main() -> ! {
                 }
             }
         }
+        // test images (renode-minimal): no DHCP peer exists on the emulated wifi
+        // switch, so a WlanIpConfigUpdate interrupt never fires and the interface
+        // would keep an empty address list forever. Seed a static config equivalent
+        // to a DHCP bind through the exact handler the production interrupt path
+        // uses. Deferred until config_valid: the bogus-MAC recovery above rebuilds
+        // `iface` from scratch, which would wipe an earlier injection.
+        // Tier-2 images (renode-peer) DO have a DHCP peer on the switch, so they
+        // skip the seed and take a real lease instead (a seed would fight the
+        // real Bound report and flap the address).
+        #[cfg(all(feature = "renode-minimal", not(feature = "renode-peer")))]
+        if config_valid && net_config.is_none() {
+            let msb = MAC_ADDRESS_MSB.load(Ordering::SeqCst).to_be_bytes();
+            let lsb = MAC_ADDRESS_LSB.load(Ordering::SeqCst).to_be_bytes();
+            apply_ipv4_config(
+                Ipv4Conf {
+                    dhcp: com_rs::DhcpState::Bound,
+                    mac: [msb[0], msb[1], lsb[0], lsb[1], lsb[2], lsb[3]],
+                    addr: [10, 0, 2, 15],
+                    gtwy: [10, 0, 2, 1],
+                    mask: [255, 255, 255, 0],
+                    // the resolver is the DUT itself: the test suite runs a fake
+                    // DNS server on its own address to exercise the dns service's
+                    // query/decode path hermetically
+                    dns1: [10, 0, 2, 15],
+                    dns2: [0, 0, 0, 0],
+                },
+                &mut net_config,
+                &mut iface,
+                &mut dns_allclear_hook,
+                &mut dns_ipv4_hook,
+            );
+        }
         let now = timer.elapsed_ms();
         let timestamp = Instant::from_millis(now as i64);
         let deadline = match iface.poll_at(timestamp, &sockets) {
@@ -562,6 +675,27 @@ fn main() -> ! {
                         hook.args,
                     );
                     buf.replace(NetMemResponse::Ok).unwrap();
+                    // test images (renode-minimal): the static config is seeded at
+                    // boot, before the dns service registers this hook, so the
+                    // notification that a production DHCP bind would deliver later
+                    // has already fired into the void. Replay it now.
+                    #[cfg(feature = "renode-minimal")]
+                    if let Some(config) = net_config {
+                        dns_ipv4_hook.notify_custom_args([
+                            Some(u32::from_be_bytes(config.dns1)),
+                            None,
+                            None,
+                            None,
+                        ]);
+                        if config.dns2 != [0, 0, 0, 0] {
+                            dns_ipv4_hook.notify_custom_args([
+                                Some(u32::from_be_bytes(config.dns2)),
+                                None,
+                                None,
+                                None,
+                            ]);
+                        }
+                    }
                 }
             }
             Some(Opcode::DnsHookAddIpv6) => {
@@ -1096,70 +1230,24 @@ fn main() -> ! {
                                             continue;
                                         }
                                     };
-                                    log::info!("Network config acquired: {:?}", config);
-                                    log::info!(
-                                        "{}NET.OK,{:?},{}",
-                                        precursor_hal::board::BOOKEND_START,
-                                        std::net::IpAddr::from(config.addr),
-                                        precursor_hal::board::BOOKEND_END
+                                    // test images (renode-minimal): the EC has no DHCP peer, so its
+                                    // config reports are never Bound (all-zero addresses); applying
+                                    // one would wipe the static config seeded at boot.
+                                    #[cfg(feature = "renode-minimal")]
+                                    if config.dhcp != com_rs::DhcpState::Bound {
+                                        log::info!(
+                                            "renode-minimal: ignoring non-Bound EC config report ({:?})",
+                                            config.dhcp
+                                        );
+                                        continue;
+                                    }
+                                    apply_ipv4_config(
+                                        config,
+                                        &mut net_config,
+                                        &mut iface,
+                                        &mut dns_allclear_hook,
+                                        &mut dns_ipv4_hook,
                                     );
-                                    net_config = Some(config);
-                                    // update a static variable that tracks this, useful for e.g. UDP bind
-                                    // address checking
-                                    IPV4_ADDRESS.store(u32::from_be_bytes(config.addr), Ordering::SeqCst);
-
-                                    if config.addr != [127, 0, 0, 1] {
-                                        // note: ARP cache is stale. Maybe that's ok?
-                                        iface.update_ip_addrs(|ip_addrs| {
-                                            ip_addrs.clear();
-                                            ip_addrs
-                                                .push(IpCidr::new(
-                                                    IpAddress::v4(
-                                                        config.addr[0],
-                                                        config.addr[1],
-                                                        config.addr[2],
-                                                        config.addr[3],
-                                                    ),
-                                                    24,
-                                                ))
-                                                .unwrap();
-                                            // ...and the loopback interface
-                                            ip_addrs
-                                                .push(IpCidr::new(IpAddress::v4(127, 0, 0, 1), 8))
-                                                .unwrap();
-                                        });
-                                    } else {
-                                        log::warn!("Attempt to update the loopback interface! Ignoring.");
-                                    }
-                                    // reset the default route, in case it has changed
-                                    iface.routes_mut().remove_default_ipv4_route();
-                                    iface
-                                        .routes_mut()
-                                        .add_default_ipv4_route(Ipv4Address::new(
-                                            config.gtwy[0],
-                                            config.gtwy[1],
-                                            config.gtwy[2],
-                                            config.gtwy[3],
-                                        ))
-                                        .unwrap();
-
-                                    dns_allclear_hook.notify();
-                                    dns_ipv4_hook.notify_custom_args([
-                                        Some(u32::from_be_bytes(config.dns1)),
-                                        None,
-                                        None,
-                                        None,
-                                    ]);
-                                    // the current implementation always returns 0.0.0.0 as the second dns,
-                                    // ignore this if that's what we've got; otherwise, pass it on.
-                                    if config.dns2 != [0, 0, 0, 0] {
-                                        dns_ipv4_hook.notify_custom_args([
-                                            Some(u32::from_be_bytes(config.dns2)),
-                                            None,
-                                            None,
-                                            None,
-                                        ]);
-                                    }
                                 }
                                 ComIntSources::WlanRxReady => {
                                     activity_interval.store(0, Ordering::Relaxed); // reset the activity interval to 0

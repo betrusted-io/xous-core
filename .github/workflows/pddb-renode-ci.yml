@@ -1,4 +1,6 @@
-# PDDB std::fs regression suite under Renode emulation.
+# PDDB std::fs and std::net regression suites under Renode emulation.
+#
+# std::fs (build + renode-test jobs below):
 #
 # What this exercises: the REAL xous std::fs path (riscv32 xous std -> senres
 # IPC -> services/pddb/src/libstd/ -> PDDB engine -> emulated SPI NOR) on a
@@ -23,6 +25,31 @@
 #
 # Local fast loop (same image, same choreography, plus a warm-boot leg and an
 # offline flash audit): tools/pddb-fs-ci.py.
+#
+# std::net (build-net + renode-test-net jobs below):
+#
+# Sibling suite exercising the REAL xous std::net path (riscv32 xous std ->
+# net service -> smoltcp -> emulated WF200 wifi + COM link to the
+# betrusted-ec), for the same reason hosted-mode CI can't cover it. The image
+# has no PDDB and no first-boot UX -- boot is fully unattended. The on-target
+# runner `services/net-tests` waits for the net service to report an
+# interface address (`_|TT|_NET.OK,<ip>,_|TE|_`) and emits the same sentinel
+# shape as fs with its own totals line (`NET-TESTS DONE: pass=.. fail=..
+# xfail=.. xpass=.. total=..`, then `CI done`). The suite is 99 tests (smoke
+# 12, tcp 25, udp 14, errors 9, sockopts 8, dns 10, concur 10, timeouts 11).
+# Expected steady-state totals: pass=71 fail=0 xfail=28 xpass=0 total=99.
+# See emulation/tests/net-ci.resc, emulation/tests/std-net.robot, and
+# tools/std-net-ci.py.
+#
+# std::net Cross-host / cross-host (build-net-cross-host + run-net-cross-host jobs below):
+#
+# The same std::net path, but against a REAL Linux peer
+# (emulation/linux-server.resc) on the switch instead of loopback: real DHCP,
+# cross-host TCP/UDP, a real connect-refused RST, and DNS resolved by the
+# peer's dnsd (7 tests). Its driver (tools/std-net-cross-host-ci.py) drives the
+# peer's serial console over a pty to provision services, which renode-test's
+# linear robot form cannot express -- so this suite runs the Python driver
+# directly rather than via a .robot file. Expected: pass=7 fail=0 total=7.
 
 name: PDDB Renode CI
 
@@ -226,3 +253,197 @@ jobs:
             renode-results/logs/
             target/pddb-fs-ci/console-robot.log
             target/pddb-fs-ci/kernel-robot.log
+
+  build-net:
+    name: Build std-net-ci image
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Install Ubuntu dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y libxkbcommon-dev
+
+      # TOOLCHAIN LOCKSTEP (do NOT replace with `rustup update`): `cargo xtask
+      # install-toolkit` requires the host rustc version to exactly match a
+      # betrusted-io/rust release tag (xtask/src/utils.rs). The renode image
+      # links the xous libstd from that toolkit, and any XFAIL the net-tests
+      # registry grows for CLIENT-side std::net bugs is pinned at this exact
+      # toolkit version. Bump this pin together with a toolkit release, then
+      # re-run the suite: client-side fixes will surface as XPASS and the
+      # registry must be updated in the same PR.
+      - name: Pin Rust toolchain
+        run: |
+          rustup toolchain install 1.96.1 --profile minimal
+          rustup default 1.96.1
+
+      - name: Checkout sources
+        uses: actions/checkout@v4
+      - name: Fetch tags
+        run: git fetch --prune --unshallow --tags
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install RISC-V toolkit
+        run: cargo xtask install-toolkit --force --no-verify
+
+      - name: Clean out old target directory (in case of libstd change)
+        run: rm -rf target/*
+
+      - name: Build the std-net-ci renode image
+        run: cargo xtask std-net-ci --no-verify
+
+      - name: Upload image artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: std-net-ci-image
+          if-no-files-found: error
+          retention-days: 7
+          path: |
+            target/riscv32imac-unknown-xous-elf/release/loader.bin
+            target/riscv32imac-unknown-xous-elf/release/xous.img
+
+  renode-test-net:
+    name: Run std-net.robot under renode-test
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    needs: build-net
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v4
+
+      # Both files land exactly where emulation/tests/std-net.robot expects
+      # them (${IMAGE_DIR} = target/riscv32imac-unknown-xous-elf/release).
+      - name: Download image artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: std-net-ci-image
+          path: target/riscv32imac-unknown-xous-elf/release
+
+      # Same pinned dated Renode portable build as the fs job above -- keep
+      # both in lockstep; see that job's comment for the pin rationale.
+      - name: Download and extract Renode portable
+        run: |
+          RENODE_TARBALL="renode-1.16.1+20260417git9d55b4e69.linux-portable-dotnet.tar.gz"
+          curl --fail --location --retry 5 -o /tmp/renode.tar.gz \
+            "https://dl.antmicro.com/projects/renode/builds/${RENODE_TARBALL}"
+          mkdir -p "$HOME/renode_portable"
+          tar -xzf /tmp/renode.tar.gz --strip-components=1 -C "$HOME/renode_portable"
+          echo "$HOME/renode_portable" >> "$GITHUB_PATH"
+          "$HOME/renode_portable/renode" --version
+
+      - name: Install renode-test python requirements
+        run: python3 -m pip install -r "$HOME/renode_portable/tests/requirements.txt"
+
+      # Per-run blank NOR: the flash model writes THROUGH into its backing
+      # file, so it must be a fresh scratch file, 0xFF-filled like blank NOR
+      # (128 MiB MX66UM1G45G), even though the net image never persists
+      # state. The robot suite's `Prepare Fresh Flash` also re-provisions
+      # this itself; this step just guarantees the directory exists and
+      # documents the contract.
+      - name: Provision fresh 0xFF flash backing file
+        run: |
+          mkdir -p target/std-net-ci
+          python3 -c "open('target/std-net-ci/flash-robot.bin','wb').write(b'\xff'*134217728)"
+
+      - name: Run the std::net robot suite
+        timeout-minutes: 75
+        env:
+          # Quoted: bare YES is YAML-1.1 boolean true, which would export
+          # "true" instead of the literal string Renode's scripts look for.
+          RENODE_CI_MODE: "YES"
+        run: |
+          renode-test -r "$GITHUB_WORKSPACE/renode-results" \
+            emulation/tests/std-net.robot
+
+      - name: Upload robot results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: std-net-renode-ci-results
+          if-no-files-found: warn
+          retention-days: 14
+          path: |
+            renode-results/robot_output.xml
+            renode-results/log.html
+            renode-results/report.html
+            renode-results/logs/
+            target/std-net-ci/console-robot.log
+            target/std-net-ci/kernel-robot.log
+
+  build-net-cross-host:
+    name: Build std-net-cross-host-ci image
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Install Ubuntu dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y libxkbcommon-dev
+      # Same toolchain-lockstep pin as build-net; see that job's comment.
+      - name: Pin Rust toolchain
+        run: |
+          rustup toolchain install 1.96.1 --profile minimal
+          rustup default 1.96.1
+      - name: Checkout sources
+        uses: actions/checkout@v4
+      - name: Fetch tags
+        run: git fetch --prune --unshallow --tags
+      - uses: Swatinem/rust-cache@v2
+      - name: Install RISC-V toolkit
+        run: cargo xtask install-toolkit --force --no-verify
+      - name: Clean out old target directory (in case of libstd change)
+        run: rm -rf target/*
+      - name: Build the std-net-cross-host-ci renode image
+        run: cargo xtask std-net-cross-host-ci --no-verify
+      - name: Upload image artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: std-net-cross-host-ci-image
+          if-no-files-found: error
+          retention-days: 7
+          path: |
+            target/riscv32imac-unknown-xous-elf/release/loader.bin
+            target/riscv32imac-unknown-xous-elf/release/xous.img
+
+  run-net-cross-host:
+    name: Run the cross-host suite (std-net-cross-host-ci.py)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    needs: build-net-cross-host
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v4
+      - name: Download image artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: std-net-cross-host-ci-image
+          path: target/riscv32imac-unknown-xous-elf/release
+      # Same pinned dated Renode portable build as the fs/net jobs above.
+      - name: Download and extract Renode portable
+        run: |
+          RENODE_TARBALL="renode-1.16.1+20260417git9d55b4e69.linux-portable-dotnet.tar.gz"
+          curl --fail --location --retry 5 -o /tmp/renode.tar.gz \
+            "https://dl.antmicro.com/projects/renode/builds/${RENODE_TARBALL}"
+          mkdir -p "$HOME/renode_portable"
+          tar -xzf /tmp/renode.tar.gz --strip-components=1 -C "$HOME/renode_portable"
+          "$HOME/renode_portable/renode" --version
+      # The cross-host driver boots a Linux peer alongside the DUT and drives the
+      # peer's serial console over a pty, which renode-test's linear robot form
+      # cannot express -- so this suite runs the Python driver directly.
+      - name: Run the cross-host suite
+        timeout-minutes: 45
+        run: |
+          python3 tools/std-net-cross-host-ci.py --renode "$HOME/renode_portable/renode"
+      - name: Upload cross-host logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: std-net-cross-host-ci-results
+          if-no-files-found: warn
+          retention-days: 14
+          path: |
+            target/std-net-cross-host-ci/console.log
+            target/std-net-cross-host-ci/kernel.log
+            target/std-net-cross-host-ci/run.log
+            target/std-net-cross-host-ci/peer-console.log
