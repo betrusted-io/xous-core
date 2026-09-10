@@ -148,8 +148,11 @@ pub fn dict_survives() {
 /// WRITE (runs after the verifiers): (re)write every marker deterministically
 /// and read each back within this run.
 pub fn write_markers() {
-    check!(fs::create_dir(DICT));
-    check!(fs::create_dir(SUBDICT));
+    for dict in [DICT, SUBDICT] {
+        if !Path::new(dict).exists() {
+            check!(fs::create_dir(dict));
+        }
+    }
 
     let small = gen_marker(MARKER_SMALL_LEN, MARKER_SMALL_SEED);
     check!(fs::write(small_path(), &small));
