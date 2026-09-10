@@ -17,12 +17,8 @@
 //! all survive verbatim into the string PDDB receives, so none of the
 //! resolution/collapsing tricks common on Unix apply here.
 //!
-//! All assertions state the CORRECT/documented behavior; anything uncertain
-//! enough to be a plausible NEW bug is called out in the test's doc comment
-//! (see the crate-level review notes for provisional XFAILs, if any).
-//! Per the assignment brief this theme does not create or unlock any basis
-//! -- every test below probes basis grammar strictly against the always-
-//! mounted default `.System` basis.
+//! This theme does not create or unlock any basis: every test below probes
+//! basis grammar against the always-mounted default `.System` basis.
 
 use std::fs::{self, File};
 use std::io::Write;
@@ -220,8 +216,7 @@ pub fn unicode_dict_and_key_names() {
 /// literal flat dict name, and a flat namespace has no "missing parent" to
 /// trip on -- so `create_dir_all` returns early having created ONLY the dict
 /// literally named `<tmp>/a/b`; the would-be ancestor `<tmp>/a` is never
-/// materialized (empirically confirmed on the suite cold run: this test's
-/// original two-dicts assertion FAILed with `<tmp>/a` absent). A key created
+/// materialized. A key created
 /// at `<tmp>/a/b/c` is visible in a `read_dir` of `<tmp>/a/b` (the dict that
 /// literally owns it) but `<tmp>/a/b` never appears as an entry when reading
 /// `<tmp>` itself: PDDB has no real directory tree at any depth.
@@ -407,7 +402,7 @@ pub fn root_path_stat_single_colon_errors() {
     assert!(!Path::new(":").exists(), "bare ':' should not report as existing");
 }
 
-/// This theme's registry (aggregated by tests::all_tests / all_xfails).
+/// This theme's tests (aggregated by tests::all_tests).
 pub const TESTS: &[(&str, fn())] = &[
     (
         "paths::basis_prefix_explicit_default_matches_unprefixed",
@@ -433,5 +428,3 @@ pub const TESTS: &[(&str, fn())] = &[
     ("paths::root_path_stat_empty_string_is_dict", root_path_stat_empty_string_is_dict as fn()),
     ("paths::root_path_stat_single_colon_errors", root_path_stat_single_colon_errors as fn()),
 ];
-
-pub const XFAILS: &[(&str, &str)] = &[];

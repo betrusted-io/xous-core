@@ -11,9 +11,6 @@
 //! the wire at all, and `FileHandle` has no access-mode field for `write_key`/
 //! `read_key` to consult. This corroborates the documented claim that
 //! `OpenOptions::read()/write()` are silently dropped client-side.
-//!
-//! SERVER-CRASH HAZARD: every file below is small
-//! (well under 4 KiB) even across repeated truncating re-creates.
 
 #![allow(unused_imports)]
 use std::fs::{self, File, OpenOptions};
@@ -63,14 +60,8 @@ pub fn create_existing_preserves_content_without_truncate() {
     check!(fs::remove_file(&path));
 }
 
-/// `create_new(true)` on a missing path creates it (correct std semantics:
-/// `create_new` implies creation, like O_CREAT|O_EXCL). XFAIL PFC-10,
-/// empirically confirmed on the Renode image 2026-07-07: the rust fork
-/// serializes `create_file` and `create_new` as independent booleans and never
-/// combines them, while the server's key-creation branch only runs when
-/// `create_file` is set -- so `create_new` WITHOUT `.create(true)` falls
-/// through every basis and the open errors ("unable to find key ..."). See
-/// PFC-10.
+/// `create_new(true)` on a missing path creates it without `.create(true)`:
+/// `create_new` implies creation, like O_CREAT|O_EXCL.
 pub fn create_new_creates_missing() {
     let tmp = TmpDict::new("create_new_missing");
     let path = tmp.path("f");
@@ -100,9 +91,7 @@ pub fn create_new_fails_on_existing() {
 }
 
 /// `truncate(true)` on an existing file clears it before the subsequent write
-/// lands -- verified by content read-back (never by metadata: PFC-5 makes
-/// `metadata().len()` always 0, but the *actual key bytes* are genuinely
-/// replaced, which is all a read-back checks).
+/// lands.
 pub fn truncate_flag_on_existing_clears_and_writes() {
     let tmp = TmpDict::new("truncate_existing");
     let path = tmp.path("f");
@@ -193,8 +182,7 @@ pub fn create_and_truncate_on_existing() {
 // ("creating or truncating a file requires write or append access", "must
 // specify at least one of read, write, or append access") before ever
 // touching the OS. The xous fork's sys/fs implementation performs no such
-// validation -- these are documented xous semantics (not bugs), asserted as
-// what actually happens per the XFAIL discipline.
+// validation. These are documented xous semantics, asserted as they are.
 // ---------------------------------------------------------------------------
 
 /// `truncate(true)` with only `read(true)` set (no `write`) is accepted and
@@ -244,14 +232,9 @@ pub fn write_succeeds_through_read_only_handle() {
 
 /// `append(true).truncate(true)` together: upstream rejects this combination
 /// client-side ("invalid_options") before ever reaching the OS; xous performs
-/// no such validation and forwards both bits to the server. Fixed PFC-2:
-/// `open_key` used to capture the key length into `len` *before* the truncate
-/// branch physically emptied the key, and seeded `FileHandle.offset` from that
-/// stale `len` because `append` was set, landing the follow-up write at the
-/// old (pre-truncate) offset with zero-fill below it. The truncate branch now
-/// resets the snapshot after emptying the key, so the combo behaves like
-/// OS-level O_APPEND|O_TRUNC: truncate to empty, then a single subsequent
-/// write is the entire new content, as asserted here.
+/// no such validation and forwards both bits to the server. The combination
+/// must behave like OS-level O_APPEND|O_TRUNC: truncate to empty, then a
+/// single subsequent write is the entire new content.
 pub fn append_and_truncate_together_stale_offset() {
     let tmp = TmpDict::new("append_and_truncate_together");
     let path = tmp.path("f");
@@ -330,7 +313,7 @@ pub fn double_create_truncates_each_time() {
     check!(fs::remove_file(&path));
 }
 
-/// This theme's registry (aggregated by tests::all_tests / all_xfails).
+/// This theme's tests (aggregated by tests::all_tests).
 pub const TESTS: &[(&str, fn())] = &[
     ("openflags::create_missing_creates_and_writes", create_missing_creates_and_writes as fn()),
     (
@@ -359,5 +342,3 @@ pub const TESTS: &[(&str, fn())] = &[
     ("openflags::create_new_and_create_together", create_new_and_create_together as fn()),
     ("openflags::double_create_truncates_each_time", double_create_truncates_each_time as fn()),
 ];
-
-pub const XFAILS: &[(&str, &str)] = &[("openflags::create_new_creates_missing", "PFC-10")];

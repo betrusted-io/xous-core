@@ -3,19 +3,15 @@
 //! Characterization facts: rename, set_len, fsync/datasync, File::flush,
 //! permissions, canonicalize, and link all map to ErrorKind::Unsupported on
 //! xous today -- this is documented client-side stub behavior (no server
-//! opcode exists for any of them), not a PFC-tracked bug, so these tests
-//! assert the Unsupported kind directly with no XFAIL entry. try_clone is
-//! grouped with these in the forbidden-API list for the same reason and is
-//! asserted the same way. fs::read_link (on a regular, non-symlink file) and
-//! fs::set_permissions are NOT in that documented list -- research suggests
-//! InvalidInput and a silent no-op respectively, but neither is confirmed, so
-//! those two tests characterize the actual observed behavior instead of
-//! asserting a specific kind (still requiring is_err()/data-intact as
-//! appropriate) per the error-assertion rule.
+//! opcode exists for any of them), so these tests assert the Unsupported
+//! kind directly. try_clone is grouped with these in the forbidden-API list
+//! for the same reason and is asserted the same way. fs::read_link (on a
+//! regular, non-symlink file) and fs::set_permissions are NOT in that
+//! documented list, so those two tests characterize the observed behavior
+//! instead of asserting a specific kind (still requiring is_err() or
+//! data-intact as appropriate).
 //! Every test verifies pre-existing file data survives the failed call via
-//! read-back, per the SERVER-CRASH HAZARD / read-back rules; all files here
-//! are a few bytes, well under the 4 KiB large-pool truncate hazard, and each
-//! is created exactly once (no truncating re-create).
+//! read-back.
 
 #![allow(unused_imports)]
 use std::fs::{self, File, OpenOptions};
@@ -428,7 +424,7 @@ pub fn try_clone_unsupported() {
     check!(fs::remove_file(&path));
 }
 
-/// This theme's registry (aggregated by tests::all_tests / all_xfails).
+/// This theme's tests (aggregated by tests::all_tests).
 pub const TESTS: &[(&str, fn())] = &[
     ("unsupported::rename_unsupported", rename_unsupported as fn()),
     ("unsupported::set_len_unsupported", set_len_unsupported as fn()),
@@ -441,5 +437,3 @@ pub const TESTS: &[(&str, fn())] = &[
     ("unsupported::set_permissions_characterize", set_permissions_characterize as fn()),
     ("unsupported::try_clone_unsupported", try_clone_unsupported as fn()),
 ];
-
-pub const XFAILS: &[(&str, &str)] = &[];
