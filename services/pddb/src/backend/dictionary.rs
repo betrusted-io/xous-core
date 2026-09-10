@@ -897,10 +897,42 @@ impl DictCacheEntry {
                     if kcache.len < (data.len() + offset) as u64 {
                         kcache.len = (data.len() + offset) as u64;
                     } else if truncate {
-                        // truncate the length only, mirroring the small-pool arm above: reads
-                        // clamp to kcache.len, and the retained page reservation is reclaimed
-                        // when the key is removed
-                        kcache.len = (data.len() + offset) as u64;
+                        let new_len = (data.len() + offset) as u64;
+                        // Absolute end of the retained data, rounded up to a vpage (same computation the grow
+                        // path uses). Keep at least one vpage reserved so start + reserved stays above start;
+                        // the mount-time alloc_top scan derives the large-pool high-water mark from it.
+                        let keep_end = PageAlignedVa::from(kcache.start + new_len)
+                            .as_u64()
+                            .max(kcache.start + VPAGE_SIZE as u64);
+                        let old_end = kcache.start + kcache.reserved;
+                        if keep_end < old_end {
+                            for vpage in (keep_end..old_end).step_by(VPAGE_SIZE) {
+                                if let Some(mut pp) = v2p_map.remove(&VirtAddr::new(vpage).unwrap()) {
+                                    // --- clean up the PTE entries ---
+                                    assert!(pp.valid(), "v2p returned an invalid page");
+                                    let page_number = pp.page_number();
+                                    // secure-erase before the page can be re-allocated, same policy as
+                                    // key_remove
+                                    let mut noise = [0u8; PAGE_SIZE];
+                                    hw.trng_slice(&mut noise);
+                                    hw.patch_data(&noise, page_number * PAGE_SIZE as u32);
+                                    // erase the PTE now: the v2p entry is gone, so pt_sync will never see it
+                                    hw.pt_erase(page_number);
+
+                                    // --- free up FSCB entries ---
+                                    log::trace!(
+                                        "fast_space_free key_update truncate {} before",
+                                        pp.journal()
+                                    );
+                                    hw.fast_space_free(&mut pp);
+                                    assert!(!pp.valid(), "pp is still marked as valid!");
+                                } else {
+                                    log::warn!("truncate: reserved vpage {:x} has no v2p entry", vpage);
+                                }
+                            }
+                            kcache.reserved = keep_end - kcache.start;
+                        }
+                        kcache.len = new_len;
                     }
                 }
             }
