@@ -1,8 +1,4 @@
 //! THEME errors: error paths and boundary conditions.
-//!
-//! All assertions state the CORRECT (or, where it is a documented xous
-//! semantic rather than a bug, the documented) behavior; known bugs are pinned
-//! in this theme's XFAILS table -- never weaken an assertion.
 
 use std::fs::{self, File, OpenOptions};
 use std::io::{ErrorKind, Read, Write};
@@ -32,7 +28,7 @@ pub fn open_missing_is_err() {
 /// retcode-to-ErrorKind mapping upstream (services/pddb/src/libstd/mod.rs
 /// `open_key` returns `PddbRetcode::BasisLost` when the dict/key doesn't
 /// exist in any basis). Pinned here so a future retcode-mapping change shows
-/// up as a loud XPASS-shaped surprise rather than silently drifting.
+/// up rather than silently drifting.
 pub fn open_missing_kind_characterization() {
     let tmp = TmpDict::new("open_missing_kind_characterization");
     let path = tmp.path("never_created");
@@ -115,11 +111,9 @@ pub fn open_empty_path() {
 /// that (called synchronously from `dict_add` -> `dict_sync` on every
 /// `create_dir`, so the error surfaces immediately, not asynchronously).
 ///
-/// NOTE for the registry maintainer: the documented dict-name limit of
-/// "<= 111 bytes" reads api.rs's `DICT_NAME_LEN` constant alone
-/// without the backend struct's reserved length byte. This test asserts the
-/// verified real boundary (110 ok / 111 errors) instead of weakening to match
-/// the doc; flagged as an open question to reconcile the doc.
+/// The documented dict-name limit of "<= 111 bytes" reads api.rs's
+/// `DICT_NAME_LEN` constant alone, without the backend struct's length byte.
+/// This test asserts the real boundary (110 ok / 111 errors).
 ///
 /// This needs a bare top-level dict name of an exact byte length -- `TmpDict`
 /// always appends an unpredictable `.<counter>` suffix (`harness.rs`) -- so it
@@ -151,20 +145,8 @@ pub fn dict_name_length_boundary() {
     check!(fs::remove_dir(&ok_name));
 
     // One byte over: must error cleanly (POSIX ENAMETOOLONG territory).
-    // XFAIL PFC-6: the client's `DirBuilder::mkdir` (rust fork
-    // sys/fs/xous.rs) never reads the server's reply retcode at all, so the
-    // server-side InternalError from `DictName::try_from_str` is swallowed
-    // and create_dir returns Ok. Same client bug as the already-exists case
-    // pinned by dirs::mkdir_path_already_exists_error.
     let over_res = fs::create_dir(&over_name);
     // Cleanup BEFORE the assert (a failing assert must not strand state).
-    // Historically this also cleared server-side damage: `dict_add` used to
-    // insert the dict into the in-memory basis cache and bump num_dicts
-    // *before* the dict_sync that validated the name length, stranding the
-    // rejected dict in RAM and drifting the basis's num_dicts accounting
-    // (the dict-name twin of PFC-8) until it was explicitly removed.
-    // `dict_add` now validates the name up front, so nothing is created and
-    // this remove is just a harmless failed no-op.
     let _ = fs::remove_dir_all(&over_name);
     assert!(over_res.is_err(), "create_dir with a {}-byte dict name unexpectedly succeeded", over_name.len());
 
@@ -187,16 +169,8 @@ pub fn dict_name_length_boundary() {
 /// `KEY_NAME_LEN - 1` = 94 bytes -- `KeyName::try_from_str` errors past that
 /// (checked at the top of every `key_update`, including the create-file
 /// path, before any cache mutation). Same off-by-one relative to the
-/// documented "<= 95" as `dict_name_length_boundary` above.
-///
-/// Formerly XFAIL PFC-8: `key_update`'s new-key path used to insert the
-/// KeyCacheEntry and bump key_count *before* the `dict_sync` whose
-/// `KeyName::try_from_str` rejected the over-length name, so the rejected
-/// key stayed poisoned -- valid+dirty -- in the dict's key cache, and EVERY
-/// later `dict_sync` of this dict re-failed on it (the follow-up "alive"
-/// create below is what caught that). `key_update` now validates the name
-/// before any cache mutation, so the over-length create errors cleanly and
-/// the dict stays usable.
+/// documented "<= 95" as `dict_name_length_boundary` above. The follow-up
+/// create checks that a rejected name leaves the dict usable.
 pub fn key_name_length_boundary() {
     const KEY_MAX: usize = 94;
     let tmp = TmpDict::new("key_name_length_boundary");
@@ -230,13 +204,7 @@ pub fn key_name_length_boundary() {
     check!(fs::remove_file(&alive_path));
 }
 
-/// `fs::metadata(path).len()` characterization. POSIX-correct behavior is
-/// that the returned length matches the actual content length; xous instead
-/// always reports 0 (PFC-5: the server half is fixed -- `stat_path` now
-/// sends the key's real length -- but the client libstd `stat()` never
-/// reads the length word and hardcodes `len: 0`, so metadata stays 0 until
-/// a rebuilt client ships). Assert the CORRECT length and register the
-/// XFAIL -- never assert the buggy `0`.
+/// `fs::metadata(path).len()` must report the actual content length.
 pub fn metadata_len_characterization() {
     let tmp = TmpDict::new("metadata_len_characterization");
     let path = tmp.path("sized");
@@ -250,7 +218,7 @@ pub fn metadata_len_characterization() {
     assert_eq!(
         md.len(),
         content.len() as u64,
-        "PFC-5: fs::metadata(..).len() should report the actual content length"
+        "fs::metadata(..).len() should report the actual content length"
     );
     check!(fs::remove_file(&path));
 }
@@ -259,16 +227,8 @@ pub fn metadata_len_characterization() {
 /// every currently-open `FileHandle` for the removed dict/key `deleted`,
 /// and `get_fd` (used by `read_key`/`write_key`/`seek_key`) then rejects
 /// all further I/O on it with `BasisLost` -- the intended (POSIX-divergent
-/// but deliberate) xous behavior this test asserts.
-///
-/// Regression pin for PFC-11 (fixed): the marking loop used to compare
-/// `fd.basis` against the raw `split_basis_and_dict` result of the unlink
-/// path -- `None` for any non-`:basis:`-prefixed path -- while `open_key`
-/// always records `fd.basis = Some(<actual basis>)`. The handle was never
-/// marked: the read still errored (the key's data really was gone
-/// server-side), but the write went through `write_key` -> `key_update`,
-/// silently RE-CREATING the deleted key at the old path. `delete_key` now
-/// resolves the effective default basis before comparing.
+/// but deliberate) xous behavior this test asserts. A write through the
+/// stale handle must not re-create the deleted key.
 pub fn delete_while_open() {
     let tmp = TmpDict::new("delete_while_open");
     let path = tmp.path("victim");
@@ -293,7 +253,7 @@ pub fn delete_while_open() {
         "write through a deleted-while-open handle unexpectedly succeeded (POSIX divergence; \
          xous errors here by design)"
     );
-    drop(f); // close_key does not check the `deleted` flag; this does not hit PFC-7.
+    drop(f); // close_key does not check the `deleted` flag, so this close succeeds
 }
 
 /// `File::create` of a key inside a dict that was never created must fail:
@@ -349,7 +309,7 @@ pub fn churn_create_delete() {
     check!(fs::remove_file(&anchor));
 }
 
-/// This theme's registry (aggregated by tests::all_tests / all_xfails).
+/// This theme's tests (aggregated by tests::all_tests).
 pub const TESTS: &[(&str, fn())] = &[
     ("errors::open_missing_is_err", open_missing_is_err as fn()),
     ("errors::open_missing_kind_characterization", open_missing_kind_characterization as fn()),
@@ -366,5 +326,3 @@ pub const TESTS: &[(&str, fn())] = &[
     ("errors::create_in_missing_dict", create_in_missing_dict as fn()),
     ("errors::churn_create_delete", churn_create_delete as fn()),
 ];
-
-pub const XFAILS: &[(&str, &str)] = &[];

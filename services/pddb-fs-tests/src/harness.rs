@@ -16,11 +16,9 @@ impl TmpDict {
     pub fn new(name: &str) -> Self {
         let counter = DICT_COUNTER.fetch_add(1, Ordering::SeqCst);
         let dict = format!("pddbtest.{}.{}", name, counter);
-        // std::fs semantics apply on xous too: the parent "directory" (the
-        // dict) must exist before keys can be created in it — File::create
-        // does NOT auto-create the dict (empirically verified in the harness
-        // pilot; the server only adds a dict when the create_path flag is
-        // set, which plain opens never set).
+        // The dict must exist before keys can be created in it: the server
+        // only adds a dict when the create_path flag is set, which plain
+        // opens never set.
         if let Err(e) = std::fs::create_dir(&dict) {
             panic!("could not create test dict {}: {}", dict, e);
         }
@@ -31,8 +29,8 @@ impl TmpDict {
     /// be '/': std::path::MAIN_SEPARATOR is '/' on xous (SEPARATORS[0] of
     /// ['/', ':'] in the rust fork), and the pddb server splits the final
     /// dict/key pair with rsplit_once(MAIN_SEPARATOR) -- a ':' join makes
-    /// every open fail with "no key was specified" (harness pilot, toolchain
-    /// 1.96.1.1). ':' is only for basis prefixes (`:basis:dict/key`).
+    /// every open fail with "no key was specified". ':' is only for basis
+    /// prefixes (`:basis:dict/key`).
     pub fn path(&self, key: &str) -> String { format!("{}/{}", self.dict, key) }
 
     /// Get the dict name (path) itself, useful for read_dir and similar dict-level operations.
