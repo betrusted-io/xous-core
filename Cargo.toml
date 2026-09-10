@@ -126,6 +126,7 @@ members = [
   "services/dc34-console",
   "apps-baosec/dc34-vault",
   "baremetal",
+  "erasure",
   "bao1x-boot/boot0",
   "bao1x-boot/boot1",
   "bao1x-boot/sha2-bao1x",

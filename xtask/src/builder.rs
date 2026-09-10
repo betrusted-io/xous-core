@@ -1113,6 +1113,7 @@ impl Builder {
                             } else if name == "baremetal"
                                 || name == "bao1x-alt-boot1"
                                 || name == "boot-updater"
+                                || name == "erasure"
                             {
                                 "baremetal"
                             } else {
