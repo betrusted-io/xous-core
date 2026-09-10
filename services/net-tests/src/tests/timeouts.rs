@@ -27,7 +27,8 @@ const BLACKHOLE: Ipv4Addr = Ipv4Addr::new(10, 254, 254, 254);
 /// With a 2 s read timeout set, a first read on a socket with data pending
 /// returns that data, and a second read on the now-quiet socket must err
 /// WouldBlock-or-TimedOut after roughly the timeout.
-/// XFAIL: the quiet-socket rx reaper is skipped by the NetPump early-return, so the second read never returns, services/net/src/main.rs:1305-1308.
+/// XFAIL: the quiet-socket rx reaper is skipped by the NetPump early-return, so the second read never
+/// returns, services/net/src/main.rs:1305-1308.
 pub fn tcp_read_timeout_after_data() {
     let port = next_port();
     let addr = SocketAddr::new(LOOPBACK, port);
@@ -83,7 +84,8 @@ pub fn tcp_read_timeout_after_data() {
 
 /// With a 2 s read timeout set, peek() on a quiet connected socket must err
 /// WouldBlock-or-TimedOut after roughly 2 s (SO_RCVTIMEO applies to MSG_PEEK).
-/// XFAIL: the tcp_peek_waiting reaper sits behind the NetPump quiet-iface early-return, so peek never returns, services/net/src/main.rs:1413-1476.
+/// XFAIL: the tcp_peek_waiting reaper sits behind the NetPump quiet-iface early-return, so peek never
+/// returns, services/net/src/main.rs:1413-1476.
 pub fn tcp_peek_timeout_quiet() {
     let port = next_port();
     let addr = SocketAddr::new(LOOPBACK, port);
@@ -127,7 +129,8 @@ pub fn tcp_peek_timeout_quiet() {
 /// With the peer not reading and a 2 s write timeout set, a write past the
 /// ~3060 B of buffering must error after roughly the timeout, not park. Kinds:
 /// WouldBlock/TimedOut (contract) or BrokenPipe (xous tx maps NetError::TimedOut).
-/// XFAIL: the tcp_tx_waiting reaper is skipped by the NetPump quiet-iface early-return, services/net/src/main.rs:1305-1308.
+/// XFAIL: the tcp_tx_waiting reaper is skipped by the NetPump quiet-iface early-return,
+/// services/net/src/main.rs:1305-1308.
 pub fn tcp_write_timeout_full_buffers() {
     let port = next_port();
     let addr = SocketAddr::new(LOOPBACK, port);
@@ -213,7 +216,8 @@ fn udp_recv_timeout_quiet_outcome(desc: &str) -> (io::Result<(usize, SocketAddr)
 /// recv_from with a 2 s read timeout on a quiet UDP socket must return an error
 /// after roughly 2 s. This owns the returns-at-all + elapsed contract; the
 /// error kind is asserted separately by udp_recv_timeout_error_kind.
-/// XFAIL: the udp_rx_waiting reaper sits behind the NetPump quiet-iface early-return, so recv_from never returns, services/net/src/main.rs:1561-1590.
+/// XFAIL: the udp_rx_waiting reaper sits behind the NetPump quiet-iface early-return, so recv_from never
+/// returns, services/net/src/main.rs:1561-1590.
 pub fn udp_recv_timeout_quiet() {
     let (result, elapsed) =
         udp_recv_timeout_quiet_outcome("udp recv_from with a 2 s timeout on a quiet socket");
@@ -237,7 +241,8 @@ pub fn udp_recv_timeout_quiet() {
 
 /// The timeout error from recv_from must be WouldBlock-or-TimedOut, per the
 /// contract. Split from the hang layer so the kind is asserted independently.
-/// XFAIL: the recv_from never returns (same NetPump quiet-iface early-return), so the kind is never observed, services/net/src/main.rs:1305-1308.
+/// XFAIL: the recv_from never returns (same NetPump quiet-iface early-return), so the kind is never observed,
+/// services/net/src/main.rs:1305-1308.
 pub fn udp_recv_timeout_error_kind() {
     let (result, _elapsed) = udp_recv_timeout_quiet_outcome("udp recv_from with a 2 s timeout (kind layer)");
     match result {
@@ -370,7 +375,8 @@ pub fn timeout_submillisecond_getter_none() {
 /// connect_timeout(500 ms) to an off-subnet blackhole must err after >= the
 /// timeout and within budget; the pinned kind is AddrNotAvailable (contract:
 /// TimedOut). Quarantined at the theme tail — it leaks a SynSent socket.
-/// XFAIL: the connect-timeout abort is serviced only via the NetPump connect scan, skipped by the quiet-iface early-return, services/net/src/main.rs:1336-1362.
+/// XFAIL: the connect-timeout abort is serviced only via the NetPump connect scan, skipped by the quiet-iface
+/// early-return, services/net/src/main.rs:1336-1362.
 pub fn tcp_connect_timeout_fires() {
     let addr = SocketAddr::new(IpAddr::V4(BLACKHOLE), 1);
     let (result, elapsed) = bounded("connect_timeout(500 ms) to a blackhole", 10, move || {
@@ -401,7 +407,8 @@ pub fn tcp_connect_timeout_fires() {
 
 /// Documented-hang pin: a PLAIN connect() to the blackhole parks forever — the
 /// client sends timeout 0, so smoltcp sets no socket timeout and never gives up
-/// SYN retransmission; PASSES only if the connect is still parked after a 10 s inverted guard, any completion means reclassify.
+/// SYN retransmission; PASSES only if the connect is still parked after a 10 s inverted guard, any completion
+/// means reclassify.
 pub fn tcp_plain_connect_blackhole_parks() {
     let addr = SocketAddr::new(IpAddr::V4(BLACKHOLE), 2);
     let (tx, rx) = mpsc::channel();

@@ -423,7 +423,8 @@ pub fn listener_clone_accept_serial() {
 
 /// Two threads parked in accept() on two clones of one listener, plus two
 /// connections, must yield two distinct working accepted streams.
-/// XFAIL: both AcceptingSocket entries reference the same smoltcp handle so both accepts return one connection, the pump accept scan in services/net/src/main.rs.
+/// XFAIL: both AcceptingSocket entries reference the same smoltcp handle so both accepts return one
+/// connection, the pump accept scan in services/net/src/main.rs.
 pub fn listener_clone_accept_concurrent_probe() {
     let port = next_port();
     let addr = SocketAddr::new(LOOPBACK, port);
