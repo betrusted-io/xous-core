@@ -22,10 +22,9 @@ use platform::*;
 #[allow(unused_imports)]
 use utralib::*;
 
+use crate::serial::SerialInteract;
 #[cfg(feature = "bao1x-usb")]
 use crate::usb::glue;
-
-use crate::serial::SerialInteract;
 
 static UART_RX: Mutex<RefCell<VecDeque<u8>>> = Mutex::new(RefCell::new(VecDeque::new()));
 #[allow(dead_code)]

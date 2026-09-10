@@ -1192,6 +1192,7 @@ Hardware images:
  dabao                   Dabao application target image.
  bao1x-baremetal-baosec  Baremetal image for baosec boards.
  bao1x-baremetal-dabao   Baremetal image for dabao boards.
+ bao1x-erasure-dabao     Erasure experimental image for dabao boards.
  bao1x-boot0             Boot0 partition for baochip1x targets.
  bao1x-boot1             Boot1 partition for baochip1x targets.
  bao1x-alt-boot1         Alterante boot1 partition for baochip1x targets. Burns into the 'loader/baremetal' region

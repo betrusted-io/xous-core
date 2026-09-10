@@ -31,7 +31,6 @@ bao1x = [
 ]
 board-baosec = ["bao1x-hal/loader-baosec"]
 board-dabao = ["bao1x-hal/board-dabao"]
-bao1x-evb = []
 bao1x-usb = []
 bao1x-buttons = []
 verbose-debug = []

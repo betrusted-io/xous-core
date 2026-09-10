@@ -1,6 +1,4 @@
-use bao1x_api::*;
 use bao1x_hal::iox::Iox;
-use bao1x_hal::udma;
 use utralib::CSR;
 use utralib::utra;
 
@@ -194,50 +192,6 @@ mod panic_handler {
     }
 }
 
-/// used to generate some test vectors
-#[allow(dead_code)]
-pub fn lfsr_next_u32(state: u32) -> u32 {
-    let bit = ((state >> 31) ^ (state >> 21) ^ (state >> 1) ^ (state >> 0)) & 1;
-
-    (state << 1) + bit
-}
-
-#[allow(dead_code)]
-pub fn clockset_wrapper(freq: u32) -> u32 {
-    // reset the baud rate on the console UART
-    let perclk = unsafe {
-        bao1x_hal::clocks::init_clock_asic(
-            freq,
-            utra::sysctrl::HW_SYSCTRL_BASE,
-            utralib::HW_AO_SYSCTRL_BASE,
-            Some(utra::duart::HW_DUART_BASE),
-            delay_at_sysfreq,
-            true,
-        )
-    };
-    let uart_buf_addr = crate::platform::UART_IFRAM_ADDR;
-    #[cfg(feature = "bao1x-evb")]
-    let mut udma_uart = unsafe {
-        // safety: this is safe to call, because we set up clock and events prior to calling
-        // new.
-        udma::Uart::get_handle(utra::udma_uart_1::HW_UDMA_UART_1_BASE, uart_buf_addr, uart_buf_addr)
-    };
-    #[cfg(not(feature = "bao1x-evb"))]
-    let mut udma_uart = unsafe {
-        // safety: this is safe to call, because we set up clock and events prior to calling
-        // new.
-        udma::Uart::get_handle(utra::udma_uart_2::HW_UDMA_UART_2_BASE, uart_buf_addr, uart_buf_addr)
-    };
-    let baudrate: u32 = crate::UART_BAUD;
-    let freq: u32 = perclk;
-    udma_uart.set_baud(baudrate, freq);
-
-    crate::println!("clock set done, perclk is {} MHz", perclk / 1_000_000);
-    udma_uart.write("console up with clocks\r\n".as_bytes());
-
-    perclk
-}
-
 #[allow(dead_code)]
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum KeyPress {
@@ -249,36 +203,4 @@ pub enum KeyPress {
     Home,
     Invalid,
     None,
-}
-#[allow(dead_code)]
-pub fn scan_keyboard<T: IoSetup + IoGpio>(
-    iox: &T,
-    rows: &[(IoxPort, u8)],
-    cols: &[(IoxPort, u8)],
-) -> [KeyPress; 4] {
-    let mut key_presses: [KeyPress; 4] = [KeyPress::None; 4];
-    let mut key_press_index = 0; // no Vec in no_std, so we have to manually track it
-
-    for (row, (port, pin)) in rows.iter().enumerate() {
-        iox.set_gpio_pin_value(*port, *pin, IoxValue::Low);
-        for (col, (col_port, col_pin)) in cols.iter().enumerate() {
-            if iox.get_gpio_pin_value(*col_port, *col_pin) == IoxValue::Low {
-                crate::println!("Key press at ({}, {})", row, col);
-                if key_press_index < key_presses.len() {
-                    key_presses[key_press_index] = match (row, col) {
-                        (1, 3) => KeyPress::Left,
-                        (1, 2) => KeyPress::Home,
-                        (1, 0) => KeyPress::Right,
-                        (0, 0) => KeyPress::Down,
-                        (0, 2) => KeyPress::Up,
-                        (0, 1) => KeyPress::Select,
-                        _ => KeyPress::Invalid,
-                    };
-                    key_press_index += 1;
-                }
-            }
-        }
-        iox.set_gpio_pin_value(*port, *pin, IoxValue::High);
-    }
-    key_presses
 }

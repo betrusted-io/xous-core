@@ -40,16 +40,6 @@ impl Uart {
             } else {
                 let buf: [u8; 1] = [c];
                 let uart_buf_addr = crate::platform::UART_IFRAM_ADDR;
-                #[cfg(feature = "bao1x-evb")]
-                let mut udma_uart = unsafe {
-                    // safety: this is safe to call, because we set up clock and events prior to calling new.
-                    udma::Uart::get_handle(
-                        utra::udma_uart_1::HW_UDMA_UART_1_BASE,
-                        uart_buf_addr,
-                        uart_buf_addr,
-                    )
-                };
-                #[cfg(not(feature = "bao1x-evb"))]
                 let mut udma_uart = unsafe {
                     // safety: this is safe to call, because we set up clock and events prior to calling new.
                     udma::Uart::get_handle(
@@ -77,12 +67,6 @@ impl Write for Uart {
 impl SerialRead for Uart {
     fn getc(&mut self) -> Option<u8> {
         let uart_buf_addr = crate::platform::UART_IFRAM_ADDR;
-        #[cfg(feature = "bao1x-evb")]
-        let mut udma_uart = unsafe {
-            // safety: this is safe to call, because we set up clock and events prior to calling new.
-            udma::Uart::get_handle(utra::udma_uart_1::HW_UDMA_UART_1_BASE, uart_buf_addr, uart_buf_addr)
-        };
-        #[cfg(not(feature = "bao1x-evb"))]
         let mut udma_uart = unsafe {
             // safety: this is safe to call, because we set up clock and events prior to calling new.
             udma::Uart::get_handle(utra::udma_uart_2::HW_UDMA_UART_2_BASE, uart_buf_addr, uart_buf_addr)
@@ -128,50 +112,26 @@ macro_rules! println
 pub fn setup_rx(perclk: u32) -> bao1x_hal::udma::Uart {
     let iox = Iox::new(utra::iox::HW_IOX_BASE as *mut u32);
     let udma_global = GlobalConfig::new();
-    #[cfg(feature = "bao1x-evb")]
-    {
-        iox.set_alternate_function(IoxPort::PD, 13, IoxFunction::AF1);
-        iox.set_alternate_function(IoxPort::PD, 14, IoxFunction::AF1);
-        // rx as input, with pull-up
-        iox.set_gpio_dir(IoxPort::PD, 13, IoxDir::Input);
-        iox.set_gpio_pullup(IoxPort::PD, 13, IoxEnable::Enable);
-        // tx as output
-        iox.set_gpio_dir(IoxPort::PD, 14, IoxDir::Output);
 
-        udma_global.clock_on(PeriphId::Uart1);
-        udma_global.map_event(
-            PeriphId::Uart1,
-            PeriphEventType::Uart(EventUartOffset::Rx),
-            EventChannel::Channel0,
-        );
-        udma_global.map_event(
-            PeriphId::Uart1,
-            PeriphEventType::Uart(EventUartOffset::Tx),
-            EventChannel::Channel1,
-        );
-    }
-    #[cfg(not(feature = "bao1x-evb"))]
-    {
-        iox.set_alternate_function(IoxPort::PB, 13, IoxFunction::AF1);
-        iox.set_alternate_function(IoxPort::PB, 14, IoxFunction::AF1);
-        // rx as input, with pull-up
-        iox.set_gpio_dir(IoxPort::PB, 13, IoxDir::Input);
-        iox.set_gpio_pullup(IoxPort::PB, 13, IoxEnable::Enable);
-        // tx as output
-        iox.set_gpio_dir(IoxPort::PB, 14, IoxDir::Output);
+    iox.set_alternate_function(IoxPort::PB, 13, IoxFunction::AF1);
+    iox.set_alternate_function(IoxPort::PB, 14, IoxFunction::AF1);
+    // rx as input, with pull-up
+    iox.set_gpio_dir(IoxPort::PB, 13, IoxDir::Input);
+    iox.set_gpio_pullup(IoxPort::PB, 13, IoxEnable::Enable);
+    // tx as output
+    iox.set_gpio_dir(IoxPort::PB, 14, IoxDir::Output);
 
-        udma_global.clock_on(PeriphId::Uart2);
-        udma_global.map_event(
-            PeriphId::Uart2,
-            PeriphEventType::Uart(EventUartOffset::Rx),
-            EventChannel::Channel0,
-        );
-        udma_global.map_event(
-            PeriphId::Uart2,
-            PeriphEventType::Uart(EventUartOffset::Tx),
-            EventChannel::Channel1,
-        );
-    }
+    udma_global.clock_on(PeriphId::Uart2);
+    udma_global.map_event(
+        PeriphId::Uart2,
+        PeriphEventType::Uart(EventUartOffset::Rx),
+        EventChannel::Channel0,
+    );
+    udma_global.map_event(
+        PeriphId::Uart2,
+        PeriphEventType::Uart(EventUartOffset::Tx),
+        EventChannel::Channel1,
+    );
 
     let baudrate: u32 = crate::UART_BAUD;
     let freq: u32 = perclk;
@@ -180,12 +140,6 @@ pub fn setup_rx(perclk: u32) -> bao1x_hal::udma::Uart {
     // IFRAM0. This is a convention that must be respected by the UDMA UART library implementation
     // for things to work.
     let uart_buf_addr = crate::platform::UART_IFRAM_ADDR;
-    #[cfg(feature = "bao1x-evb")]
-    let mut udma_uart = unsafe {
-        // safety: this is safe to call, because we set up clock and events prior to calling new.
-        udma::Uart::get_handle(utra::udma_uart_1::HW_UDMA_UART_1_BASE, uart_buf_addr, uart_buf_addr)
-    };
-    #[cfg(not(feature = "bao1x-evb"))]
     let mut udma_uart = unsafe {
         // safety: this is safe to call, because we set up clock and events prior to calling new.
         udma::Uart::get_handle(utra::udma_uart_2::HW_UDMA_UART_2_BASE, uart_buf_addr, uart_buf_addr)
@@ -195,9 +149,6 @@ pub fn setup_rx(perclk: u32) -> bao1x_hal::udma::Uart {
 
     // setup interrupt here
     let mut uart_irq = UartIrq::new();
-    #[cfg(feature = "bao1x-evb")]
-    uart_irq.rx_irq_ena(udma::UartChannel::Uart1, true);
-    #[cfg(not(feature = "bao1x-evb"))]
     uart_irq.rx_irq_ena(udma::UartChannel::Uart2, true);
 
     udma_uart

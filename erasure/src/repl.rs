@@ -1,5 +1,3 @@
-use crate::SerialInteract;
-use crate::erase::Erasure;
 #[allow(unused_imports)]
 use alloc::format;
 use alloc::string::{String, ToString};
@@ -9,21 +7,18 @@ use alloc::vec::Vec;
 #[cfg(feature = "bao1x")]
 use bao1x_api::*;
 #[allow(unused_imports)]
-use bao1x_hal::board::{BOOKEND_END, BOOKEND_START};
-#[allow(unused_imports)]
 use utralib::*;
+
+use crate::SerialInteract;
+use crate::erase::Erasure;
 
 pub struct Error {
     pub message: Option<&'static str>,
 }
 impl Error {
-    pub fn none() -> Self {
-        Self { message: None }
-    }
+    pub fn none() -> Self { Self { message: None } }
 
-    pub fn help(message: &'static str) -> Self {
-        Self { message: Some(message) }
-    }
+    pub fn help(message: &'static str) -> Self { Self { message: Some(message) } }
 }
 
 pub struct Repl {
