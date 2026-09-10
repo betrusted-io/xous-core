@@ -2,7 +2,7 @@ use core::fmt::{Error, Write};
 #[cfg(all(feature = "bao1x", not(feature = "hwsim"), not(feature = "gdb-stub")))]
 use std::pin::Pin;
 #[cfg(all(feature = "bao1x", not(feature = "hwsim"), not(feature = "gdb-stub")))]
-use std::sync::atomic::AtomicU32;
+use std::sync::atomic::{AtomicBool, AtomicU32};
 
 #[cfg(all(feature = "bao1x", not(feature = "hwsim"), not(feature = "gdb-stub")))]
 use bao1x_hal::board::UART_DMA_TX_BUF_PHYS;
@@ -22,8 +22,21 @@ pub static mut UART_DMA_TX_BUF_VIRT: *mut u8 = 0x0000_0000 as *mut u8;
 
 #[cfg(all(feature = "bao1x", not(feature = "hwsim"), not(feature = "gdb-stub")))]
 pub static KBD_CONN: AtomicU32 = AtomicU32::new(0);
+#[cfg(all(feature = "usb", not(feature = "hazardous-usb-ci")))]
+pub static KBD_ENA: AtomicBool = AtomicBool::new(false);
+#[cfg(all(feature = "usb", feature = "hazardous-usb-ci"))]
+pub static KBD_ENA: AtomicBool = AtomicBool::new(true);
 
 pub fn init() -> Output {
+    // dabao builds require the console to work - override the static build default
+    #[cfg(all(
+        feature = "bao1x",
+        not(feature = "hwsim"),
+        not(feature = "gdb-stub"),
+        feature = "board-dabao"
+    ))]
+    KBD_ENA.store(true, std::sync::atomic::Ordering::SeqCst);
+
     #[cfg(all(feature = "bao1x", not(feature = "hwsim"), not(feature = "gdb-stub")))]
     let uart = xous::syscall::map_memory(
         xous::MemoryAddress::new(utra::udma_uart_2::HW_UDMA_UART_2_BASE),
@@ -108,23 +121,25 @@ fn uart_handler(_irq_no: usize, _arg: *mut usize) {
     if uart.read_async(&mut c) != 0 {
         use std::sync::atomic::Ordering;
 
-        if KBD_CONN.load(Ordering::SeqCst) == 0 {
-            println!("connecting to keyboard_bouncer");
-            match xous::try_connect(xous::SID::from_bytes(b"keyboard_bouncer").unwrap()) {
-                Ok(cid) => KBD_CONN.store(cid, Ordering::SeqCst),
-                // ignore the character and wait until there's a server for us to send it to
-                _ => return,
+        if KBD_ENA.load(Ordering::SeqCst) {
+            if KBD_CONN.load(Ordering::SeqCst) == 0 {
+                println!("connecting to keyboard_bouncer");
+                match xous::try_connect(xous::SID::from_bytes(b"keyboard_bouncer").unwrap()) {
+                    Ok(cid) => KBD_CONN.store(cid, Ordering::SeqCst),
+                    // ignore the character and wait until there's a server for us to send it to
+                    _ => return,
+                }
             }
-        }
-        let conn = KBD_CONN.load(Ordering::SeqCst);
-        if c != 0 {
-            let c = char::from_u32(c as u32).unwrap_or('.');
-            if c == '\r' {
-                println!(""); // add line feed to carriage return
-            } else {
-                print!("{}", c); // local echo
+            let conn = KBD_CONN.load(Ordering::SeqCst);
+            if c != 0 {
+                let c = char::from_u32(c as u32).unwrap_or('.');
+                if c == '\r' {
+                    println!(""); // add line feed to carriage return
+                } else {
+                    print!("{}", c); // local echo
+                }
+                xous::try_send_message(conn, xous::Message::new_scalar(0, c as usize, 0, 0, 0)).ok();
             }
-            xous::try_send_message(conn, xous::Message::new_scalar(0, c as usize, 0, 0, 0)).ok();
         }
     }
 }

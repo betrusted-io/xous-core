@@ -2,6 +2,7 @@
 
 pub mod api;
 pub use api::*;
+use bao1x_api::keyboard::KeyMap;
 use num_traits::*;
 use packed_struct::PackedStruct;
 use rkyv::option::ArchivedOption;
@@ -415,6 +416,14 @@ impl UsbHid {
     }
 
     pub fn cid(&self) -> xous::CID { self.conn }
+
+    pub fn set_key_map(&self, map: KeyMap) {
+        send_message(
+            self.conn,
+            Message::new_blocking_scalar(Opcode::SetKeyMap.to_usize().unwrap(), map.into(), 0, 0, 0),
+        )
+        .unwrap();
+    }
 }
 
 use core::sync::atomic::{AtomicU32, Ordering};

@@ -68,20 +68,17 @@ impl Repl {
             if self.cmdline.len() != 0 {
                 self.cmdline.pop();
             }
-        } else {
-            // everything else
-            match char::from_u32(c as u32) {
-                Some(c) => {
-                    if self.local_echo {
-                        crate::print!("{}", c);
-                    }
-                    self.cmdline.push(c);
-                }
-                None => {
-                    crate::println!("Warning: bad char received, ignoring")
-                }
+        } else if (0x20..=0x7e).contains(&c) {
+            // Printable ASCII only. Anything else (notably 0xFF framing noise that couples onto
+            // the idle UART RX line during USB enumeration) is dropped, so line noise can neither
+            // echo-storm the console nor grow `cmdline` without bound and exhaust the heap.
+            let c = c as char;
+            if self.local_echo {
+                crate::print!("{}", c);
             }
+            self.cmdline.push(c);
         }
+        // else: non-printable byte (control chars, 0x7f, 0x80..=0xff) — silently ignored
     }
 
     pub fn process(&mut self) -> Result<(), Error> {
@@ -180,7 +177,10 @@ impl Repl {
                             let high_limit = bao1x_api::BAREMETAL_START;
 
                             if record.address() as usize >= low_limit
-                                && (record.address() as usize) < high_limit
+                                && (record.address() as usize)
+                                    .checked_add(record.data().len())
+                                    .expect("record address overflow")
+                                    < high_limit
                                 && record.family() == bao1x_api::BAOCHIP_1X_UF2_FAMILY
                             {
                                 let mut rram = bao1x_hal::rram::Reram::new();
@@ -659,6 +659,9 @@ impl Repl {
                 crate::println!("Board type set to {:?} after {} increments", new_type, count);
                 crate::platform::slots::check_slots();
                 crate::println!("Key & data slots checked according to the new type");
+                // improve scripted recognition of confirmation message in noisy/flakey serial environments
+                use bao1x_hal::board::{BOOKEND_END, BOOKEND_START};
+                crate::println!("{}BOOT1.BOARDTYPE,{},{}", BOOKEND_START, args[0].as_str(), BOOKEND_END);
             }
             "altboot" => {
                 let owc = OneWayCounter::new();
@@ -695,22 +698,26 @@ impl Repl {
             "audit" => {
                 crate::audit::audit();
             }
-            "lockdown" => match bao1x_hal::sigcheck::validate_image(BOOT0_TO_BOOT1, None, None) {
-                Ok((k, _k2, _tag, _target, _pq)) => {
-                    if k != bao1x_api::pubkeys::DEVELOPER_KEY_SLOT {
-                        crate::println!("This will permanently disable developer mode. It cannot be undone!");
-                        crate::println!("Proceed? (type 'YES' in all caps to proceed)");
-                        self.lockdown_armed = true;
-                    } else {
-                        crate::println!(
-                            "Boot1 is signed with the developer key. Refusing to lockdown, as that would brick the chip."
-                        )
+            "lockdown" => {
+                match bao1x_hal::sigcheck::validate_image(BOOT0_TO_BOOT1, None, None, HardenedBool::TRUE) {
+                    Ok((k, _k2, _tag, _target, _pq)) => {
+                        if k != bao1x_api::pubkeys::DEVELOPER_KEY_SLOT {
+                            crate::println!(
+                                "This will permanently disable developer mode. It cannot be undone!"
+                            );
+                            crate::println!("Proceed? (type 'YES' in all caps to proceed)");
+                            self.lockdown_armed = true;
+                        } else {
+                            crate::println!(
+                                "Boot1 is signed with the developer key. Refusing to lockdown, as that would brick the chip."
+                            )
+                        }
+                    }
+                    Err(_e) => {
+                        crate::println!("Boot1 has no valid signature, lockdown would brick the chip.")
                     }
                 }
-                Err(_e) => {
-                    crate::println!("Boot1 has no valid signature, lockdown would brick the chip.")
-                }
-            },
+            }
             "self_destruct" => {
                 if !matches!(args.as_slice(), [s] if s == "void_my_warrantee") {
                     return Err(Error::help(
@@ -738,6 +745,10 @@ impl Repl {
                 }
             }
             "baosec-init" => {
+                // NOTE: boardtype setting is removed from this routine. Test routine needs to be reworked to
+                // set this using a separate boardtype command.
+                // completion type is also BAOSEC-INIT now.
+
                 let full = match args.as_slice() {
                     [s] if s == "confirm" => false,
                     [s, f] if s == "confirm" && f == "full" => true,
@@ -813,25 +824,7 @@ impl Repl {
                     flash_spim.flash_erase_block(addr, SPINOR_BULK_ERASE_SIZE as usize);
                 }
                 crate::println!("...done!");
-                let one_way = bao1x_hal::acram::OneWayCounter::new();
-                let board_type =
-                    one_way.get_decoded::<bao1x_api::BoardTypeCoding>().expect("Board type coding error");
-                #[cfg(not(feature = "oem-baosec-lite"))]
-                if board_type != bao1x_api::BoardTypeCoding::Baosec {
-                    while one_way.get_decoded::<bao1x_api::BoardTypeCoding>().expect("owc coding error")
-                        != bao1x_api::BoardTypeCoding::Baosec
-                    {
-                        one_way.inc_coded::<bao1x_api::BoardTypeCoding>().expect("increment error");
-                    }
-                }
-                #[cfg(feature = "oem-baosec-lite")]
-                if board_type != bao1x_api::BoardTypeCoding::Oem {
-                    while one_way.get_decoded::<bao1x_api::BoardTypeCoding>().expect("owc coding error")
-                        != bao1x_api::BoardTypeCoding::Oem
-                    {
-                        one_way.inc_coded::<bao1x_api::BoardTypeCoding>().expect("increment error");
-                    }
-                }
+
                 // reset the USB stack so that we'll re-enumerate correctly after this reboot.
                 // This also has the side-effect of redirecting the console output back to the serial port.
                 crate::platform::usb::glue::shutdown();
@@ -843,23 +836,19 @@ impl Repl {
                 // CI note: this appears on the "hard UART", not on USB serial. If we want this on USB
                 // serial, we would want to add some wait time to ensure the USB packets get sent before
                 // issuing the reboot command.
-                #[cfg(not(feature = "oem-baosec-lite"))]
-                {
-                    crate::println!("{}BOOT1.SETBOARD,{}", BOOKEND_START, BOOKEND_END);
-                    crate::println!("Board type set to baosec");
-                }
-                #[cfg(feature = "oem-baosec-lite")]
-                {
-                    crate::println!("Board type set to baosec-lite");
-                    crate::println!("{}BOOT1.SETBOARD-LITE,{}", BOOKEND_START, BOOKEND_END);
-                }
+                crate::println!("{}BOOT1.BAOSEC-INIT,{}", BOOKEND_START, BOOKEND_END);
+                crate::println!("Board type set to baosec");
             }
             "ifr" => {
                 // safety: the IFR region is aligned and exists here. It is sealed by hardware in USER mode,
                 // and should report as all 0's.
                 let ifr = unsafe { core::slice::from_raw_parts(0x6040_0000 as *const u8, 0x400) };
                 for (i, chunk) in ifr.chunks(32).enumerate() {
+                    // these "redundant" asserts make it harder to abuse this print as a memory dumping
+                    // primitive, e.g. by glitching or other similar attack
+                    assert!(core::hint::black_box(ifr.as_ptr()) as usize == 0x6040_0000);
                     crate::println!("  {:03x}: {:02x?}", i * 32, chunk);
+                    assert!(i < 32);
                 }
             }
             #[cfg(feature = "test-boot0-keys")]
@@ -868,7 +857,7 @@ impl Repl {
                 // put random data in collateral - to simulate a third party keying
                 let slot_mgr = bao1x_hal::acram::SlotManager::new();
                 let mut rram = bao1x_hal::rram::Reram::new();
-                let slot = &bao1x_api::offsets::COLLATERAL;
+                let slot = &bao1x_api::offsets::COLLATERAL_ERASURE_ALIAS;
                 let mut trng = super::trng::ManagedTrng::new();
                 // only clear ACL if it isn't already cleared
                 if slot_mgr
@@ -1054,7 +1043,7 @@ impl Repl {
                 use bao1x_api::{IoGpio, IoSetup};
                 use bao1x_hal::iox::Iox;
                 let iox = Iox::new(utralib::utra::iox::HW_IOX_BASE as *mut u32);
-                // setup PF1 as an "index" pin
+                // setup PF5 as the test active pin
                 iox.setup_pin(
                     bao1x_api::IoxPort::PF,
                     5,
@@ -1073,10 +1062,205 @@ impl Repl {
                 let slot_mgr = bao1x_hal::acram::SlotManager::new();
                 let mut rram = bao1x_hal::rram::Reram::new();
                 let slot = &bao1x_api::offsets::ATE_RESERVED;
-                let ate = crate::platform::ate::Ate::new(self.perclk);
+
                 let mut data = [0u8; 32];
-                ate.serialize_into(&mut data);
-                slot_mgr.write(&mut rram, slot, &data).ok();
+                if args.len() == 0 {
+                    let ate = crate::platform::ate::Ate::new(self.perclk);
+                    ate.serialize_into(&mut data);
+                    slot_mgr.write(&mut rram, slot, &data).ok();
+                } else {
+                    match args[0].as_str() {
+                        "0" => {
+                            // clears the slot
+                            let mut rram = bao1x_hal::rram::Reram::new();
+                            let slot = &bao1x_api::offsets::ATE_RESERVED;
+                            slot_mgr.write(&mut rram, slot, &[0x0; 32]).ok();
+                        }
+                        "1" => {
+                            // writes a known pattern into the data slot
+                            let mut rram = bao1x_hal::rram::Reram::new();
+                            let slot = &bao1x_api::offsets::ATE_RESERVED;
+                            slot_mgr.write(&mut rram, slot, &[0x5a; 32]).ok();
+                        }
+                        "2" => {
+                            // slow down clocks before calling to save power
+                            let perclk = unsafe {
+                                bao1x_hal::clocks::init_clock_asic(
+                                    350_000_000,
+                                    utra::sysctrl::HW_SYSCTRL_BASE,
+                                    utralib::HW_AO_SYSCTRL_BASE,
+                                    Some(utra::duart::HW_DUART_BASE),
+                                    crate::delay_at_sysfreq,
+                                    false,
+                                )
+                            };
+                            let ate = crate::platform::ate::Ate::new(perclk);
+                            let mut data = [0u8; 32];
+                            ate.serialize_into(&mut data);
+                            slot_mgr.write(&mut rram, slot, &data).ok();
+                        }
+                        _ => {
+                            // non-RRAM testing path - dynamically sample triggers from the ATE
+                            use bao1x_api::{IoGpio, IoSetup};
+                            use bao1x_hal::iox::Iox;
+                            let iox = Iox::new(utralib::utra::iox::HW_IOX_BASE as *mut u32);
+                            let udma_global = GlobalConfig::new();
+                            udma_global.clock_on(bao1x_api::PeriphId::Adc);
+                            // safety: clocks have been turned on. The ADC buffer is located at the base of
+                            // IFRAM0 which should be empty, as IFRAM reserved
+                            // addresses allocate from top-down.
+                            let mut adc = unsafe {
+                                bao1x_hal::udma::Adc::new_baremetal(self.perclk, utralib::HW_IFRAM0_MEM)
+                            };
+                            // PF1 indicates that a sample is ready by going high
+                            iox.setup_pin(
+                                bao1x_api::IoxPort::PF,
+                                1,
+                                Some(bao1x_api::IoxDir::Output),
+                                Some(bao1x_api::IoxFunction::Gpio),
+                                None,
+                                Some(bao1x_api::IoxEnable::Disable),
+                                None,
+                                None,
+                            );
+                            iox.set_gpio_pin_value(bao1x_api::IoxPort::PF, 1, bao1x_api::IoxValue::Low);
+
+                            // setup PA4..=PA7 as inputs - just to make sure we aren't accidentally driving
+                            // them. disable the pull-up, too.
+                            for pin in 4..=7 {
+                                iox.setup_pin(
+                                    bao1x_api::IoxPort::PA,
+                                    pin,
+                                    Some(bao1x_api::IoxDir::Input),
+                                    Some(bao1x_api::IoxFunction::Gpio),
+                                    Some(bao1x_api::IoxEnable::Disable),
+                                    Some(bao1x_api::IoxEnable::Disable),
+                                    None,
+                                    None,
+                                );
+                            }
+
+                            // setup relay I/O. PB[15:0] is the DAC data output
+                            iox.set_gpio_bank(IoxPort::PB, 0, 0x0FFF);
+                            for pin in 0..12 {
+                                iox.setup_pin(
+                                    bao1x_api::IoxPort::PB,
+                                    pin,
+                                    Some(bao1x_api::IoxDir::Output),
+                                    Some(bao1x_api::IoxFunction::Gpio),
+                                    Some(bao1x_api::IoxEnable::Disable),
+                                    Some(bao1x_api::IoxEnable::Disable),
+                                    Some(IoxEnable::Enable),
+                                    Some(IoxDriveStrength::Drive4mA),
+                                );
+                            }
+                            // PC[4:0] selects the ADC, lowest bit that is 0 is the selected ADC
+                            // PC[5] triggers a sample when it rises; put a pullup on this to avoid false
+                            // PC[6] low stops the test
+                            // triggering on floating input
+                            for pin in 0..7 {
+                                iox.setup_pin(
+                                    bao1x_api::IoxPort::PC,
+                                    pin,
+                                    Some(bao1x_api::IoxDir::Input),
+                                    Some(bao1x_api::IoxFunction::Gpio),
+                                    Some(bao1x_api::IoxEnable::Enable),
+                                    Some(bao1x_api::IoxEnable::Enable),
+                                    None,
+                                    None,
+                                );
+                            }
+
+                            // pipe-clear any stale ADC values
+                            let _dummy = adc.read_raw_averaged(AdcSource::Ext(AdcExtChannel::Adc0), 8);
+
+                            use bao1x_hal::udma::{AdcExtChannel, AdcSource, GlobalConfig};
+                            enum State {
+                                Armed,
+                                Triggered,
+                            }
+                            let sources = [
+                                AdcSource::Temperature,
+                                AdcSource::Ext(AdcExtChannel::Adc0),
+                                AdcSource::Ext(AdcExtChannel::Adc1),
+                                AdcSource::Ext(AdcExtChannel::Adc2),
+                                AdcSource::Ext(AdcExtChannel::Adc3),
+                            ];
+
+                            while iox.get_gpio_pin(IoxPort::PC, 5) != IoxValue::Low {
+                                // wait for PC5 to go low before arming the system
+                                // if test abort, break
+                                if iox.get_gpio_pin(IoxPort::PC, 6) == IoxValue::Low {
+                                    break;
+                                }
+                            }
+                            let mut state = State::Armed;
+
+                            while iox.get_gpio_pin(IoxPort::PC, 6) == IoxValue::High {
+                                match state {
+                                    State::Armed => {
+                                        if iox.get_gpio_pin(IoxPort::PC, 5) == IoxValue::High {
+                                            state = State::Triggered;
+                                        }
+                                    }
+                                    State::Triggered => {
+                                        let adc_code = iox.get_gpio_bank(IoxPort::PC) & 0x1F;
+                                        let mut got_channel = false;
+                                        for channel in 0..5 {
+                                            if ((adc_code >> channel as u16) & 1) == 0 {
+                                                let source = sources[channel];
+                                                let _dummy = adc.read_raw_averaged(source, 8); // dummy reading still required every source change, some bug in ADC driver?
+                                                let raw = adc.read_raw_averaged(source, 8);
+                                                iox.set_gpio_bank(IoxPort::PB, raw, 0x0FFF);
+                                                got_channel = true;
+                                                break;
+                                            }
+                                        }
+                                        if !got_channel {
+                                            // apply a test pattern to confirm port configuration
+                                            iox.set_gpio_bank(IoxPort::PB, 0xa5a5, 0xFFFF);
+                                        }
+                                        // indicate that the sample is done
+                                        iox.set_gpio_pin_value(
+                                            bao1x_api::IoxPort::PF,
+                                            1,
+                                            bao1x_api::IoxValue::High,
+                                        );
+
+                                        // wait for PC5 to drop
+                                        while iox.get_gpio_pin(IoxPort::PC, 5) == IoxValue::High {
+                                            // if test abort, break
+                                            if iox.get_gpio_pin(IoxPort::PC, 6) == IoxValue::Low {
+                                                break;
+                                            }
+                                        }
+                                        // acknowledge the drop before next iteration
+                                        iox.set_gpio_pin_value(
+                                            bao1x_api::IoxPort::PF,
+                                            1,
+                                            bao1x_api::IoxValue::Low,
+                                        );
+                                        iox.set_gpio_bank(IoxPort::PB, 0, 0xFFFF);
+                                        state = State::Armed;
+                                    }
+                                }
+                            }
+                            // revert PB to inputs
+                            for pin in 0..12 {
+                                iox.setup_pin(
+                                    bao1x_api::IoxPort::PB,
+                                    pin,
+                                    Some(bao1x_api::IoxDir::Input),
+                                    Some(bao1x_api::IoxFunction::Gpio),
+                                    Some(bao1x_api::IoxEnable::Enable),
+                                    Some(bao1x_api::IoxEnable::Enable),
+                                    None,
+                                    None,
+                                );
+                            }
+                        }
+                    }
+                }
 
                 // indicates test finish
                 iox.set_gpio_pin_value(bao1x_api::IoxPort::PF, 5, bao1x_api::IoxValue::High);
@@ -1118,6 +1302,63 @@ impl Repl {
                     new_type,
                     count
                 );
+            }
+            #[cfg(feature = "pocs")]
+            // checks the following facts:
+            // - with the IFR configured correctly, the boot0 protection is not mutable
+            // - that boot1 "as boot0" by the coreuser logic, which allows it to change boot0
+            // - this is an immutable fact of the chip, the ACL logic always allows a user to change its own
+            //   data
+            // - Side note: boot0/boot1 defs could be modified to "prevent" boot1 from notionally changing
+            //   boot0 contents, but it's easily changed back by just editing the coreuser mapping table. It's
+            //   not until the one-way door on the CU table is sealed that boot0 becomes truly indelible.
+            "poc_boot0_in_boot1" => {
+                let mut rram = bao1x_hal::rram::Reram::new();
+
+                let ifr = unsafe { core::slice::from_raw_parts(0x6040_0100 as *const u8, 0x100) };
+                for (i, chunk) in ifr.chunks(32).enumerate() {
+                    // these "redundant" asserts make it harder to abuse this print as a memory dumping
+                    // primitive, e.g. by glitching or other similar attack
+                    crate::println!("  {:03x}: {:02x?}", i * 32, chunk);
+                }
+
+                // confirm that we can't touch the end of boot0
+                let test = [0x4u8; 32];
+                crate::println!("should fail: {:?}", unsafe {
+                    rram.crazy_unsafe_write_slice(0x0002_0000 - 32, &test)
+                });
+                crate::println!("touched boot0: {:x?}", unsafe {
+                    core::slice::from_raw_parts((0x6002_0000 - 32) as *const u8, 8)
+                });
+                let mut old_ac = [0u8; 32];
+                old_ac.copy_from_slice(unsafe {
+                    core::slice::from_raw_parts((0x6040_0000 + 0x280) as *const u8, 32)
+                });
+                crate::println!("ifr 0x280: {:x?}", &old_ac);
+                crate::println!("DISABLE PROTECTION");
+                let new_ac = [0u8; 32];
+                unsafe { rram.crazy_unsafe_write_slice(0x0040_0000 + 0x280, &new_ac) };
+                bao1x_hal::cache_flush();
+                crate::println!("ifr 0x280: {:x?}", unsafe {
+                    core::slice::from_raw_parts((0x6040_0000 + 0x280) as *const u8, 32)
+                });
+                crate::println!("should pass: {:?}", unsafe {
+                    rram.crazy_unsafe_write_slice(0x0002_0000 - 32, &test)
+                });
+                crate::println!("touched boot0: {:x?}", unsafe {
+                    core::slice::from_raw_parts((0x6002_0000 - 32) as *const u8, 8)
+                });
+                crate::println!("ENABLE PROTECTION");
+                unsafe { rram.crazy_unsafe_write_slice(0x0002_0000 - 32, &[0u8; 32]) };
+                // restore ifr
+                old_ac[31] = 0x3a;
+                unsafe { rram.crazy_unsafe_write_slice(0x0040_0000 + 0x280, &old_ac) };
+                crate::println!("ifr 0x280: {:x?}", unsafe {
+                    core::slice::from_raw_parts((0x6040_0000 + 0x280) as *const u8, 32)
+                });
+                crate::println!("touched boot0: {:x?}", unsafe {
+                    core::slice::from_raw_parts((0x6002_0000 - 32) as *const u8, 8)
+                });
             }
             "echo" => {
                 for word in args {

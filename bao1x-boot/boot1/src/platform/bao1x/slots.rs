@@ -170,10 +170,14 @@ fn print_slots(slot_mgr: &SlotManager, slot_list: &[SlotIndex]) {
         let slot_type = slot.get_type();
         #[cfg(feature = "unsafe-debug")]
         // clear the ACL so we can read the key
-        if slot_type == SlotType::Key {
+        if slot_type == SlotType::Data {
             let mut rram = Reram::new();
             slot_mgr
-                .set_acl(&mut rram, slot, &AccessSettings::Key(KeySlotAccess::new_with_raw_value(0)))
+                .set_acl(
+                    &mut rram,
+                    slot,
+                    &AccessSettings::Data(bao1x_api::offsets::DataSlotAccess::new_with_raw_value(0)),
+                )
                 .expect("couldn't reset ACL");
         }
         for (data_index, acl_index) in

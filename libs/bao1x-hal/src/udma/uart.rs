@@ -267,11 +267,24 @@ impl Uart {
                 as usize;
 
         if valid != 0 {
-            *c = unsafe {
+            // Sample the per-frame error status (framing/parity/overrun) *before* popping the byte.
+            // Coupling from USB signalling can forge a start bit on the Rx line; the hardware then
+            // frames a counterfeit byte, latches it Valid, and flags it in Error. Delivering it as
+            // data floods the console (and any Rx queue) with junk, so an errored frame is dropped.
+            let error = unsafe {
+                self.csr().base().add(Bank::Custom.into()).add(UartReg::Error.into()).read_volatile()
+            };
+            // Always pop the frame from the FIFO so the head advances and Valid clears.
+            let data = unsafe {
                 self.csr().base().add(Bank::Custom.into()).add(UartReg::Data.into()).read_volatile()
             } as u8;
 
-            1
+            if error == 0 {
+                *c = data;
+                1
+            } else {
+                0
+            }
         } else {
             0
         }

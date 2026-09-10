@@ -533,7 +533,7 @@ pub struct IrqConfig {
 }
 
 /// Defines an accessible window by DMA from BIO cores. It's a slice starting from `base` going for `bounds`
-/// bytes.
+/// pages.
 #[derive(Debug, Copy, Clone)]
 #[cfg_attr(feature = "std", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
 pub struct DmaWindow {

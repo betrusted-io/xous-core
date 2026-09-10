@@ -87,8 +87,9 @@ fn overwrite_shorter_inner(path: &str, first_len: usize) {
     assert_eq!(readback, second, "truncating overwrite did not read back intact");
 }
 
-/// SeekFrom::Current with a negative offset must rewind. XFAIL PFC-3: the
-/// server casts the offset with `as u64`, so any negative seek errors out.
+/// SeekFrom::Current with a negative offset must rewind. Was XFAIL PFC-3
+/// (the server cast the offset with `as u64`, so any negative seek errored
+/// out); now pins the fix.
 pub fn seek_negative_current() {
     let tmp = TmpDict::new("seek_negative_current");
     let path = tmp.path("seek");
@@ -155,7 +156,6 @@ pub const TESTS: &[(&str, fn())] = &[
 pub const XFAILS: &[(&str, &str)] = &[
     // smoke::overwrite_shorter_large (PFC-1) is not here: it crashes the pddb
     // server outright and is disabled above.
-    ("smoke::seek_negative_current", "PFC-3"),
 ];
 
 /// `create_new` on an existing path must fail. Don't assert the ErrorKind: the

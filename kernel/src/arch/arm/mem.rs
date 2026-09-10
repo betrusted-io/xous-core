@@ -182,6 +182,55 @@ impl MemoryMapping {
             false,
         )
     }
+
+    /// Undo a reservation made by `reserve_address`. This will refuse to
+    /// unmap a page that has actually been mapped, and is a no-op if nothing
+    /// was ever reserved at this address.
+    ///
+    /// This code is entirely machine generated in an attempt to try and support
+    /// the ARM target with improvements in the mainline Xous code, but without
+    /// a target to test against this is just a best-effort guess at what this
+    /// might be. An actual ARM architecture expert should review this.
+    ///
+    /// Generated with Claude Opus 5 (medium) with a prompt asking for a parallel
+    /// implementation of unreserve_address() from the RV32 code, given the current
+    /// ARM code as a starting point.
+    pub fn unreserve_address(&self, addr: usize) -> Result<(), xous_kernel::Error> {
+        let v = VirtualAddress::new(addr as u32);
+        let vpn1 = v.translation_table_index();
+        let vpn2 = v.page_table_index();
+        assert!(vpn1 < 4096);
+        assert!(vpn2 < 256);
+
+        let l1_pt_addr = PAGE_TABLE_ROOT_OFFSET;
+        let l2_pt_addr = PAGE_TABLE_OFFSET + vpn1 * PAGE_SIZE;
+
+        let existing_l1_entry = unsafe {
+            ((l1_pt_addr as *mut u32).add(vpn1) as *mut TranslationTableDescriptor).read_volatile()
+        };
+        if existing_l1_entry.get_type() == TranslationTableType::Invalid {
+            // No L2 table, so nothing was ever reserved here.
+            return Ok(());
+        }
+
+        let l2_entry_ptr = unsafe { (l2_pt_addr as *mut u32).add(vpn2) };
+        let existing_l2_entry = unsafe { (l2_entry_ptr as *mut PageTableDescriptor).read_volatile() };
+
+        // Refuse to touch a live mapping. Only undo reservations.
+        // Reservations go through `map_page_inner` with `MemoryFlags::RESERVE`,
+        // which deliberately leaves the `VALID` bit clear because the page
+        // hasn't been backed or zeroed yet.
+        if existing_l2_entry.as_u32() & u32::from(SMALL_PAGE_FLAGS::VALID::Enable) != 0 {
+            return Err(xous_kernel::Error::ShareViolation);
+        }
+
+        unsafe {
+            l2_entry_ptr.write_volatile(0);
+            flush_mmu();
+        }
+
+        Ok(())
+    }
 }
 
 pub fn hand_page_to_user(virt: *mut u8) -> Result<(), xous_kernel::Error> {

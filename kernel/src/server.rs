@@ -886,6 +886,22 @@ impl Server {
         }
     }
 
+    /// Returns true if the queue can accept one more message.
+    /// Does NOT reserve or mutate any state.
+    pub fn has_queue_capacity(&self) -> bool {
+        // Same full-check as queue_message, plus verify an Empty slot exists.
+        // The generation check is the fast path; the scan is the fallback
+        // for the case where WaitingReturn* tokens occupy slots.
+        if self.tail_generation == self.head_generation.wrapping_sub(1) {
+            return false;
+        }
+        self.queue.iter().any(|e| *e == QueuedMessage::Empty)
+    }
+
+    pub fn has_queue_capacity_scalar(&self) -> bool {
+        self.tail_generation != self.head_generation.wrapping_sub(1)
+    }
+
     /// Add the given message to this server's queue.
     ///
     /// # Errors

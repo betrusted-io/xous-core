@@ -26,6 +26,9 @@ pub fn keystore(sid: SID) -> ! {
         log::info!("{}COLLATERAL.FAIL,{}", BOOKEND_START, BOOKEND_END);
     }
 
+    #[cfg(feature = "swap")]
+    let xns = xous_names::XousNames::new().unwrap();
+
     let mut msg_opt = None;
 
     // allow preemption once the keystore has claimed locks on all its critical resources
@@ -190,6 +193,41 @@ pub fn keystore(sid: SID) -> ! {
                         _ => app_key = AppKey::InternalError,
                     }
                     buffer.replace(app_key).unwrap();
+                }
+            }
+            #[cfg(feature = "swap")]
+            Opcode::EnsureSwapEncryption => {
+                if let Some(mem) = msg.body.memory_message() {
+                    let buffer = unsafe { Buffer::from_memory_message(mem) };
+                    let swap_call = buffer.to_original::<SwapEncryptCall, _>().unwrap();
+                    if let Ok(cid) = xns.request_connection_blocking(&swap_call.status_server) {
+                        #[cfg(feature = "legacy-swap-key")]
+                        let key = store.get_swap_key(&mut rram);
+                        #[cfg(not(feature = "legacy-swap-key"))]
+                        let key = store.get_swap_key();
+                        if !store.is_developer() {
+                            let _ = store
+                                .ensure_swap_encryption(cid, swap_call.status_opcode, swap_call.token, key)
+                                .inspect_err(|e| log::info!("Couldn't ensure swap encryption: {:?}", e));
+                        }
+                        // set completion to 100%
+                        xous::try_send_message(
+                            cid,
+                            xous::Message::new_scalar(
+                                swap_call.status_opcode as usize,
+                                100,
+                                swap_call.token[0] as usize,
+                                swap_call.token[1] as usize,
+                                swap_call.token[2] as usize,
+                            ),
+                        )
+                        .ok();
+                        log::info!("{}SWAP.ENCRYPTED,{}", BOOKEND_START, BOOKEND_END);
+                    } else {
+                        log::warn!(
+                            "Swap encryption check skipped because the caller provided an invalid server name for status feedback"
+                        );
+                    }
                 }
             }
             Opcode::InvalidCall => {

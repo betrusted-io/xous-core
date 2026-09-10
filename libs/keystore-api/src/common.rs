@@ -188,3 +188,10 @@ impl Into<(usize, usize, usize)> for PasswordState {
         }
     }
 }
+
+#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+pub struct SwapEncryptCall {
+    pub status_server: String,
+    pub status_opcode: u32,
+    pub token: [u32; 3],
+}

@@ -8,11 +8,9 @@ use aes_gcm_siv::{
     Aes256GcmSiv, Nonce,
     aead::{Aead, KeyInit, Payload},
 };
-use bao1x_api::signatures::SwapSourceHeader;
+use bao1x_api::signatures::{SWAP_VERSION, SwapSourceHeader};
 
 use crate::sign_image::{Version, sign_image};
-
-const SWAP_VERSION: u32 = 0x01_01_0000;
 
 pub fn git_rev(override_rev: Option<&str>) -> u64 {
     let hash = if let Some(rev) = override_rev {
@@ -143,13 +141,14 @@ impl SwapWriter {
             nonce_vec.extend_from_slice(&((offset as u32) * 0x1000).to_be_bytes());
             nonce_vec.extend_from_slice(&header.partial_nonce.to_be_bytes());
             let nonce = Nonce::from_slice(&nonce_vec);
+            // println!("pt: {:x?}", &padded_block[..32]);
             // println!("nonce: {:x?}", nonce);
             // println!("aad: {:x?}", header.aad);
             let enc = cipher
                 .encrypt(nonce, Payload { aad: &header.aad, msg: &padded_block })
                 .expect("couldn't encrypt block");
             assert!(enc.len() == 0x1010);
-            // println!("data: {:x?}", &enc[..32]);
+            // println!("ct: {:x?}", &enc[..32]);
             // println!("tag: {:x?}", &enc[0x1000..]);
             image.write(&enc[..0x1000])?;
             macs.extend_from_slice(&enc[0x1000..]);

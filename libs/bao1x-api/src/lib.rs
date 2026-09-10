@@ -24,6 +24,7 @@ pub use clocks::*;
 pub mod bio;
 #[cfg(feature = "std")]
 pub mod bio_resources;
+pub mod checks;
 
 /// UF2 Family ID. Randomly generated, no collisions with the known list, still to be merged
 /// into the "official" list
