@@ -290,7 +290,11 @@ bio_code!(
     "bne x6, x0, 23b",   // loop back if we haven't shifted all the bits
     "mv x17, x11",       // x17 <- read data
 
-    // outgoing ACK or NACK
+    // outgoing ACK or NACK. SCL must be low before SDA changes direction:
+    // an SDA edge while SCL is still high reads as a START/STOP condition.
+    "mv x20, x0", // SCL L0
+    "mv x24, x5",        // SCL <- 0
+    "mv x20, x0", // SCL L1
     "beq x10, x0, 28f",  // if last iteration, do NACK
     "mv x24, x4",        //    otherwise ACK by SDA as output
     "addi x7, x7, 1",    //   ACK += 1
@@ -299,9 +303,6 @@ bio_code!(
     "mv x25, x4",        // SDA is input (SDA goes high; NACK)
     "addi x8, x8, 1",    //   NACK += 1
   "29:",
-    "mv x20, x0", // SCL L0
-    "mv x24, x5",        // SCL <- 0
-    "mv x20, x0", // SCL L1
     "mv x20, x0", // SCL H0
     "mv x25, x5",        // SCL <- 1
     "j 25f",

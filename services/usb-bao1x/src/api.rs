@@ -32,6 +32,9 @@ pub enum Opcode {
     /// Modify log level
     SetLogLevel = 12,
 
+    /// Set the host-side key mapping (this translates data into e.g. dvorak or qwerty maps)
+    SetKeyMap = 16,
+
     /// Send a U2F message
     U2fTx = 128,
     /// Blocks the caller, waiting for a U2F message

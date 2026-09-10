@@ -47,6 +47,11 @@ pub(crate) const TARGET_TRIPLE_RISCV32_KERNEL: &str = "riscv32imac-unknown-none-
 pub(crate) const TARGET_TRIPLE_ARM: &str = "armv7a-unknown-xous-elf";
 pub(crate) const TARGET_TRIPLE_ARM_KERNEL: &str = "armv7a-unknown-none-elf";
 
+/// default path to the boot0 binary image
+const DEFAULT_BOOT0_PATH: &str = "../../../target/riscv32imac-unknown-none-elf/release/bao1x-boot0.img";
+/// default path to the boot1 binary image
+const DEFAULT_BOOT1_PATH: &str = "../../../target/riscv32imac-unknown-none-elf/release/bao1x-boot1.img";
+
 /// Size of the "statics" region used to initialize baremetal targets
 const STATICS_LEN: usize = 0x100;
 
@@ -150,6 +155,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     if env::args().filter(|x| x == "--no-pq").count() != 0 {
         builder.skip_pq(true);
     }
+    let arb_testing = get_flag("--arb-override")?;
+    if !arb_testing.is_empty() {
+        builder.set_antirollback_override(
+            usize::from_str_radix(&arb_testing[0], 10).expect("malformed arb-override"),
+        );
+    }
 
     let swap_key = get_flag("--swap")?;
     if swap_key.len() != 0 {
@@ -235,6 +246,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         builder.set_change_target_flag();
     }
 
+    let boot0_path = get_flag("--boot0")?.first().cloned();
+    let boot1_path = get_flag("--boot1")?.first().cloned();
+
     // ---- now process the verb plus position dependent arguments ----
     let mut args = env::args();
     let task = args.nth(1);
@@ -280,12 +294,72 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         Some("libstd-net") => {
             builder.target_renode().add_services(&base_pkgs).add_services(&get_cratespecs());
-            builder.add_loader_feature("renode-bypass").add_loader_feature("renode-minimal");
+            builder.add_loader_feature("renode-bypass");
             builder
                 .add_service("net", LoaderRegion::Ram)
                 .add_service("com", LoaderRegion::Ram)
                 .add_service("llio", LoaderRegion::Ram)
                 .add_service("dns", LoaderRegion::Ram);
+            // `net` and `dns` pull the UX client stack (pddb/gam/modals) as
+            // unconditional lib deps, and those only compile with a board
+            // feature selected; the full-image builds get this from feature
+            // unification across the whole package set, but this minimal set
+            // has to ask for it explicitly. `net/renode-minimal` (in place of
+            // the connection manager) and `dns/minimal-testing` (in place of
+            // pddb-backed prefs) keep the runtime paths pddb-free.
+            builder
+                .add_feature("net/renode-minimal")
+                .add_feature("dns/minimal-testing")
+                .add_feature("pddb/renode")
+                .add_feature("gam/renode")
+                .add_feature("modals/renode");
+        }
+        Some("std-net-ci") => {
+            // The libstd-net image plus the on-target std::net test runner;
+            // see the libstd-net arm above for why the feature list is what
+            // it is.
+            builder.target_renode().add_services(&base_pkgs).add_services(&get_cratespecs());
+            builder.add_loader_feature("renode-bypass");
+            builder
+                .add_service("net", LoaderRegion::Ram)
+                .add_service("com", LoaderRegion::Ram)
+                .add_service("llio", LoaderRegion::Ram)
+                // net blocks in setup on `trng::Trng::new` (ephemeral ports,
+                // MAC fallback), and dns needs it for query ids; the Renode
+                // TRNG peripheral models back it in emulation.
+                .add_service("trng", LoaderRegion::Ram)
+                .add_service("dns", LoaderRegion::Ram)
+                .add_service("net-tests", LoaderRegion::Ram);
+            builder
+                .add_feature("net/renode-minimal")
+                .add_feature("dns/minimal-testing")
+                .add_feature("pddb/renode")
+                .add_feature("gam/renode")
+                .add_feature("modals/renode");
+        }
+        Some("std-net-cross-host-ci") => {
+            // Same image as std-net-ci, plus the cross-host test themes, built
+            // against a REAL DHCP peer (emulation/linux-server.resc) on the
+            // switch: `net/renode-peer` skips the renode-minimal static seed so
+            // the DUT takes a real lease, and `net-tests/cross-host` compiles in the
+            // cross-host themes that talk to the peer.
+            builder.target_renode().add_services(&base_pkgs).add_services(&get_cratespecs());
+            builder.add_loader_feature("renode-bypass");
+            builder
+                .add_service("net", LoaderRegion::Ram)
+                .add_service("com", LoaderRegion::Ram)
+                .add_service("llio", LoaderRegion::Ram)
+                .add_service("trng", LoaderRegion::Ram)
+                .add_service("dns", LoaderRegion::Ram)
+                .add_service("net-tests", LoaderRegion::Ram);
+            builder
+                .add_feature("net/renode-minimal")
+                .add_feature("net/renode-peer")
+                .add_feature("net-tests/cross-host")
+                .add_feature("dns/minimal-testing")
+                .add_feature("pddb/renode")
+                .add_feature("gam/renode")
+                .add_feature("modals/renode");
         }
         Some("renode-aes-test") => {
             builder.target_renode().add_services(&aes_test_pkgs).add_services(&get_cratespecs());
@@ -678,6 +752,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 (bao1x_api::BAREMETAL_START + sigblock_size + STATICS_LEN) as u32,
             )?;
             builder.set_baremetal(true).target_baremetal_bao1x("baremetal").set_sigblock_size(sigblock_size);
+            if env::args().filter(|x| x == "--thirdparty-test").count() != 0 {
+                builder.set_thirdparty_test(true);
+            }
         }
 
         Some("bao1x-baremetal-dabao") => {
@@ -691,6 +768,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 (bao1x_api::BAREMETAL_START + sigblock_size + STATICS_LEN) as u32,
             )?;
             builder.set_baremetal(true).target_baremetal_bao1x("baremetal").set_sigblock_size(sigblock_size);
+            if env::args().filter(|x| x == "--thirdparty-test").count() != 0 {
+                builder.set_thirdparty_test(true);
+            }
         }
 
         Some("bao1x-erasure-dabao") => {
@@ -743,6 +823,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .set_baremetal(true)
                 .target_baremetal_bao1x("bao1x-boot1")
                 .set_sigblock_size(sigblock_size);
+            if env::args().filter(|x| x == "--thirdparty-test").count() != 0 {
+                builder.set_thirdparty_test(true);
+            }
         }
 
         Some("bao1x-alt-boot1") => {
@@ -757,6 +840,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .set_baremetal(true)
                 .target_baremetal_bao1x("bao1x-alt-boot1")
                 .set_sigblock_size(sigblock_size);
+            if env::args().filter(|x| x == "--thirdparty-test").count() != 0 {
+                builder.set_thirdparty_test(true);
+            }
         }
 
         Some("bao1x-boot1-lite") => {
@@ -770,7 +856,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .set_baremetal(true)
                 .target_baremetal_bao1x("bao1x-boot1")
                 .add_loader_feature("oem-baosec-lite")
+                // todo: remove this after the update is published
+                // .add_loader_feature("fix-ifr")
                 .set_sigblock_size(sigblock_size);
+            if env::args().filter(|x| x == "--thirdparty-test").count() != 0 {
+                builder.set_thirdparty_test(true);
+            }
         }
 
         Some("bao1x-alt-boot1-lite") => {
@@ -786,6 +877,50 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .target_baremetal_bao1x("bao1x-alt-boot1")
                 .add_loader_feature("oem-baosec-lite")
                 .set_sigblock_size(sigblock_size);
+            if env::args().filter(|x| x == "--thirdparty-test").count() != 0 {
+                builder.set_thirdparty_test(true);
+            }
+        }
+
+        Some("bao1x-boot-updater-lite") => {
+            let board = "oem-baosec-lite";
+            builder.add_loader_feature(board);
+            let sigblock_size = bao1x_api::signatures::SIGBLOCK_LEN;
+            update_flash_origin(
+                "bao1x-boot/boot-updater/src/platform/bao1x/link.x",
+                (bao1x_api::BAREMETAL_START + sigblock_size + STATICS_LEN) as u32,
+            )?;
+            builder
+                .set_baremetal(true)
+                .target_baremetal_bao1x("boot-updater")
+                .set_sigblock_size(sigblock_size)
+                .add_loader_feature("boot0")
+                .add_loader_feature("oem-baosec-lite")
+                .is_updater(true, true);
+
+            if let Some(target) = &boot0_path {
+                builder.set_boot0(target.to_owned());
+            }
+            if let Some(target) = &boot1_path {
+                builder.set_boot1(target.to_owned());
+            }
+        }
+
+        Some("bao1x-boot-updater") => {
+            let sigblock_size = bao1x_api::signatures::SIGBLOCK_LEN;
+            update_flash_origin(
+                "bao1x-boot/boot-updater/src/platform/bao1x/link.x",
+                (bao1x_api::BAREMETAL_START + sigblock_size + STATICS_LEN) as u32,
+            )?;
+            builder
+                .set_baremetal(true)
+                .target_baremetal_bao1x("boot-updater")
+                .set_sigblock_size(sigblock_size)
+                .is_updater(true, true);
+
+            if let Some(target) = &boot1_path {
+                builder.set_boot1(target.to_owned());
+            }
         }
 
         Some("baosec") => {
@@ -923,6 +1058,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // at the UI layer but anyways - this avoids accidental duplicate processes which is a good thing
     // in general.
     builder.deduplicate_processes();
+
+    let print_boot0_warn = builder.uses_boot0_path() && boot0_path.is_none();
+    let print_boot1_warn = builder.uses_boot1_path() && boot1_path.is_none();
+    let third_party_test = builder.thirdparty_test();
+
     builder.build()?;
 
     // the intent of this call is to check that crates we are sourcing from crates.io
@@ -938,7 +1078,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // this has to be called after the build because the crates need to be downloaded for
     // checking before you can check them!
     let do_verify = env::args().filter(|x| x == "--no-verify").count() == 0;
-    if do_verify {
+    let result = if do_verify {
         match check_project_consistency() {
             Ok(()) => Ok(()),
             Err(e) => {
@@ -956,7 +1096,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     } else {
         Ok(())
+    };
+    if print_boot0_warn {
+        println!(
+            "\n**** WARNING: boot0 path defaults to dev build. This is not what you want for a production release ****\n"
+        );
     }
+    if print_boot1_warn {
+        println!(
+            "\n**** WARNING: boot1 path defaults to dev build. This is not what you want for a production release ****\n"
+        );
+    }
+    if third_party_test {
+        println!("\n**** WARNING: manifest contains fake third party keys ****\n");
+    }
+    result
 }
 
 fn print_help() {
@@ -978,6 +1132,10 @@ fn print_help() {
     [--change-target]
     [--git-describe version]
     [--git-rev commit]
+    [--boot0 <path-to-boot0>]
+    [--boot1 <path-to-boot1>]
+    [--thirdparty-test]
+    [--arb-override [value]]
 
 [cratespecs] is a list of 0 or more items of the following syntax:
    [name]                crate 'name' to be built from local source
@@ -1010,6 +1168,10 @@ be merged in with explicit app/service treatment with the following flags:
 [--no-pq]                Force PQ signing to be off (defaults to dev PQ key otherwise)
 [--pq-key <keyfile>]     Use this PQ key file instead of the dev key. Ignored if --no-pq specified.
 [--pq-cache <cache>]     Use this PQ cache file. If provided and valid, speeds up the PQ signing operation.
+[--boot0 <path>]         Updater builds: path to the boot0 binary image (defaults to a built-in path if omitted)
+[--boot1 <path>]         Updater builds: path to the boot1 binary image (defaults to a built-in path if omitted)
+[--thirdparty-test]      Populate the key block with 'fake' third party keys. Only valid with bao1x-boot1/alt-boot1/barmetal targets.
+[--arb-override [value]] Furnishes an anti-rollback counter override to a boot-series image being generated. Used for CI testing. Ignored for non-boot images.
 
 - An 'app' must be enumerated in apps/manifest.json.
    A pre-processor configures the launch menu based on the list of specified apps.
@@ -1054,6 +1216,8 @@ Renode emulation:
  libstd-test             Renode test image that includes the minimum packages. [cratespecs] are services
                          Bypasses sig checks, keys locked out.
  libstd-net              Renode test image for testing network functions. Bypasses sig checks, keys locked out.
+ std-net-ci              libstd-net image plus the net-tests runner (on-target std::net CI suite).
+ std-net-cross-host-ci        std-net-ci plus the cross-host themes (real DHCP peer on the switch).
  ffi-test                builds an image for testing C-FFI bindings and integration. [cratespecs] are services
  renode-aes-test         Renode image for AES emulation development. Extremely minimal.
 

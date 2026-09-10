@@ -41,6 +41,8 @@ impl MemoryMapping {
     ) -> Result<(), Error> {
         Ok(())
     }
+
+    pub fn unreserve_address(&self, _addr: usize) -> Result<(), Error> { Ok(()) }
 }
 
 /// Determine whether a virtual address has been mapped

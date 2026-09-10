@@ -150,6 +150,16 @@ impl SignatureInFlash {
         sig_struct
     }
 
+    pub unsafe fn manifest_appendix(&self) -> &SignatureAppendixInFlash {
+        let addr = self.as_ref().as_ptr() as usize + self.sealed_data_end();
+
+        // SAFETY: `addr` points to at least SIGNATURE_PQ_LENGTH readable, initialized
+        // bytes for the lifetime of this reference (backed by RRAM, not concurrently
+        // mutated). Alignment is satisfied since SignatureAppendixInFlash has an alignment of 1.
+        let sig_struct: &SignatureAppendixInFlash = unsafe { &*(addr as *const SignatureAppendixInFlash) };
+        sig_struct
+    }
+
     /// Offset for retrieving signature from off-chip memory implementations
     pub fn pq_signature_offset(&self) -> usize { self.sealed_data_end() }
 
@@ -180,6 +190,35 @@ impl AsMut<[u8]> for SignaturePqInFlash {
 }
 impl Default for SignaturePqInFlash {
     fn default() -> Self { Self { signature: [0u8; SIGNATURE_PQ_LENGTH] } }
+}
+
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub struct SignatureAppendixInFlash {
+    /// This is the PQ signature
+    pub pq_signature: [u8; SIGNATURE_PQ_LENGTH],
+    /// This is a classical signature that is only tested in case of third party manifest binding
+    pub manifest_sig: [u8; SIGNATURE_LENGTH],
+    pub manifest_aad: [u8; AAD_LENGTH],
+    pub manifest_aad_len: u32,
+}
+unsafe impl Zeroable for SignatureAppendixInFlash {}
+unsafe impl Pod for SignatureAppendixInFlash {}
+impl AsRef<[u8]> for SignatureAppendixInFlash {
+    fn as_ref(&self) -> &[u8] { bytemuck::bytes_of(self) }
+}
+impl AsMut<[u8]> for SignatureAppendixInFlash {
+    fn as_mut(&mut self) -> &mut [u8] { bytemuck::bytes_of_mut(self) }
+}
+impl Default for SignatureAppendixInFlash {
+    fn default() -> Self {
+        Self {
+            pq_signature: [0u8; SIGNATURE_PQ_LENGTH],
+            manifest_sig: [0u8; SIGNATURE_LENGTH],
+            manifest_aad: [0u8; AAD_LENGTH],
+            manifest_aad_len: 0,
+        }
+    }
 }
 
 #[repr(C)]

@@ -44,7 +44,7 @@ bao1x = [
     # needed for the boot logo
     "ux-api/loader-baosec",
 ]
-unsafe-debug = []
+unsafe-debug = ["print-ifr"]
 verbose-debug = ["bao1x-hal/debug-print-uart", "bao1x-hal/verbose-debug"]
 print-ifr = []
 
@@ -57,7 +57,15 @@ pq-check = []
 oem = []
 oem-baosec-lite = ["oem", "bao1x-hal/oem-baosec-lite"]
 
+# invokes the third party key provisioning path
+thirdparty = []
+
 qe-debug = ["verbose-debug", "bao1x-hal/debug-print-duart"]
+
+# various pocs for security issues
+pocs = []
+# check and fix IFR values - requires an unsafe setting from bao1x-hal
+fix-ifr = ["bao1x-hal/redteam"]
 
 verilator-only = []
 default = ["oem-baosec-lite"]

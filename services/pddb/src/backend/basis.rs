@@ -307,6 +307,9 @@ impl BasisCache {
     ///    - if `basis_name` is Some, searches for the given basis and adds the dictionary to that.
     /// If the dictionary already exists, it returns an informative error.
     pub(crate) fn dict_add(&mut self, hw: &mut PddbOs, name: &str, basis_name: Option<&str>) -> Result<()> {
+        // validate up front: a name that dict_sync would later reject must not be
+        // inserted into basis.dicts, where it would strand a phantom entry
+        DictName::try_from_str(name)?;
         if !hw.ensure_fast_space_alloc(2, &self.cache) {
             return Err(Error::new(ErrorKind::OutOfMemory, "No free space to allocate dict"));
         }

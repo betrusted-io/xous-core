@@ -34,6 +34,7 @@ const fn claim(name: &'static str, first: usize, count: usize) -> OwcClaim { Owc
 // derived from the `#[offset = N]` attribute. Editing that attribute alone is enough to trip
 // the overlap assertion below; there is no literal here to drift out of sync.
 pub const OWC_MAP: &[OwcClaim] = &[
+    <Boot1DeveloperState as OneWayEncoding>::CLAIM,
     <UsbDefaultSpeed as OneWayEncoding>::CLAIM,
     claim("REQUIRE_PQ", REQUIRE_PQ, 1),
     claim("PQ_LOADER_REVOCATION_DUPE", PQ_LOADER_REVOCATION_DUPE_OFFSET, PUBKEY_SLOTS),

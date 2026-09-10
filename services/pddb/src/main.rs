@@ -1464,7 +1464,11 @@ fn wrapped_main() -> ! {
                         if let Err(e) = result {
                             xous::return_scalar(msg.sender, e as usize)
                         } else {
-                            fd_mapping.remove(&msg.sender.pid());
+                            // prune the table only once every fd owned by this process is closed
+                            let fds = fd_mapping.entry(msg.sender.pid()).or_default();
+                            if fds.iter().all(|f| f.is_none()) {
+                                fd_mapping.remove(&msg.sender.pid());
+                            }
                             xous::return_scalar2(msg.sender, 0, 0)
                         }
                         .ok();

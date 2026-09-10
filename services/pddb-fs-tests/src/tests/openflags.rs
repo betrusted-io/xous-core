@@ -101,9 +101,8 @@ pub fn create_new_fails_on_existing() {
 
 /// `truncate(true)` on an existing file clears it before the subsequent write
 /// lands -- verified by content read-back (never by metadata: PFC-5 makes
-/// `metadata().len()` always 0, and separately the returned/open-time length
-/// this server keeps is stale pre-truncate -- see PFC-2 below -- but the
-/// *actual key bytes* are genuinely replaced, which is all a read-back checks).
+/// `metadata().len()` always 0, but the *actual key bytes* are genuinely
+/// replaced, which is all a read-back checks).
 pub fn truncate_flag_on_existing_clears_and_writes() {
     let tmp = TmpDict::new("truncate_existing");
     let path = tmp.path("f");
@@ -245,15 +244,14 @@ pub fn write_succeeds_through_read_only_handle() {
 
 /// `append(true).truncate(true)` together: upstream rejects this combination
 /// client-side ("invalid_options") before ever reaching the OS; xous performs
-/// no such validation and forwards both bits to the server. XFAIL PFC-2: in
-/// `open_key`, the pre-truncate key length is captured into `len` (~mod.rs
-/// L335-341) *before* the truncate branch physically empties the key
-/// (~L377-399), and `FileHandle.offset` is then seeded from that stale `len`
-/// because `append` is set (~L407). The follow-up write therefore lands at
-/// the old (pre-truncate) offset instead of 0, leaving the physically-emptied
-/// key's start zero-padded up to that stale offset -- POSIX-correct behavior
-/// (truncate empties the file, so a single subsequent write is the entire new
-/// content) is asserted here and is expected to fail until PFC-2 is fixed.
+/// no such validation and forwards both bits to the server. Fixed PFC-2:
+/// `open_key` used to capture the key length into `len` *before* the truncate
+/// branch physically emptied the key, and seeded `FileHandle.offset` from that
+/// stale `len` because `append` was set, landing the follow-up write at the
+/// old (pre-truncate) offset with zero-fill below it. The truncate branch now
+/// resets the snapshot after emptying the key, so the combo behaves like
+/// OS-level O_APPEND|O_TRUNC: truncate to empty, then a single subsequent
+/// write is the entire new content, as asserted here.
 pub fn append_and_truncate_together_stale_offset() {
     let tmp = TmpDict::new("append_and_truncate_together");
     let path = tmp.path("f");
@@ -362,7 +360,4 @@ pub const TESTS: &[(&str, fn())] = &[
     ("openflags::double_create_truncates_each_time", double_create_truncates_each_time as fn()),
 ];
 
-pub const XFAILS: &[(&str, &str)] = &[
-    ("openflags::append_and_truncate_together_stale_offset", "PFC-2"),
-    ("openflags::create_new_creates_missing", "PFC-10"),
-];
+pub const XFAILS: &[(&str, &str)] = &[("openflags::create_new_creates_missing", "PFC-10")];

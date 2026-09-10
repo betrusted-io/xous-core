@@ -400,6 +400,7 @@ pub fn start_time_server() {
                             log::warn!(
                                 "Time was negative, recovering from time setting error by clearing utc offset to 0"
                             );
+                            #[cfg(not(feature = "minimal-testing"))]
                             prefs.set_utc_offset(0).ok();
                             utc_offset_ms = 0;
                         }
@@ -425,7 +426,9 @@ pub fn start_time_server() {
                             log::warn!(
                                 "Time was negative, recovering from time setting error by clearing utc and timezone offsets to 0."
                             );
+                            #[cfg(not(feature = "minimal-testing"))]
                             prefs.set_utc_offset(0).ok();
+                            #[cfg(not(feature = "minimal-testing"))]
                             prefs.set_timezone_offset(0).ok();
                             utc_offset_ms = 0;
                             tz_offset_ms = 0;

@@ -20,6 +20,7 @@ slh-dsa = { path = "../../bao1x-boot/slh-dsa-bao1x", features = [
     "tree-cache",
     "parallel",
 ] }
+ed25519-dalek = { version = "2.1", features = ["digest"] }
 
 # For Windows USB support
 [target.'cfg(windows)'.dependencies]

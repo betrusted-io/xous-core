@@ -2,6 +2,7 @@ extern crate alloc;
 use alloc::string::String;
 use alloc::vec::Vec;
 
+use bao1x_api::HardenedBool;
 use bao1x_api::PQ_REVOCATION_DUPE_DISTANCE;
 use bao1x_api::REQUIRE_PQ;
 use bao1x_api::REQUIRE_PQ_DUPE;
@@ -56,6 +57,12 @@ use crate::udma::Spim;
 ///
 /// `csprng`, when Some, allows the image validator to insert random delays to harden against glitch attacks
 ///
+/// `audit`, when TRUE, skips modifying the anti-rollback counter. This is because the validate_image()
+///     routine can also be used to check an image in an update before it is applied, and the ARB should
+///     not be incremented before application. This does introduce a possible ARB-increment bypass vector,
+///     however as a glitch target I think it's relatively inherently hardened because missing the glitch
+///     even once still causes the ARB counter to be advanced during the normal boot path.
+///
 /// Returns either Ok(key_index, !key_index, tag, jump_target, pq_advisory) or Err
 ///   - `key_index` is returned twice, once as the compliment of itself, to harden the return value and to
 ///     facilitate hardened logic based on the return values.
@@ -74,6 +81,7 @@ pub fn validate_image(
     configuration: SecurityConfiguration,
     mut spim: Option<&mut Spim>,
     mut csprng: Option<&mut Csprng>,
+    audit: HardenedBool,
 ) -> Result<(usize, usize, [u8; 4], u32, Option<[u8; 4]>), String> {
     // Unpack the arguments
     let img_offset: *const u32 = configuration.image_ptr;
@@ -172,7 +180,9 @@ pub fn validate_image(
             // ASSUME: the SPIM driver has allocated a read buffer that is actually PAGE_SIZE. If the SPIM
             // driver has a smaller buffer, reads get less efficient.
             let end = img_offset as usize + UNSIGNED_LEN + signed_len as usize;
-            assert!(end <= bao1x_api::offsets::baosec::SPI_FLASH_LEN);
+            if end > bao1x_api::offsets::baosec::SPI_FLASH_LEN {
+                return Err(String::from("SPIM image length out of range"));
+            }
             for offset in ((img_offset as usize + UNSIGNED_LEN)..end).step_by(PAGE_SIZE) {
                 let mut buf = [0u8; PAGE_SIZE];
                 spim.mem_read(offset as u32, &mut buf, false);
@@ -182,11 +192,11 @@ pub fn validate_image(
         } else {
             // sanity check the purported length of the image. It can't be any bigger than the available
             // storage in RRAM.
-            assert!(
-                (signed_len as usize)
-                    <= bao1x_api::RRAM_STORAGE_LEN
-                        - ((img_offset as usize - utralib::HW_RERAM_MEM) + UNSIGNED_LEN)
-            );
+            if (signed_len as usize)
+                > bao1x_api::RRAM_STORAGE_LEN - ((img_offset as usize - utralib::HW_RERAM_MEM) + UNSIGNED_LEN)
+            {
+                return Err(String::from("Image length out of range"));
+            }
             let image: &[u8] = unsafe {
                 core::slice::from_raw_parts(
                     (img_offset as usize + UNSIGNED_LEN) as *const u8,
@@ -233,8 +243,14 @@ pub fn validate_image(
             // crate::println!("hashed hash: {:x?}", hashed_hash.as_slice());
 
             let mut msg: Vec<u8> = Vec::new();
-            assert!((sig.aad_len as usize) <= sig.aad.len());
+            if sig.aad_len as usize > sig.aad.len() {
+                return Err(String::from("aad_len out of range"));
+            }
             msg.extend_from_slice(&sig.aad[..sig.aad_len as usize]);
+            // reduce hiding places for incorrect data
+            if sig.aad[sig.aad_len as usize..].iter().any(|&x| x != 0) {
+                return Err(String::from("aad padding not zero"));
+            }
             msg.extend_from_slice(hashed_hash.as_slice());
             // crate::println!("assembled msg({}): {:x?}", msg.len(), msg);
 
@@ -265,44 +281,6 @@ pub fn validate_image(
     if let Some(valid_key2) = passing_key2 {
         csprng.as_deref_mut().map(|rng| rng.random_delay());
         if let Some(valid_key) = passing_key {
-            // Check anti-rollback only after we have confirmed a signature to mitigate the
-            // possibility of wear-out attacks by unsigned images that set the anti-rollback
-            // field to a high number
-            let claimed_function: FunctionCode =
-                sig.sealed_data.function_code.try_into().unwrap_or(FunctionCode::Invalid);
-            let arb_offset = claimed_function.to_anti_rollback_counter();
-            match arb_offset {
-                Some(arb) => {
-                    let arb_value = one_way_counters.get(arb).expect("Can't read anti-rollback value");
-                    csprng.as_deref_mut().map(|rng| rng.random_delay());
-                    bollard!(die_no_std, 4);
-                    if arb_value > sig.sealed_data.anti_rollback {
-                        let mut err_msg = String::from("Anti-rollback code too old, refusing image: ");
-                        use alloc::string::ToString;
-                        err_msg.push_str(&arb_value.to_string());
-                        return Err(err_msg);
-                    }
-                    bollard!(die_no_std, 4);
-                    if arb_value < sig.sealed_data.anti_rollback {
-                        csprng.as_deref_mut().map(|rng| rng.random_delay());
-                        if sig.sealed_data.anti_rollback >= crate::acram::ONEWAY_MAX_VALUE {
-                            return Err(String::from("Proposed anti-rollback value out of range"));
-                        }
-                        // enforce a maximum "reasonable" increment - just as belt-and-suspenders
-                        assert!(sig.sealed_data.anti_rollback - arb_value < crate::acram::ONEWAY_MAX_DELTA);
-                        // increment anti-rollback counter to match the current value of the signed image
-                        bollard!(die_no_std, 4);
-                        while one_way_counters.get(arb).unwrap() < sig.sealed_data.anti_rollback {
-                            bollard!(die_no_std, 4);
-                            // safety: anti-rollback counter argument is from a set of constants in bao1x_api
-                            // that are pre-validated.
-                            unsafe { one_way_counters.inc(arb).ok() };
-                        }
-                    }
-                }
-                _ => return Err(String::from("Invalid anti-rollback code, aborting")),
-            }
-
             // default to a hard-wired mask if for some reason we're called with no csprng. The primary
             // purpose of the mask is to force the Rust compiler to not optimize out the equality
             // check of the PQ signature result, by causing the mask to be XOR'd into the values deep inside
@@ -426,6 +404,67 @@ pub fn validate_image(
                 die_no_std();
             }
 
+            // Check anti-rollback only after we have confirmed a signature to mitigate the
+            // possibility of wear-out attacks by unsigned images that set the anti-rollback
+            // field to a high number
+            let claimed_function: FunctionCode =
+                sig.sealed_data.function_code.try_into().unwrap_or(FunctionCode::Invalid);
+            let arb_offset = claimed_function.to_anti_rollback_counter();
+            match arb_offset {
+                Some(arb) => {
+                    let arb_value = one_way_counters.get(arb).expect("Can't read anti-rollback value");
+                    csprng.as_deref_mut().map(|rng| rng.random_delay());
+                    bollard!(die_no_std, 4);
+                    if arb_value > sig.sealed_data.anti_rollback {
+                        let mut err_msg = String::from("Anti-rollback code too old, refusing image: ");
+                        use alloc::string::ToString;
+                        err_msg.push_str(&arb_value.to_string());
+                        return Err(err_msg);
+                    }
+                    bollard!(die_no_std, 4);
+                    // validate the audit flag
+                    csprng.as_deref_mut().map(|rng| rng.random_delay());
+                    if audit.is_true().is_none() {
+                        die_no_std();
+                    }
+                    if arb_value < sig.sealed_data.anti_rollback {
+                        bollard!(die_no_std, 4);
+                        csprng.as_deref_mut().map(|rng| rng.random_delay());
+                        if sig.sealed_data.anti_rollback >= crate::acram::ONEWAY_MAX_VALUE {
+                            return Err(String::from("Proposed anti-rollback value out of range"));
+                        }
+                        // enforce a maximum "reasonable" increment - just as belt-and-suspenders
+                        if sig.sealed_data.anti_rollback - arb_value >= crate::acram::ONEWAY_MAX_DELTA {
+                            return Err(String::from("Proposed anti-rollback increment out of range"));
+                        }
+                        // increment anti-rollback counter to match the current value of the signed
+                        // image
+                        bollard!(die_no_std, 4);
+                        csprng.as_deref_mut().map(|rng| rng.random_delay());
+                        // only side-effect the ARB if we are *not* doing an audit of a staged image.
+                        match audit.is_true() {
+                            None => die_no_std(),
+                            Some(false) => {
+                                while one_way_counters.get(arb).unwrap() < sig.sealed_data.anti_rollback {
+                                    bollard!(die_no_std, 4);
+                                    // safety: anti-rollback counter argument is from a set of constants in
+                                    // bao1x_api that are pre-validated.
+                                    unsafe { one_way_counters.inc(arb).ok() };
+                                }
+                            }
+                            Some(true) => {
+                                bollard!(die_no_std, 4);
+                                // doing an audit - do not advance the ARB. An attacker could glitch into this
+                                // state and skip the ARB increment, but they'd have to be able to repeatedly
+                                // do this reliably to totally avoid the ARB
+                                // increment over the life of the attack.
+                            }
+                        }
+                    }
+                }
+                _ => return Err(String::from("Invalid anti-rollback code, aborting")),
+            }
+
             // continue on to return classical signature
             bollard!(die_no_std, 4);
             assert!(valid_key != valid_key2);
@@ -436,19 +475,19 @@ pub fn validate_image(
             // by code structure sizes but de facto fixed to 0x400. This computation ensures these
             // two are consistent, so if in the future I tweak one value I should hit the assert and
             // remind myself to fix the others.
-            let header_len = SIGBLOCK_LEN + size_of::<StaticsInRom>();
-            assert!(header_len == 0x400, "header size is inconsistent");
+            const HEADER_LEN: usize = SIGBLOCK_LEN + size_of::<StaticsInRom>();
+            const _: () = assert!(HEADER_LEN == 0x400, "header size is inconsistent");
             Ok((
                 valid_key,
                 valid_key2,
                 pk_src.sealed_data.pubkeys[valid_key].tag,
-                // add header_len to the jump offset - so that the jump target is inside the signed
+                // add HEADER_LEN to the jump offset - so that the jump target is inside the signed
                 // region. This addition does not affect boot0 because the jump target is fixed to always
                 // be at the unsigned trampoline instruction. Boot0's first instruction is OK to be
                 // unsigned because it is assumed that boot0 is trusted code. Mutability of boot0 is
                 // fatal to the security assumptions of the chip. `img_offset` is a compile-time constant
                 // and therefore not attacker controlled.
-                ((img_offset as usize + header_len) as u32)
+                ((img_offset as usize + HEADER_LEN) as u32)
                     ^ u32::from_le_bytes(pk_src.sealed_data.pubkeys[valid_key].tag),
                 if verdict == PQ_MATCH { Some(pq_tag) } else { None },
             ))
@@ -535,6 +574,8 @@ pub fn pq_checks(
         // extract sig_data which should be appended directly to the end of the image in FLASH.
         let mut sig_data = [0u8; <Sha2_128_24 as SignatureLen>::SigLen::USIZE];
         spim.mem_read(end as u32, &mut sig_data, false);
+        // manifest appendix is never used in checking swap signatures - it is only needed to check
+        // binding of boot1 to its new signature, so we just "fake it" with 0-data here.
         &SignaturePqInFlash { signature: sig_data }
     } else {
         // sanity check the purported length of the image. It can't be any bigger than the available
@@ -641,34 +682,39 @@ pub fn erase_collateral(csprng: &mut Option<&mut Csprng>) -> Result<(), String> 
     let slot_mgr = SlotManager::new();
     let mut rram = crate::rram::Reram::new();
 
-    let slot = &bao1x_api::offsets::COLLATERAL;
+    let full_slot = &bao1x_api::offsets::COLLATERAL_ERASURE_ALIAS;
+    let check_slot = &bao1x_api::offsets::COLLATERAL_PUBLIC;
     bollard!(die_no_std, 4);
     csprng.as_deref_mut().map(|rng| rng.random_delay());
-    // only clear ACL if it isn't already cleared
-    if slot_mgr
-        .get_acl(slot)
-        .unwrap_or(AccessSettings::Data(DataSlotAccess::new_with_raw_value(0xFFFF_FFFF)))
-        .raw_u32()
-        != 0
-    {
-        // clear the ACL so we can operate on the data
-        // Don't panic on failure: the panic can be used as a primitive to prevent
-        // further erasure.
-        slot_mgr.set_acl(&mut rram, slot, &AccessSettings::Data(DataSlotAccess::new_with_raw_value(0))).ok();
-    }
-    let bytes = unsafe { slot_mgr.read_unchecked(slot) };
+
+    let bytes = unsafe { slot_mgr.read_unchecked(check_slot) };
     // only erase if the key hasn't already been erased, to avoid stressing the RRAM array
     // erase_secrets() may be called on every boot in some modes.
     bollard!(die_no_std, 4);
     if !bytes.iter().all(|&b| b == ERASE_VALUE) {
-        let mut eraser = alloc::vec::Vec::with_capacity(slot.len() * SLOT_ELEMENT_LEN_BYTES);
-        eraser.resize(slot.len() * SLOT_ELEMENT_LEN_BYTES, ERASE_VALUE);
+        // only clear ACL if it isn't already cleared
+        if slot_mgr
+            .get_acl(full_slot)
+            .unwrap_or(AccessSettings::Data(DataSlotAccess::new_with_raw_value(0xFFFF_FFFF)))
+            .raw_u32()
+            != 0
+        {
+            // clear the ACL so we can operate on the data
+            // Don't panic on failure: the panic can be used as a primitive to prevent
+            // further erasure.
+            slot_mgr
+                .set_acl(&mut rram, full_slot, &AccessSettings::Data(DataSlotAccess::new_with_raw_value(0)))
+                .ok();
+        }
 
-        slot_mgr.write(&mut rram, slot, &eraser).ok();
+        let mut eraser = alloc::vec::Vec::with_capacity(full_slot.len() * SLOT_ELEMENT_LEN_BYTES);
+        eraser.resize(full_slot.len() * SLOT_ELEMENT_LEN_BYTES, ERASE_VALUE);
+
+        slot_mgr.write(&mut rram, full_slot, &eraser).ok();
     }
-    let check = unsafe { slot_mgr.read_unchecked(slot) };
+    let check = unsafe { slot_mgr.read_unchecked(check_slot) };
     if !check.iter().all(|&b| b == ERASE_VALUE) {
-        crate::println!("Failed to erase key at {:?}: {:x?}", slot, check);
+        crate::println!("Failed to erase key at {:?}: {:x?}", check_slot, check);
     }
     bollard!(die_no_std, 4);
     Ok(())
@@ -1029,4 +1075,63 @@ pub fn die_no_std() -> ! {
             options(noreturn)
         );
     }
+}
+
+#[cfg(not(feature = "std"))]
+pub fn check_counter_sig(block_start: usize, mut csprng: &mut Option<&mut Csprng>) -> HardenedBool {
+    use bao1x_api::signatures::*;
+    use digest::Digest;
+    use ed25519_dalek::{Signature, VerifyingKey};
+
+    use crate::hardening::die;
+
+    // safety: caller passes a validated image base
+    let sig_block = unsafe { &*(block_start as *const SignatureInFlash) };
+    let pq_block = unsafe { sig_block.manifest_appendix() };
+
+    let aad_len = pq_block.manifest_aad_len as usize;
+    if aad_len > AAD_LENGTH {
+        return HardenedBool::FALSE;
+    }
+    // same discipline as validate_image: no hiding places in the padding
+    if pq_block.manifest_aad[aad_len..].iter().any(|&b| b != 0) {
+        return HardenedBool::FALSE;
+    }
+
+    // message = aad || sha256(classic signature)
+    for (i, pk) in sig_block.sealed_data.pubkeys[..].iter().enumerate() {
+        csprng.as_deref_mut().map(|rng| rng.random_delay());
+        let ed_sig = Signature::from_bytes(&pq_block.manifest_sig);
+        let Ok(vk) = VerifyingKey::from_bytes(&pk.pk) else { continue };
+        bollard!(die, 4);
+        if aad_len == 0 {
+            let mut h = Sha512::new();
+            h.update(&sig_block.signature);
+            if vk.verify_prehashed(h, None, &ed_sig).is_ok() {
+                if i == DEVELOPER_KEY_SLOT {
+                    // allow boot, but erase collateral
+                    erase_collateral(&mut csprng).ok();
+                }
+                return HardenedBool::TRUE;
+            }
+        } else {
+            let mut h = Sha256::new();
+            h.update(&sig_block.signature);
+            let digest = h.finalize();
+
+            let mut msg = [0u8; AAD_LENGTH + 32];
+            msg[..aad_len].copy_from_slice(&pq_block.manifest_aad[..aad_len]);
+            msg[aad_len..aad_len + 32].copy_from_slice(digest.as_slice());
+            let msg = &msg[..aad_len + 32];
+
+            if vk.verify_strict(msg, &ed_sig).is_ok() {
+                if i == DEVELOPER_KEY_SLOT {
+                    // allow boot, but erase collateral
+                    erase_collateral(&mut csprng).ok();
+                }
+                return HardenedBool::TRUE;
+            }
+        }
+    }
+    HardenedBool::FALSE
 }
