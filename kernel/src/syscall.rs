@@ -1432,6 +1432,13 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
                                 for process in &system_services.processes {
                                     if !process.free() {
                                         process.activate().unwrap();
+
+                                        // Uncommenting this will cause all pages to dump to DUART. This can
+                                        // take several seconds and freeze the system while this happens,
+                                        // but it's a useful trick for debugging.
+                                        //
+                                        // crate::arch::mem::MemoryMapping::current().print_map();
+
                                         let mut connection_count = 0;
                                         ArchProcess::with_inner(|process_inner| {
                                             for conn in &process_inner.connection_map {
