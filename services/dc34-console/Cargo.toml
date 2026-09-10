@@ -94,6 +94,10 @@ hazardous-test = []
 # turns on USB console input by default - this is hazardous for release, but required for CI
 hazardous-usb-ci = []
 
+# small set of tests to aggravate some edge cases that we couldn't patch up in time for
+# the conference. Now fixed, but retaining the tests for a while in case I need to run these again.
+pddb-test = []
+
 # these flags are for factory only builds
 # owc-inc is necessary because we use a OWC to disable the factory cheat routine after run-once.
 factory-mismatch = ["keystore/owc-inc"]

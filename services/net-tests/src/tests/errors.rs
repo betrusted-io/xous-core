@@ -185,7 +185,8 @@ pub fn udp_nonblocking_recv_wouldblock() {
 
 /// A nonblocking write with both socket buffers full (~3060 B) must return
 /// WouldBlock; it parks forever instead.
-/// XFAIL: StdTcpTx carries no nonblocking flag, so the full-buffer tx parks in tcp_tx_waiting with no expiry, services/net/src/main.rs.
+/// XFAIL: StdTcpTx carries no nonblocking flag, so the full-buffer tx parks in tcp_tx_waiting with no expiry,
+/// services/net/src/main.rs.
 pub fn tcp_nonblocking_write_wouldblock() {
     let addr = SocketAddr::new(LOOPBACK, next_port());
     let listener = check!(TcpListener::bind(addr));
@@ -274,7 +275,8 @@ pub fn tcp_write_after_shutdown_write_errs() {
 
 /// shutdown(Read) through a clone wakes a read blocked on the same socket and
 /// makes it return Ok(0) (EOF); the woken read returns Err(Other) instead.
-/// XFAIL: the wake sets body.valid but never body.offset, so the rx decode takes the error path, services/net/src/main.rs.
+/// XFAIL: the wake sets body.valid but never body.offset, so the rx decode takes the error path,
+/// services/net/src/main.rs.
 pub fn tcp_shutdown_read_wakes_blocked_read() {
     let addr = SocketAddr::new(LOOPBACK, next_port());
     let listener = check!(TcpListener::bind(addr));

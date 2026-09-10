@@ -8,26 +8,26 @@
 //! fn carries a doc stating the symptom, mechanism, and suspected code site.
 //!
 //! xous/net rules that trip up std::net habits:
-//! - Port isolation: allocate every port through `harness::next_port` and
-//!   never reuse one — the server has no SO_REUSEADDR and leaked blocked
-//!   threads keep old ports bound (a re-bind fails with SocketInUse).
-//! - HANG HAZARD: blocking calls a known bug can park forever go through
-//!   `harness::bounded`, which converts a hang into a deterministic panic.
-//! - CLOSE HAZARD: dropping a TCP socket issues a blocking close that can hang
-//!   forever, so never drop TCP sockets on the test thread — release them with
-//!   `harness::discard` (UDP drops are synchronous and safe inline). Inside a
-//!   `bounded` worker, return sockets to the test thread with the result and
-//!   discard there, in collect-discard-assert order.
-//! - A loop of >~10 socket ops must `log::info!` every ~5 iterations, or the
-//!   driver's inactivity reaper treats console silence as a dead server.
+//! - Port isolation: allocate every port through `harness::next_port` and never reuse one — the server has no
+//!   SO_REUSEADDR and leaked blocked threads keep old ports bound (a re-bind fails with SocketInUse).
+//! - HANG HAZARD: blocking calls a known bug can park forever go through `harness::bounded`, which converts a
+//!   hang into a deterministic panic.
+//! - CLOSE HAZARD: dropping a TCP socket issues a blocking close that can hang forever, so never drop TCP
+//!   sockets on the test thread — release them with `harness::discard` (UDP drops are synchronous and safe
+//!   inline). Inside a `bounded` worker, return sockets to the test thread with the result and discard there,
+//!   in collect-discard-assert order.
+//! - A loop of >~10 socket ops must `log::info!` every ~5 iterations, or the driver's inactivity reaper
+//!   treats console silence as a dead server.
 //! - Deterministic data only: `harness::XorShift`, never the `rand` crate.
-//! - Never call `NetManager` wifi-stats/SSID-list APIs: under renode-minimal
-//!   the connection manager thread is not spawned and those requests hang.
+//! - Never call `NetManager` wifi-stats/SSID-list APIs: under renode-minimal the connection manager thread is
+//!   not spawned and those requests hang.
 
 // the loopback suite and cross-host (cross-host) are mutually exclusive suites; each
 // image compiles only its own themes so the other's tests don't warn as unused.
 #[cfg(not(feature = "cross-host"))]
 pub mod concur;
+#[cfg(feature = "cross-host")]
+pub mod cross_host;
 #[cfg(not(feature = "cross-host"))]
 pub mod dns;
 #[cfg(not(feature = "cross-host"))]
@@ -38,8 +38,6 @@ pub mod smoke;
 pub mod sockopts;
 #[cfg(not(feature = "cross-host"))]
 pub mod tcp;
-#[cfg(feature = "cross-host")]
-pub mod cross_host;
 #[cfg(not(feature = "cross-host"))]
 pub mod timeouts;
 #[cfg(not(feature = "cross-host"))]
