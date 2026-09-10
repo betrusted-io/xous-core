@@ -1,5 +1,6 @@
 use alloc::vec::Vec;
 use core::convert::TryFrom;
+
 use digest::Digest;
 use sha2_bao1x::Sha256;
 
@@ -74,9 +75,7 @@ impl<const N: usize> ShiftXor<N> {
         }
     }
 
-    pub fn key(&self) -> &[u8] {
-        &self.key_block
-    }
+    pub fn key(&self) -> &[u8] { &self.key_block }
 }
 
 #[cfg(test)]

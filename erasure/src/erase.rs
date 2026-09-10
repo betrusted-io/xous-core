@@ -1,13 +1,13 @@
 use alloc::boxed::Box;
 use alloc::vec;
 use alloc::vec::Vec;
-use bao1x_hal::rram::Reram;
 use core::convert::TryFrom;
 
-mod shiftxor;
-use crate::erase::shiftxor::ShiftXor;
+use bao1x_hal::rram::Reram;
 
+mod shiftxor;
 use crate::SerialInteract;
+use crate::erase::shiftxor::ShiftXor;
 
 /// Represents a contiguous block of memory to overwrite or read back.
 trait MemRegion {
@@ -22,14 +22,10 @@ trait MemRegion {
     fn advance(&mut self, nbytes: usize) -> Result<(), xous::Error>;
 
     /// Total size of the region in bytes.
-    fn len(&self) -> usize {
-        (self.end() - self.start()) as usize
-    }
+    fn len(&self) -> usize { (self.end() - self.start()) as usize }
     /// Returns a slice representing the region. The caller must ensure no one else owns this region
     /// for the duration of the slice's lifetime.
-    unsafe fn as_slice(&self) -> &[u8] {
-        core::slice::from_raw_parts(self.start() as *const u8, self.len())
-    }
+    unsafe fn as_slice(&self) -> &[u8] { core::slice::from_raw_parts(self.start() as *const u8, self.len()) }
 }
 
 struct GenericMemRegion {
@@ -44,13 +40,9 @@ impl GenericMemRegion {
 }
 
 impl MemRegion for GenericMemRegion {
-    fn start(&self) -> u32 {
-        self.start
-    }
+    fn start(&self) -> u32 { self.start }
 
-    fn end(&self) -> u32 {
-        self.end
-    }
+    fn end(&self) -> u32 { self.end }
 
     fn write_slice(&self, data: &[u8]) -> Result<(), xous::Error> {
         if data.len() > self.len() {
@@ -111,13 +103,9 @@ impl ReramRegion {
 }
 
 impl MemRegion for ReramRegion {
-    fn start(&self) -> u32 {
-        self.start
-    }
+    fn start(&self) -> u32 { self.start }
 
-    fn end(&self) -> u32 {
-        self.end
-    }
+    fn end(&self) -> u32 { self.end }
 
     fn write_slice(&self, data: &[u8]) -> Result<(), xous::Error> {
         if data.len() > self.len() {
@@ -141,9 +129,7 @@ impl MemRegion for ReramRegion {
         }
     }
 
-    unsafe fn as_slice(&self) -> &[u8] {
-        core::slice::from_raw_parts(self.start as *const u8, self.len())
-    }
+    unsafe fn as_slice(&self) -> &[u8] { core::slice::from_raw_parts(self.start as *const u8, self.len()) }
 }
 
 /// Traverses through multiple non-contiguous memory blocks.
@@ -154,7 +140,7 @@ struct MemoryTraversal {
 }
 
 macro_rules! mem {
-    ( $start: ident, $len: ident ) => {
+    ($start:ident, $len:ident) => {
         GenericMemRegion::new(utralib::generated::$start, utralib::generated::$len)
     };
 }
@@ -175,9 +161,7 @@ impl MemoryTraversal {
     }
 
     /// Creates an empty erasure representing no memory.
-    pub fn empty() -> Self {
-        MemoryTraversal { idx: 0, blocks: Vec::new() }
-    }
+    pub fn empty() -> Self { MemoryTraversal { idx: 0, blocks: Vec::new() } }
 
     fn len(&self) -> usize {
         let mut total = 0;
@@ -187,9 +171,7 @@ impl MemoryTraversal {
         return total;
     }
 
-    fn peek(&self) -> u32 {
-        self.blocks[self.idx].start()
-    }
+    fn peek(&self) -> u32 { self.blocks[self.idx].start() }
 
     fn advance_block(&mut self) -> Result<(), xous::Error> {
         if self.idx < self.blocks.len() - 1 {
@@ -213,9 +195,7 @@ impl MemoryTraversal {
         }
     }
 
-    fn all_blocks(&self) -> &[Box<dyn MemRegion>] {
-        return &self.blocks;
-    }
+    fn all_blocks(&self) -> &[Box<dyn MemRegion>] { return &self.blocks; }
 }
 
 pub struct Erasure {
@@ -232,19 +212,13 @@ impl Erasure {
     }
 
     /// Creates an empty erasure representing no memory.
-    pub fn empty() -> Self {
-        Erasure { traversal: MemoryTraversal::empty(), bytes_written: 0 }
-    }
+    pub fn empty() -> Self { Erasure { traversal: MemoryTraversal::empty(), bytes_written: 0 } }
 
     /// Remaining length to fill.
-    pub fn len(&self) -> usize {
-        self.traversal.len()
-    }
+    pub fn len(&self) -> usize { self.traversal.len() }
 
     /// Next address to fill.
-    pub fn peek(&self) -> u32 {
-        self.traversal.peek()
-    }
+    pub fn peek(&self) -> u32 { self.traversal.peek() }
 
     pub fn write_slice(&mut self, data: &[u8]) {
         self.traversal.write_slice(data).unwrap();
@@ -291,15 +265,13 @@ enum State {
 /// a repl-like interface.
 ///
 /// The expected interaction is:
-/// 1. Host sends:
-///    1a. 4 bytes indicating requested ack frequency in bytes.
-///    1b. 4 bytes indicating the rram offset to start erasure from.
-/// 2. Device sends 4 bytes indicating error code (0 = no error).
-///    2a. If there was an error, the protocol does not continue.
+/// 1. Host sends: 1a. 4 bytes indicating requested ack frequency in bytes. 1b. 4 bytes indicating the rram
+///    offset to start erasure from.
+/// 2. Device sends 4 bytes indicating error code (0 = no error). 2a. If there was an error, the protocol does
+///    not continue.
 /// 3. Device sends 4 bytes indicating requested total byte length.
-/// 4. Repeat until total byte length is reached:
-///    3a. Host sends <ack frequency> bytes, or remaining bytes if less.
-///    3b. Device sends 4 bytes, encoding the total bytes received so far.
+/// 4. Repeat until total byte length is reached: 3a. Host sends <ack frequency> bytes, or remaining bytes if
+///    less. 3b. Device sends 4 bytes, encoding the total bytes received so far.
 /// 5. Host sends the key and seed blocks.
 /// 6. Device sends the recovered key.
 ///
@@ -320,13 +292,12 @@ pub struct OneShotErasure {
 }
 
 impl OneShotErasure {
+    const KEY_BYTES: usize = 16;
+    // Sizes of seed and key block.
+    const SEED_BYTES: usize = 16;
     // Determines how often we actually write the data. Buffering more data causes more stack usage;
     // buffering less incurs more overhead and internal buffering in the erase procedure.
     const WRITE_INTERVAL: usize = 256;
-
-    // Sizes of seed and key block.
-    const SEED_BYTES: usize = 16;
-    const KEY_BYTES: usize = 16;
 
     pub fn new() -> Self {
         Self {
