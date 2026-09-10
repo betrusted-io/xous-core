@@ -99,6 +99,34 @@ Inject Keys With Echo
         Wait For Line On Uart    injecting key    timeout=10
     END
 
+Inject Arrow Once
+    [Arguments]               ${letter}    ${code}
+    Inject Keys               sysbus.keyboard WriteDoubleWord 0x0 0x1b
+    ...                       sysbus.keyboard WriteDoubleWord 0x0 0x5b
+    ...                       sysbus.keyboard WriteDoubleWord 0x0 ${letter}
+    Wait For Line On Uart     injecting key .*\\(${code}\\)    timeout=10    treatAsRegex=true
+
+Inject Arrow
+    [Documentation]           Queue ESC [ <letter> in the keyboard model
+    ...                       (UART_CHAR register writes) and wait for the
+    ...                       keyboard service's echo of the parsed arrow,
+    ...                       with one retry.
+    [Arguments]               ${letter}    ${code}
+    ${ok}=                    Run Keyword And Return Status
+    ...                       Inject Arrow Once    ${letter}    ${code}
+    IF    not ${ok}
+        Log                   no arrow echo; re-injecting once    WARN
+        Inject Arrow Once     ${letter}    ${code}
+    END
+
+Answer Format Prompt With Okay
+    [Documentation]           Radio [Okay, Cancel], cursor on the item row,
+    ...                       Okay preselected: Down x2 to the OK row, CR.
+    Sleep                     ${FOCUS_DELAY}
+    Inject Arrow              0x42    2193
+    Inject Arrow              0x42    2193
+    Inject Keys With Echo     sysbus.keyboard InjectLine ""
+
 *** Test Cases ***
 Boot Format And Run PDDB FS Tests
     Prepare Fresh Flash
@@ -119,13 +147,12 @@ Boot Format And Run PDDB FS Tests
     Wait For Line On Uart     status: starting main loop    timeout=${BOOT_TIMEOUT}
     Wait For Line On Uart     Requesting login password    timeout=${BOOT_TIMEOUT}
 
-    # Format prompt: radio [Okay, Cancel] with the cursor on the item row.
-    # Down x2 reaches the OK row (CR on the item row only sets the payload),
-    # then CR submits. Arrows must go through the scan matrix, not ESC bytes.
+    # Format prompt: the arrows go through the keyboard model's inject queue
+    # as ESC [ B, which the keyboard service echoes per key. Scan-matrix
+    # Press/Release leaves no echo and is lost when the release lands before
+    # the interrupt handler has read the matrix.
     Wait For Line On Uart     _|TT|_PDDB.REQFMT,_|TE|_    timeout=${BOOT_TIMEOUT}
-    Inject Keys With Echo     sysbus.keyboard Press Down    sysbus.keyboard Release Down
-    ...                       sysbus.keyboard Press Down    sysbus.keyboard Release Down
-    ...                       sysbus.keyboard InjectLine ""
+    Answer Format Prompt With Okay
 
     # PIN entry #1
     Wait For Line On Uart     _|TT|_ROOTKEY.BOOTPW,_|TE|_    timeout=${BOOT_TIMEOUT}
