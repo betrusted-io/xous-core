@@ -267,6 +267,7 @@ impl Keystore {
     }
 
     /// Automatically increments the correct slot based on the OFFSET encoded in the definition
+    #[cfg(feature = "bao1x")]
     pub fn inc_owc_coded<T>(&self) -> Result<(), OneWayErr>
     where
         T: OneWayEncoding,
