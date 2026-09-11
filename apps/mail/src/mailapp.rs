@@ -487,6 +487,22 @@ fn strip_html(input: &str) -> String {
             Some(gt) => {
                 if tag_breaks_line(&after[1..gt]) {
                     out.push('\n');
+                } else {
+                    // Inline tag: normally contributes nothing. But when it
+                    // sits *directly* between two word characters -- with no
+                    // whitespace on either side, as in minified HTML like
+                    // `<span>Buy</span><span>Now</span>` or `word<a>x</a>word`
+                    // -- dropping it fuses the words ("BuyNow"). Emit a single
+                    // space in exactly that case so the words stay separate.
+                    // Guarded to *both* sides being alphanumeric so we don't
+                    // inject spurious spaces around styled punctuation/prices
+                    // (`$<b>50</b>.00` stays `$50.00`, `<b>x</b>:` stays `x:`).
+                    let next = after[gt + 1..].chars().next();
+                    if out.chars().next_back().is_some_and(|c| c.is_alphanumeric())
+                        && next.is_some_and(|c| c.is_alphanumeric())
+                    {
+                        out.push(' ');
+                    }
                 }
                 rest = &after[gt + 1..];
             }
