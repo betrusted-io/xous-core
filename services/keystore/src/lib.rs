@@ -1,4 +1,4 @@
-use bao1x_api::{BackupFlags, OneWayEncoding, OneWayErr};
+use bao1x_api::{APP_OWC_BEGIN, BackupFlags, OneWayEncoding, OneWayErr};
 pub use cipher::{
     BlockBackend, BlockCipher, BlockClosure, BlockDecrypt, BlockEncrypt, BlockSizeUser, ParBlocksSizeUser,
     consts::U16, generic_array::GenericArray, inout::InOut,
@@ -239,8 +239,11 @@ impl Keystore {
     /// fit into the `encode_oneway` mechanism, e.g. key revocations, etc.
     ///
     /// All you have to do to be safe is no be super-sure you got the offset right.
-    #[cfg(feature = "owc-inc")]
     pub unsafe fn inc_owc(&self, offset: usize) -> Result<(), OneWayErr> {
+        if !cfg!(feature = "owc-inc") && offset < APP_OWC_BEGIN {
+            return Err(OneWayErr::OutOfBounds);
+        }
+
         let result = xous::send_message(
             self.conn,
             xous::Message::new_blocking_scalar(
@@ -264,17 +267,20 @@ impl Keystore {
     }
 
     /// Automatically increments the correct slot based on the OFFSET encoded in the definition
-    #[cfg(feature = "owc-inc")]
     pub fn inc_owc_coded<T>(&self) -> Result<(), OneWayErr>
     where
         T: OneWayEncoding,
         T::Error: core::fmt::Debug,
     {
         let offset: usize = T::OFFSET;
-        if offset < bao1x_hal::acram::MAX_ONEWAY_COUNTERS {
-            unsafe { self.inc_owc(offset) }
-        } else {
+        if !cfg!(feature = "owc-inc") && offset < APP_OWC_BEGIN {
             Err(OneWayErr::OutOfBounds)
+        } else {
+            if offset < bao1x_hal::acram::MAX_ONEWAY_COUNTERS {
+                unsafe { self.inc_owc(offset) }
+            } else {
+                Err(OneWayErr::OutOfBounds)
+            }
         }
     }
 

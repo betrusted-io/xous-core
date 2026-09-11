@@ -87,8 +87,8 @@ bao1x = ["utralib/bao1x", "aes/bao1x"]
 debug-hal = ["bao1x-hal/debug-print-duart"]
 debug-swap-sig = []
 
-# Enables incrementing one way counters. Off by default because this API can be, at the very least,
-# used to grief the security layer if not worse
+# Enables incrementing one way counters in the system range. Off by default because this API can be,
+# at the very least, used to grief the security layer if not worse
 owc-inc = ["keystore-api/owc-inc"]
 
 # Enable to allow users to access the application keystore slots

@@ -1,4 +1,4 @@
-use bao1x_api::{BackupFlags, OneWayErr};
+use bao1x_api::{APP_OWC_BEGIN, BackupFlags, OneWayErr};
 use bao1x_hal::acram::MAX_ONEWAY_COUNTERS;
 use bao1x_hal::board::{BOOKEND_END, BOOKEND_START};
 use bao1x_hal::rram::Reram;
@@ -126,17 +126,20 @@ pub fn keystore(sid: SID) -> ! {
                     if store.is_developer() { scalar.arg1 = 0 } else { scalar.arg1 = 1 }
                 }
             }
-            #[cfg(feature = "owc-inc")]
             Opcode::IncOneWayCounter => {
                 if let Some(scalar) = msg.body.scalar_message_mut() {
                     if [scalar.arg2, scalar.arg3, scalar.arg4] == OWC_MAGIC_INC
                         && scalar.arg1 < MAX_ONEWAY_COUNTERS
                     {
-                        match unsafe { store.owc.inc(scalar.arg1) } {
-                            Ok(_) => {
-                                scalar.arg1 = OneWayErr::None.to_usize().unwrap();
+                        if !cfg!(feature = "owc-inc") && scalar.arg1 < APP_OWC_BEGIN {
+                            scalar.arg1 = OneWayErr::InternalError.to_usize().unwrap();
+                        } else {
+                            match unsafe { store.owc.inc(scalar.arg1) } {
+                                Ok(_) => {
+                                    scalar.arg1 = OneWayErr::None.to_usize().unwrap();
+                                }
+                                Err(e) => scalar.arg1 = e.to_usize().unwrap(),
                             }
-                            Err(e) => scalar.arg1 = e.to_usize().unwrap(),
                         }
                     } else {
                         scalar.arg1 = OneWayErr::InternalError.to_usize().unwrap();
