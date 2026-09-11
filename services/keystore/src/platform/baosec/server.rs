@@ -132,7 +132,7 @@ pub fn keystore(sid: SID) -> ! {
                         && scalar.arg1 < MAX_ONEWAY_COUNTERS
                     {
                         if !cfg!(feature = "owc-inc") && scalar.arg1 < APP_OWC_BEGIN {
-                            scalar.arg1 = OneWayErr::InternalError.to_usize().unwrap();
+                            scalar.arg1 = OneWayErr::OutOfBounds.to_usize().unwrap();
                         } else {
                             match unsafe { store.owc.inc(scalar.arg1) } {
                                 Ok(_) => {
