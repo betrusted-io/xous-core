@@ -24,6 +24,10 @@ pub const SERVER_NAME_VAULT2: &str = "_Vault2_";
 /// are disabled. 128 is the beginning of the 'application' range for OWC.
 pub const FACTORY_ONE_WAY: usize = 128;
 
+/// Flags if FIDO has be re-inited. This is an option users can invoke to
+/// regenerate their FIDO secrets with corrected TRNG seeding code.
+pub const FIDO_REINIT: usize = 129;
+
 // chosen by fair dice roll. guaranteed to be random.
 pub const DC34_HEADER: [u8; 16] = hex!("49db7671 f34435ed 5fddffdf cbb7508a");
 
