@@ -19,6 +19,8 @@ The [wiki](https://github.com/betrusted-io/betrusted-wiki/wiki) is a community r
 
 The [Baochip README](./README-baochip.md) is the starting point for Baochip users. `vscode` users may wish to install the `baochip` extension to help manage build & test cycles.
 
+USB CCID (smart-card class) on Baochip is documented in [`docs/CCID_PROTOCOL_AND_HIL.md`](./docs/CCID_PROTOCOL_AND_HIL.md). It is **not** enabled on default `dabao` / `baosec` images.
+
 The [Precursor README](./README-precursor.md) is the starting point for Precursor users.
 
 > [!IMPORTANT]
@@ -62,6 +64,8 @@ Install the latest [Rust](https://rust-lang.org/tools/install/) or run `rustup u
 - Precursor: `cargo xtask app-image`
 - Dabao: `cargo xtask dabao dabao-console`
 - Baosec: `cargo xtask baosec`
+- Baosec with USB CCID: `cargo xtask baosec-ccid`
+- CCID HIL (echo personality, lab only): `cargo xtask ccid-hil`
 - Baochip baremetal: `cargo xtask baremetal-bao1x`
 - Defcon34: `cargo xtask baosec-lite dc34-console~flash dc34-vault`
 

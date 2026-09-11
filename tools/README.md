@@ -157,46 +157,31 @@ image offline with `pddbdbg.py`. It exits non-zero if any test fails. A cold run
 ~15 minutes on a fast host. `--loglevel DEBUG` shows the boot choreography;
 `--help` lists the timeout flags. See `services/pddb-fs-tests/README.md`.
 
-### Running `std-net-ci.py` (on-target `std::net` tests under Renode)
+## CCID USB testing
 
-The sibling of `pddb-fs-ci.py`: `std-net-ci.py` runs the `services/net-tests` suite
-against the real riscv32 xous libstd inside Renode, exercising the actual
-`std::net`-over-`net`-service code path (smoltcp, over an emulated WF200 wifi link
-to the betrusted-ec). Requires Renode on the `PATH`; unlike the fs suite there is no
-`pddbdbg.py` analysis step and no PIN/format UX to drive.
+Host-side smoke and hardware-in-the-loop tests for the `usb-bao1x` CCID transport
+(`ccid-openpgp`). They check USB enumeration, Persona A layout (no CDC on CCID
+images), and bulk echo — not OpenPGP/APDU. Status: `docs/CCID_TEST_REPORT.md`.
 
 ```sh
-# From the repository root
-cargo xtask std-net-ci --no-verify     # build the Renode test image (slow first time)
-python3 tools/std-net-ci.py            # boot, wait for net-ready, run the suite
+# Unit tests (also in .github/workflows/ccid-ci.yml)
+cargo test -p usb-bao1x --lib ccid_framing   # wire math (9 tests)
+cargo test -p usb-bao1x --lib ep_budget      # cumulative EP ledger (4 tests)
+
+# Local EP arithmetic / mock Persona A (no hardware)
+python3 tools/check_ep_budget.py
+python3 tools/test_ep_budget_cumulative.py
+python3 tools/sim_persona_a_composite.py
+
+# Manual USB smoke (flash: cargo xtask ccid-hil)
+python3 tools/ccid_smoke.py
+
+# Full HIL suite on a Linux USB host
+tools/ccid_hil/run_all.sh
 ```
 
-The driver boots the emulator headless (no keyboard, no PDDB, fully unattended),
-watches the console for the boot banner and the net-ready marker, then the per-test
-result lines. It exits non-zero if any test fails. `--loglevel DEBUG` shows the
-milestone waits; `--help` lists the timeout flags.
-
-### Running `std-net-cross-host-ci.py` (cross-host `std::net` tests under Renode)
-
-The Cross-host counterpart: it boots the SoC + EC pair alongside a real Linux peer
-(`emulation/linux-server.resc`) on one Ethernet switch, so the DUT exchanges
-genuine packets with an independent stack instead of looping back inside itself.
-The DUT takes a real DHCP lease from the peer, and the cross-host theme exercises
-cross-host TCP/UDP echo, a real connect-refused RST, and DNS resolved by the
-peer's `dnsd`.
-
-```sh
-# From the repository root
-cargo xtask std-net-cross-host-ci --no-verify   # build the cross-host image
-python3 tools/std-net-cross-host-ci.py          # start all machines, provision the peer, run
-```
-
-Beyond the loopback driver's job, this one drives the peer's serial console (on a
-pty) to a passwordless root shell and starts its services — `dnsd`, a rewritten
-`udhcpd` advertising the peer as the resolver, and `nc` TCP/UDP echo servers —
-before the DUT boots far enough to take its lease. It copies the peer rootfs to
-a per-run scratch file (the peer's flash writes back). Exits non-zero on any
-failure.
+See `tools/ccid_hil/README.md`, `docs/CCID_PROTOCOL_AND_HIL.md`, and `docs/code_map.md` for protocol
+details and Raspberry Pi HIL setup.
 
 ## Contribution Guidelines
 

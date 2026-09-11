@@ -1,8 +1,9 @@
 use std::borrow::BorrowMut;
 use std::cell::RefCell;
 use std::collections::VecDeque;
-use std::sync::atomic::{AtomicBool, compiler_fence};
-use std::sync::atomic::{AtomicPtr, Ordering};
+#[cfg(feature = "ccid-openpgp")]
+use std::rc::Rc;
+use std::sync::atomic::{AtomicBool, AtomicPtr, Ordering, compiler_fence};
 
 use bao1x_hal::usb::driver::*;
 use bao1x_hal::usb::utra::*;
@@ -10,6 +11,7 @@ use num_traits::*;
 use usb_device::class_prelude::*;
 use usb_device::device::UsbDevice;
 use usb_device::prelude::*;
+#[cfg(not(feature = "ccid-openpgp"))]
 use usbd_serial::SerialPort;
 use utralib::{AtomicCsr, utra};
 use xous::Message;
@@ -24,6 +26,45 @@ use xous_usb_hid::prelude::UsbHidClass;
 use xous_usb_hid::prelude::*;
 
 use crate::api::Opcode;
+#[cfg(feature = "ccid-openpgp")]
+use crate::ccid_transport::CcidTransportClass;
+use crate::ep_budget::{EpBudgetLedger, assert_class_ep_budget};
+
+/// Unidirectional non-EP0 endpoints claimed by FIDO (interrupt IN+OUT).
+/// Cite: xous-usb-hid interface.rs `interrupt` IN + OUT (`device/fido.rs`).
+pub(crate) const EP_FIDO: usize = 2;
+/// Unidirectional non-EP0 endpoints claimed by NKRO keyboard (interrupt IN+OUT).
+/// Cite: xous-usb-hid `device/keyboard.rs` `in_endpoint` + `with_out_endpoint`.
+pub(crate) const EP_NKRO: usize = 2;
+/// Unidirectional non-EP0 endpoints claimed by CDC-ACM debug serial.
+/// Cite: usbd-serial `cdc_acm.rs` interrupt + bulk OUT + bulk IN.
+#[cfg(not(feature = "ccid-openpgp"))]
+pub(crate) const EP_DEBUG_CDC: usize = 3;
+/// Unidirectional non-EP0 endpoints claimed by CCID (bulk OUT+IN only).
+/// Cite: `ccid_transport.rs` `alloc.bulk` ×2. Interrupt IN omitted — see
+/// `CcidTransportClass` (Corigine IN/OUT pairing collision with HID).
+#[cfg(feature = "ccid-openpgp")]
+pub(crate) const EP_CCID: usize = 2;
+
+/// Per-class sanity check (kept). Prefer [`EpBudgetLedger`] for cumulative totals.
+pub(crate) fn assert_composite_ep_budget(label: &str, claimed: usize) {
+    assert_class_ep_budget(label, claimed);
+}
+
+#[cfg(feature = "ccid-openpgp")]
+pub(crate) fn make_ccid_transport<'a>(
+    alloc: &'a UsbBusAllocator<CorigineWrapper>,
+    complete_rx: Rc<RefCell<VecDeque<Vec<u8>>>>,
+    notify_cid: xous::CID,
+    ledger: &mut EpBudgetLedger,
+) -> CcidTransportClass<'a, CorigineWrapper> {
+    // Construction order (CCID image), alloc sites in CcidTransportClass::new:
+    //   1) alloc.bulk OUT
+    //   2) alloc.bulk IN
+    assert_class_ep_budget("CCID", EP_CCID);
+    ledger.reserve_before_alloc("CCID", EP_CCID);
+    CcidTransportClass::new(alloc, complete_rx, notify_cid)
+}
 
 /// Maximum packet size for serial - tied to the speed of the port (HS)
 pub const SERIAL_MAX_PACKET_SIZE: usize = 512;
@@ -48,9 +89,11 @@ pub struct Bao1xUsb<'a> {
     >,
     // storage for hid_packets to expatriate from the interrupt handler
     pub hid_packet: VecDeque<[u8; 64]>,
+    #[cfg(not(feature = "ccid-openpgp"))]
     pub serial_port: SerialPort<'a, CorigineWrapper, [u8; 1024], [u8; 1024]>,
     // holds one HS packet - must be statically allocated in IRQ handler. Valid length is
     // passed as part of the interrupt recovery message.
+    #[cfg(not(feature = "ccid-openpgp"))]
     pub serial_rx: [u8; SERIAL_MAX_PACKET_SIZE],
     // an error reporter for the double lock condition, which we need to figure out how to handle still.
     // used for debugging, the idea is to query this in userspace to try and pick up the double-lock problem
@@ -58,6 +101,10 @@ pub struct Bao1xUsb<'a> {
     pub double_lock: AtomicBool,
     pub led_state: KeyboardLedsReport,
     pub irq_serviced: AtomicBool,
+    #[cfg(feature = "ccid-openpgp")]
+    pub ccid: CcidTransportClass<'a, CorigineWrapper>,
+    #[cfg(feature = "ccid-openpgp")]
+    pub ccid_rx: Rc<RefCell<VecDeque<Vec<u8>>>>,
 }
 
 impl<'a> Bao1xUsb<'a> {
@@ -68,15 +115,33 @@ impl<'a> Bao1xUsb<'a> {
         cw: CorigineWrapper,
         usb_alloc: &'a UsbBusAllocator<CorigineWrapper>,
         serial_number: &'a String,
+        ledger: &mut EpBudgetLedger,
+        #[cfg(feature = "ccid-openpgp")] ccid: CcidTransportClass<'a, CorigineWrapper>,
+        #[cfg(feature = "ccid-openpgp")] ccid_rx: Rc<RefCell<VecDeque<Vec<u8>>>>,
     ) -> Self {
+        // Cumulative plan: reserve every remaining class BEFORE its allocating constructors.
+        // Per-class assert_class_ep_budget is invoked inside reserve_before_alloc.
+        //
+        // HID builder (xous-usb-hid) order in .build(): NKRO then FIDO — each interrupt IN+OUT.
+        assert_class_ep_budget("NKRO", EP_NKRO);
+        ledger.reserve_before_alloc("NKRO", EP_NKRO);
+        assert_class_ep_budget("FIDO", EP_FIDO);
+        ledger.reserve_before_alloc("FIDO", EP_FIDO);
+
         let class = UsbHidClassBuilder::new()
             .add_device(NKROBootKeyboardConfig::default())
             .add_device(RawFidoConfig::default())
             .build(usb_alloc);
 
-        let rx_buf = [0u8; SERIAL_MAX_PACKET_SIZE * 2];
-        let tx_buf = [0u8; SERIAL_MAX_PACKET_SIZE * 2];
-        let serial_port = SerialPort::new_with_store(&usb_alloc, rx_buf, tx_buf);
+        #[cfg(not(feature = "ccid-openpgp"))]
+        let serial_port = {
+            // usbd-serial CdcAcmClass: interrupt + bulk OUT + bulk IN
+            assert_class_ep_budget("debug CDC", EP_DEBUG_CDC);
+            ledger.reserve_before_alloc("debug CDC", EP_DEBUG_CDC);
+            let rx_buf = [0u8; SERIAL_MAX_PACKET_SIZE * 2];
+            let tx_buf = [0u8; SERIAL_MAX_PACKET_SIZE * 2];
+            SerialPort::new_with_store(&usb_alloc, rx_buf, tx_buf)
+        };
         // HACK ALERT: due to a shortcoming in the usb-device implementation, inside the interrupt handler we
         // have to catch and parse SETUP-OUT sequences. Basically the driver assumes that the OUT endpoint is
         // always configured to trigger, but in our stack every time we have an OUT on EP0, we have to
@@ -87,6 +152,13 @@ impl<'a> Bao1xUsb<'a> {
         // interface, this hack has to be dealt with (and btw, there are not enough endpoints availbale
         // to concurrently add that in - you have to kick out one of the interfaces above to add mass
         // storage!)
+        //
+        // Persona A (ccid-openpgp): CCID(2)+FIDO(2)+NKRO(2)=6/8. No CDC serial; debug via
+        // xous-log UART / DUART.
+
+        ledger.finalize();
+        // Live counter is shared across CorigineWrapper clones (UsbBusAllocator vs outer cw).
+        ledger.assert_matches_live(cw.allocated_non_ep0_count());
 
         #[cfg(feature = "oem-baosec-lite")]
         let product = "Baosec-lite";
@@ -107,6 +179,18 @@ impl<'a> Bao1xUsb<'a> {
             .composite_with_iads()
             .build();
 
+        #[cfg(feature = "ccid-openpgp")]
+        let mut ccid = ccid;
+        #[cfg(feature = "ccid-openpgp")]
+        {
+            // Snapshot of the allocator bus (populated ep_meta) for IRQ force-prime.
+            ccid.attach_force_bus(device.bus().clone());
+        }
+
+        let irq_serviced = AtomicBool::new(false);
+        #[cfg(feature = "ccid-openpgp")]
+        ccid.attach_irq_serviced(&irq_serviced);
+
         Bao1xUsb {
             conn: cid,
             // safety: we created iframrange to have the exact same P&V mappings
@@ -119,11 +203,17 @@ impl<'a> Bao1xUsb<'a> {
             kbd_tx_queue: RefCell::new(VecDeque::new()),
             irq_req: None,
             hid_packet: VecDeque::with_capacity(4),
+            #[cfg(not(feature = "ccid-openpgp"))]
             serial_port,
+            #[cfg(not(feature = "ccid-openpgp"))]
             serial_rx: [0u8; SERIAL_MAX_PACKET_SIZE],
             double_lock: AtomicBool::new(false),
             led_state: KeyboardLedsReport::default(),
-            irq_serviced: AtomicBool::new(false),
+            irq_serviced,
+            #[cfg(feature = "ccid-openpgp")]
+            ccid,
+            #[cfg(feature = "ccid-openpgp")]
+            ccid_rx,
         }
     }
 
@@ -176,6 +266,10 @@ impl<'a> Bao1xUsb<'a> {
 
         // reset all shared data structures
         self.device.force_reset().ok();
+        #[cfg(feature = "ccid-openpgp")]
+        {
+            self.ccid.reset();
+        }
         self.fido_tx_queue = RefCell::new(VecDeque::new());
         self.kbd_tx_queue = RefCell::new(VecDeque::new());
         self.irq_req = None;
@@ -208,6 +302,10 @@ impl<'a> Bao1xUsb<'a> {
     /// Pending interrupt events are not cleared here. An event raised while
     /// the interrupt is masked remains pending and is processed after the
     /// previous interrupt-enable state is restored.
+    ///
+    /// Persona A (`ccid-openpgp`): no CDC `serial_port` field — these helpers
+    /// are omitted; callers use UART / `xous-log` instead.
+    #[cfg(not(feature = "ccid-openpgp"))]
     pub fn serial_write_irq_safe(&mut self, data: &[u8]) -> usb_device::Result<usize> {
         // IRQARRAY1 is currently dedicated to the Corigine USB implementation,
         // so this code assumes there are no concurrent writers to EV_ENABLE.
@@ -230,6 +328,7 @@ impl<'a> Bao1xUsb<'a> {
 
     /// Flushes the USB CDC serial transmit buffer without allowing the USB
     /// interrupt handler to access the same `usbd-serial` state concurrently.
+    #[cfg(not(feature = "ccid-openpgp"))]
     pub fn serial_flush_irq_safe(&mut self) -> usb_device::Result<()> {
         let previous_enable = self.irq_csr.r(utra::irqarray1::EV_ENABLE);
 
@@ -251,17 +350,51 @@ impl<'a> Bao1xUsb<'a> {
 pub enum UsbIrqReq {
     FidoTx,
     KbdTx,
+    /// Flush CCID bulk IN (`poll_bulk_in`) after `CcidTx` from main context.
+    #[cfg(feature = "ccid-openpgp")]
+    CcidTx,
 }
 
 pub const CORIGINE_IRQ_MASK: u32 = 0x1;
 pub const SW_IRQ_MASK: u32 = 0x2;
 
+/// Drop guard: increments `composite_handler` exit counter on every return path
+/// (including the early `return` after `try_lock` failure). Panic unwind would
+/// also fire if unwinding is enabled; with abort-on-panic, a hang still shows as
+/// entries≫exits because `drop` never runs. Also snapshots raw `EV_PENDING` /
+/// `EV_ENABLE` into the flight ring before the exit marker.
+#[cfg(feature = "irq-pending-trace")]
+struct CompositeHandlerExitGuard {
+    irq_csr: AtomicCsr<u32>,
+}
+#[cfg(feature = "irq-pending-trace")]
+impl Drop for CompositeHandlerExitGuard {
+    fn drop(&mut self) {
+        let pending = self.irq_csr.r(utra::irqarray1::EV_PENDING);
+        let enable = self.irq_csr.r(utra::irqarray1::EV_ENABLE);
+        bao1x_hal::usb::driver::usb_flight_record_ev_regs(pending, enable);
+        bao1x_hal::usb::driver::composite_handler_trace_note_exit();
+    }
+}
+
 pub(crate) fn composite_handler(_irq_no: usize, arg: *mut usize) {
+    #[cfg(feature = "irq-pending-trace")]
+    bao1x_hal::usb::driver::composite_handler_trace_note_entry();
+
     let usb = unsafe { &mut *(arg as *mut Bao1xUsb) };
+
+    #[cfg(feature = "irq-pending-trace")]
+    let _exit_guard = CompositeHandlerExitGuard { irq_csr: usb.irq_csr.clone() };
 
     // immediately clear the interrupt and re-enable it so we can catch an interrupt
     // that is generated while we are handling the interrupt.
     let pending = usb.irq_csr.r(utra::irqarray1::EV_PENDING);
+    #[cfg(feature = "irq-pending-trace")]
+    {
+        // Raw bitmask at entry (before clear) — not just nonzero booleans.
+        let enable = usb.irq_csr.r(utra::irqarray1::EV_ENABLE);
+        bao1x_hal::usb::driver::usb_flight_record_ev_regs(pending, enable);
+    }
     #[cfg(feature = "verbose-debug")]
     crate::println!("pending: {:x}, status: {:x}", pending, usb.irq_csr.r(utra::irqarray1::EV_STATUS),);
     // clear pending
@@ -288,8 +421,15 @@ pub(crate) fn composite_handler(_irq_no: usize, arg: *mut usize) {
                     // crate::println!("getting event");
                     // scoping on the hardware lock to manipulate pointer states
                     let mut corigine_usb = match usb.wrapper.hw.try_lock() {
-                        Ok(lock) => lock,
+                        Ok(lock) => {
+                            #[cfg(feature = "irq-pending-trace")]
+                            bao1x_hal::usb::driver::composite_handler_trace_note_lock_acquired();
+                            lock
+                        }
                         _ => {
+                            #[cfg(feature = "irq-pending-trace")]
+                            bao1x_hal::usb::driver::composite_handler_trace_note_lock_contended();
+                            // No spin/retry — single try_lock fail returns immediately.
                             crate::println!("double lock - this case is actually broken, stack will crash");
                             usb.double_lock.store(true, Ordering::SeqCst);
                             return;
@@ -323,13 +463,26 @@ pub(crate) fn composite_handler(_irq_no: usize, arg: *mut usize) {
                             ready.store(false, Ordering::SeqCst);
                         }
                         usb.wrapper.address_is_set.store(false, Ordering::SeqCst);
+                        #[cfg(feature = "ccid-openpgp")]
+                        {
+                            usb.ccid.reset();
+                        }
                     }
                 }
 
                 let device = usb.device.borrow_mut();
                 let class = usb.class.borrow_mut();
+                #[cfg(not(feature = "ccid-openpgp"))]
                 let serial = usb.serial_port.borrow_mut();
-                if device.poll(&mut [class, serial as &mut dyn UsbClass<_>]) {
+                #[cfg(not(feature = "ccid-openpgp"))]
+                let polled = device.poll(&mut [class, serial as &mut dyn UsbClass<_>]);
+                #[cfg(feature = "ccid-openpgp")]
+                let polled = {
+                    let ccid = &mut usb.ccid as &mut dyn UsbClass<_>;
+                    device.poll(&mut [class, ccid])
+                };
+                if polled {
+                    #[cfg(not(feature = "ccid-openpgp"))]
                     if let Ok(count) = serial.read(&mut usb.serial_rx) {
                         xous::try_send_message(
                             usb.conn,
@@ -368,6 +521,9 @@ pub(crate) fn composite_handler(_irq_no: usize, arg: *mut usize) {
                 }
                 {
                     // scoping on the hardware lock to manipulate pointer states
+                    // NOTE: this is a *blocking* `core()` lock (not try_lock). If main
+                    // holds the mutex, the IRQ path can hang here — entry/exit divergence
+                    // is the signal; locking behavior is intentionally unchanged this pass.
                     let mut hw_lock = usb.wrapper.core();
                     if hw_lock.udc_event.evt_dq_pt.load(Ordering::SeqCst)
                         == hw_lock.udc_event.evt_seg0_last_trb.load(Ordering::SeqCst)
@@ -396,7 +552,8 @@ pub(crate) fn composite_handler(_irq_no: usize, arg: *mut usize) {
         if usb.csr.rf(IMAN_IE) != 0 {
             usb.csr.wo(IMAN, usb.csr.ms(IMAN_IE, 1) | usb.csr.ms(IMAN_IP, 1));
         }
-    } else if (pending & SW_IRQ_MASK) != 0 {
+    }
+    if (pending & SW_IRQ_MASK) != 0 {
         let composite = usb.class.borrow_mut();
         match usb.irq_req.take() {
             Some(UsbIrqReq::FidoTx) => {
@@ -418,6 +575,13 @@ pub(crate) fn composite_handler(_irq_no: usize, arg: *mut usize) {
                 keyboard.write_report(kbd_events).ok();
                 usb.kbd_tx_queue.borrow_mut().clear();
                 keyboard.tick().ok();
+            }
+            #[cfg(feature = "ccid-openpgp")]
+            Some(UsbIrqReq::CcidTx) => {
+                // Main-context CcidTx only queues bytes; bulk IN is written from IRQ
+                // via UsbClass::poll → poll_bulk_in (same role as FidoTx write_report).
+                // irq_serviced is set inside poll_bulk_in after bulk_in.write() is attempted.
+                usb.ccid.poll();
             }
             None => (),
         }
