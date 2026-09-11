@@ -20,7 +20,7 @@ bao1x-hal = { path = "../../libs/bao1x-hal", features = [
     # "verbose-debug",
     "axp2101",
 ], optional = true }
-bao1x-api = { path = "../../libs/bao1x-api" }
+bao1x-api = { path = "../../libs/bao1x-api", features = ["std"] }
 bao1x-hal-service = { path = "../bao1x-hal-service", optional = true }
 bao1x-emu = { path = "../bao1x-emu", optional = true }
 # Optional: only to forward `hosted-baosec` onto `ux-api` (pulled by `bao1x-emu`).
