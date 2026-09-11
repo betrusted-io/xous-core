@@ -19,6 +19,8 @@ pub(crate) fn fido2_handler(
     allow_host: Arc<AtomicBool>,
     opensk_mutex: Arc<Mutex<i32>>,
     animate: Arc<AtomicBool>,
+    is_unused: Arc<AtomicBool>,
+    used_set: Arc<AtomicBool>,
 ) {
     // spawn the FIDO2 USB handler
     let _ = thread::spawn({
@@ -30,6 +32,8 @@ pub(crate) fn fido2_handler(
 
             let env = XousEnv::new(conn, animate);
             let mut ctap = dc34_vault::Ctap::new(env, Instant::now());
+            is_unused.store(ctap.is_unused(), Ordering::SeqCst);
+            used_set.store(true, Ordering::SeqCst);
             loop {
                 match ctap.env().main_hid_connection().u2f_wait_incoming() {
                     Ok(msg) => {

@@ -26,7 +26,6 @@ pub enum Opcode {
     SetFlags = 513,
     /// One way counter operations
     GetOneWayCounter = 768,
-    #[cfg(feature = "owc-inc")]
     IncOneWayCounter = 769,
 
     /// Application key operations

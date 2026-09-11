@@ -308,7 +308,8 @@ pub const BOOT1_REVOCATION_OFFSET: usize = LOADER_REVOCATION_OFFSET + PUBKEY_SLO
 /// key slots, from [124..=127].
 pub const BOOT0_REVOCATION_OFFSET: usize = BOOT1_REVOCATION_OFFSET + PUBKEY_SLOTS;
 
-// slots from 128..=255 are totally unused by the boot logic
+// slots from 128..=255 are totally unused by the boot logic, and available to applications for use
+pub const APP_OWC_BEGIN: usize = 128;
 
 // =========== DATA SLOTS ==============
 

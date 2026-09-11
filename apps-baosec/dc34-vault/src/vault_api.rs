@@ -75,6 +75,8 @@ pub(crate) enum VaultOp {
     SkipKey = 1026,
     // monkey patch to indicate if BIO hacks are active
     BioActive = 1027,
+    // work-around to offer a token reset due to earlier issues with TRNG
+    ResetToken = 1028,
 }
 
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
