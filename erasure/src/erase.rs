@@ -82,6 +82,7 @@ impl ReramRegion {
         // the baremetal image. The baremetal code actually starts at an offset of
         // 1024 from BAREMETAL_START.
         let mut start = bao1x_api::BAREMETAL_START + 1024 + baremetal_rram_offset as usize;
+
         let end = utralib::HW_RERAM_MEM + bao1x_api::RRAM_STORAGE_LEN;
         if start % Erasure::KEY_BYTES != 0 {
             // If the start address is not a multiple of the key size, write some zeroes as padding.
@@ -149,14 +150,65 @@ impl MemoryTraversal {
     fn new(baremetal_rram_offset: u32) -> Result<Self, xous::Error> {
         let mut blocks: Vec<Box<dyn MemRegion>> = Vec::new();
         blocks.push(Box::new(ReramRegion::new(baremetal_rram_offset)?));
+
+        // TODO: SRAM
+
         blocks.push(Box::new(mem!(HW_BIO_IMEM0_MEM, HW_BIO_IMEM0_MEM_LEN)));
         blocks.push(Box::new(mem!(HW_BIO_IMEM1_MEM, HW_BIO_IMEM1_MEM_LEN)));
         blocks.push(Box::new(mem!(HW_BIO_IMEM2_MEM, HW_BIO_IMEM2_MEM_LEN)));
         blocks.push(Box::new(mem!(HW_BIO_IMEM3_MEM, HW_BIO_IMEM3_MEM_LEN)));
-        // TODO: IFRAM0 works but might overwrite some USB stuff, needs further checking. IFRAM1
-        // seems to block.
-        // blocks.push(Box::new(mem!(HW_IFRAM0_MEM, HW_IFRAM0_MEM_LEN)));
+        blocks.push(Box::new(mem!(HW_IFRAM0_MEM, HW_IFRAM0_MEM_LEN)));
+        blocks.push(Box::new(mem!(HW_SEG_LKEY_MEM, HW_SEG_LKEY_MEM_LEN)));
+        blocks.push(Box::new(mem!(HW_SEG_KEY_MEM, HW_SEG_KEY_MEM_LEN)));
+        blocks.push(Box::new(mem!(HW_SEG_SKEY_MEM, HW_SEG_SKEY_MEM_LEN)));
+        blocks.push(Box::new(mem!(HW_SEG_SCRT_MEM, HW_SEG_SCRT_MEM_LEN)));
+        blocks.push(Box::new(mem!(HW_SEG_SOB_MEM, HW_SEG_SOB_MEM_LEN)));
+        blocks.push(Box::new(mem!(HW_SEG_PCON_MEM, HW_SEG_PCON_MEM_LEN)));
+        blocks.push(Box::new(mem!(HW_SEG_PKB_MEM, HW_SEG_PKB_MEM_LEN)));
+        blocks.push(Box::new(mem!(HW_SEG_PIB_MEM, HW_SEG_PIB_MEM_LEN)));
+        blocks.push(Box::new(mem!(HW_SEG_POB_MEM, HW_SEG_POB_MEM_LEN)));
+        blocks.push(Box::new(mem!(HW_SEG_PSOB_MEM, HW_SEG_PSOB_MEM_LEN)));
+        blocks.push(Box::new(mem!(HW_SEG_AKEY_MEM, HW_SEG_AKEY_MEM_LEN)));
+        blocks.push(Box::new(mem!(HW_SEG_AIB_MEM, HW_SEG_AIB_MEM_LEN)));
+        blocks.push(Box::new(mem!(HW_SEG_AOB_MEM, HW_SEG_AOB_MEM_LEN)));
+        blocks.push(Box::new(mem!(HW_SEG_RNGA_MEM, HW_SEG_RNGA_MEM_LEN)));
+        blocks.push(Box::new(mem!(HW_SEG_RNGB_MEM, HW_SEG_RNGB_MEM_LEN)));
+
+        // The following regions interfere with the key recovery process.
+        //
+        // blocks.push(Box::new(mem!(HW_SEG_MSG_MEM, HW_SEG_MSG_MEM_LEN)));
+        // blocks.push(Box::new(mem!(HW_SEG_HOUT_MEM, HW_SEG_HOUT_MEM_LEN)));
+
+        // The following regions seem to block on write. Perhaps they need extra intialization steps
+        // to become writeable?
+        //
+        // blocks.push(Box::new(mem!(HW_BIO_BDMA_MEM, HW_BIO_BDMA_MEM_LEN)));
         // blocks.push(Box::new(mem!(HW_IFRAM1_MEM, HW_IFRAM1_MEM_LEN)));
+        // blocks.push(Box::new(mem!(HW_BIO_FIFO0_MEM, HW_BIO_FIFO0_MEM_LEN)));
+        // blocks.push(Box::new(mem!(HW_BIO_FIFO1_MEM, HW_BIO_FIFO1_MEM_LEN)));
+        // blocks.push(Box::new(mem!(HW_BIO_FIFO2_MEM, HW_BIO_FIFO2_MEM_LEN)));
+        // blocks.push(Box::new(mem!(HW_BIO_FIFO3_MEM, HW_BIO_FIFO3_MEM_LEN)));
+        // blocks.push(Box::new(mem!(HW_CSR_MEM, HW_CSR_MEM_LEN)));
+        // blocks.push(Box::new(mem!(HW_SCE_MEM, HW_SCE_MEM_LEN)));
+        // blocks.push(Box::new(mem!(HW_SYSCTRL_MEM, HW_SYSCTRL_MEM_LEN)));
+        // blocks.push(Box::new(mem!(HW_IFSUB_MEM, HW_IFSUB_MEM_LEN)));
+        // blocks.push(Box::new(mem!(HW_CORESUB_MEM, HW_CORESUB_MEM_LEN)));
+        // blocks.push(Box::new(mem!(HW_RRC_MEM, HW_RRC_MEM_LEN)));
+        // blocks.push(Box::new(mem!(HW_SECSUB_MEM, HW_SECSUB_MEM_LEN)));
+        // blocks.push(Box::new(mem!(HW_AO_MEM, HW_AO_MEM_LEN)));
+        // blocks.push(Box::new(mem!(HW_AOPERI_MEM, HW_AOPERI_MEM_LEN)));
+        // blocks.push(Box::new(mem!(HW_NULL_MEM, HW_NULL_MEM_LEN)));
+        // blocks.push(Box::new(mem!(HW_UDMA_MEM, HW_UDMA_MEM_LEN)));
+        // blocks.push(Box::new(mem!(HW_UDP_MEM, HW_UDP_MEM_LEN)));
+        // blocks.push(Box::new(mem!(HW_SDDC_DAT_MEM, HW_SDDC_DAT_MEM_LEN)));
+        // blocks.push(Box::new(mem!(HW_UDC_MEM, HW_UDC_MEM_LEN)));
+        // blocks.push(Box::new(mem!(HW_XIP_MEM, HW_XIP_MEM_LEN))); // huge! what is this?
+        // blocks.push(Box::new(mem!(HW_PL230_MEM, HW_PL230_MEM_LEN)));
+        // blocks.push(Box::new(mem!(HW_MDMA_MEM, HW_MDMA_MEM_LEN)));
+        // blocks.push(Box::new(mem!(HW_MBOX_APB_MEM, HW_MBOX_APB_MEM_LEN)));
+        // blocks.push(Box::new(mem!(HW_IOX_MEM, HW_IOX_MEM_LEN)));
+        // blocks.push(Box::new(mem!(HW_AORAM_MEM, HW_AORAM_MEM_LEN)));
+
         Ok(MemoryTraversal { idx: 0, blocks })
     }
 
