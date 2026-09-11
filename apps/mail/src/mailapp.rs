@@ -11,15 +11,15 @@
 //!
 //!   * F1 (`inbox`)    — list recent subjects + senders, pick one to read.
 //!   * F2 (`compose`)  — a To/Subject/Body form, then SMTP send.
-//!   * F3 (`settings`) — IMAP/SMTP server, user and password forms, saved
-//!                       to the pddb.
+//!   * F3 (`settings`) — IMAP/SMTP server, user and password forms, saved to the pddb.
 //!   * F4 (`reply`)    — pre-filled reply to the open message.
 //!
 //! Account settings are persisted the same way edlin persisted its "mail"
 //! file: as a pddb-backed key (encrypted at rest on real hardware) holding
 //! "key=value" lines. See [`MailApp::save_config`] / [`MailApp::load_config`].
 
-use core::fmt::Write as _; // for write!() into a TextView; aliased so it doesn't clash with std::io::Write
+use core::fmt::Write as _; /* for write!() into a TextView; aliased so it doesn't clash with
+                             * std::io::Write */
 use std::collections::HashSet;
 use std::fs::File;
 use std::io::{Read, Write};
@@ -238,7 +238,8 @@ fn split_multipart(body: &str, boundary: &str) -> Vec<String> {
         if remaining.starts_with("--") {
             break; // closing delimiter "--boundary--"
         }
-        remaining = remaining.strip_prefix("\r\n").or_else(|| remaining.strip_prefix('\n')).unwrap_or(remaining);
+        remaining =
+            remaining.strip_prefix("\r\n").or_else(|| remaining.strip_prefix('\n')).unwrap_or(remaining);
         match remaining.find(&delim) {
             Some(next_pos) => {
                 parts.push(remaining[..next_pos].to_string());
@@ -472,12 +473,13 @@ fn decode_rfc2047(input: &str) -> String {
 /// converter (no DOM / CSS) -- enough to make an HTML-only message readable,
 /// not a full renderer.
 fn strip_html(input: &str) -> String {
-    // 1. Drop <script>/<style> element contents and HTML comments outright,
-    //    so their internals never leak into the text.
-    let without_blocks = remove_html_comments(&remove_html_element(&remove_html_element(input, "script"), "style"));
+    // 1. Drop <script>/<style> element contents and HTML comments outright, so their internals never leak
+    //    into the text.
+    let without_blocks =
+        remove_html_comments(&remove_html_element(&remove_html_element(input, "script"), "style"));
 
-    // 2. Walk the remaining markup: copy text runs, and replace each tag
-    //    with a newline (block-level tags) or nothing (inline tags).
+    // 2. Walk the remaining markup: copy text runs, and replace each tag with a newline (block-level tags) or
+    //    nothing (inline tags).
     let mut out = String::with_capacity(without_blocks.len());
     let mut rest = without_blocks.as_str();
     while let Some(lt) = rest.find('<') {
@@ -1095,11 +1097,7 @@ impl MailApp {
                     Rectangle::new_with_style(
                         Point::new(bar_x0 + 1, bar_y0 + 1),
                         Point::new(bar_x0 + 1 + fill_w, bar_y1 - 1),
-                        DrawStyle {
-                            fill_color: Some(PixelColor::Dark),
-                            stroke_color: None,
-                            stroke_width: 0,
-                        },
+                        DrawStyle { fill_color: Some(PixelColor::Dark), stroke_color: None, stroke_width: 0 },
                     ),
                 )
                 .ok();
@@ -1218,11 +1216,8 @@ impl MailApp {
                 // Remember it *before* paging so F4 (reply) can pre-fill from
                 // it -- whether pressed from the home screen after backing out,
                 // or from inside the reader itself (see page_message).
-                self.open_msg = Some(OpenMessage {
-                    from: from.clone(),
-                    subject: subject.clone(),
-                    body: body.clone(),
-                });
+                self.open_msg =
+                    Some(OpenMessage { from: from.clone(), subject: subject.clone(), body: body.clone() });
                 // The reader captures every keystroke while its modal is open,
                 // so an F4 pressed while reading is handled there and reported
                 // back here rather than reaching the main loop's Rawkeys path.
@@ -1275,7 +1270,10 @@ impl MailApp {
                         if idx + 1 < n {
                             idx += 1;
                             self.modals
-                                .dynamic_notification_update(page_title(idx, n).as_deref(), Some(pages[idx].as_str()))
+                                .dynamic_notification_update(
+                                    page_title(idx, n).as_deref(),
+                                    Some(pages[idx].as_str()),
+                                )
                                 .ok();
                         }
                     }
@@ -1283,7 +1281,10 @@ impl MailApp {
                         if idx > 0 {
                             idx -= 1;
                             self.modals
-                                .dynamic_notification_update(page_title(idx, n).as_deref(), Some(pages[idx].as_str()))
+                                .dynamic_notification_update(
+                                    page_title(idx, n).as_deref(),
+                                    Some(pages[idx].as_str()),
+                                )
                                 .ok();
                         }
                     }
@@ -1922,7 +1923,8 @@ impl MailApp {
         let mut last_pct = usize::MAX;
         let responses = client
             .fetch_with_progress(&seq.to_string(), "BODY.PEEK[]", &mut |done, total| {
-                let pct = if total == 0 { 100 } else { (done.min(total) as u64 * 100 / total as u64) as usize };
+                let pct =
+                    if total == 0 { 100 } else { (done.min(total) as u64 * 100 / total as u64) as usize };
                 if pct != last_pct {
                     last_pct = pct;
                     self.draw_progress("Downloading message...", done, total);
@@ -2042,9 +2044,7 @@ impl MailApp {
 
     // ---- small helpers ------------------------------------------------
 
-    fn notify(&self, msg: &str) {
-        self.modals.show_notification(msg, None).ok();
-    }
+    fn notify(&self, msg: &str) { self.modals.show_notification(msg, None).ok(); }
 }
 
 /// Computes the message-pager page geometry from the runtime glyph height,
@@ -2150,8 +2150,11 @@ fn wrap_lines(text: &str, cols: usize) -> Vec<String> {
                 cur = rest.to_string();
                 continue;
             }
-            let projected =
-                if cur.is_empty() { word.chars().count() } else { cur.chars().count() + 1 + word.chars().count() };
+            let projected = if cur.is_empty() {
+                word.chars().count()
+            } else {
+                cur.chars().count() + 1 + word.chars().count()
+            };
             if !cur.is_empty() && projected > cols {
                 out.push(std::mem::take(&mut cur));
                 cur = word.to_string();

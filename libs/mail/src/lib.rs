@@ -18,14 +18,12 @@
 //!
 //! # Known gaps
 //!
-//! - [`ImapClient::fetch`] returns raw [`ImapChunk`]s (correctly framed
-//!   around `{n}` literals) rather than a parsed FETCH response. Splitting
-//!   those into per-attribute values (FLAGS vs BODY[...] vs ENVELOPE)
-//!   means parsing IMAP's parenthesized-list grammar, which is out of
-//!   scope here — this module solves the wire framing, not the semantics.
-//! - Tagged response lines are assumed to never themselves start with a
-//!   literal (true in practice); if a server literal-quotes plain-text of
-//!   a tagged status line, [`ImapClient`]'s tag matching only looks at
+//! - [`ImapClient::fetch`] returns raw [`ImapChunk`]s (correctly framed around `{n}` literals) rather than a
+//!   parsed FETCH response. Splitting those into per-attribute values (FLAGS vs BODY[...] vs ENVELOPE) means
+//!   parsing IMAP's parenthesized-list grammar, which is out of scope here — this module solves the wire
+//!   framing, not the semantics.
+//! - Tagged response lines are assumed to never themselves start with a literal (true in practice); if a
+//!   server literal-quotes plain-text of a tagged status line, [`ImapClient`]'s tag matching only looks at
 //!   the first text chunk.
 
 use std::io::{self, BufRead, BufReader, Read, Write};
@@ -72,7 +70,9 @@ fn wrap_tls(host: &str, mut sock: TcpStream, root_store: RootCertStore) -> Resul
             log::info!("mail: tls handshake complete for {host}");
             Ok(StreamOwned::new(conn, sock))
         }
-        Ok(_) => Err(TlsWrapError::Io(io::Error::new(io::ErrorKind::Other, "handshake completed, no peer cert"))),
+        Ok(_) => {
+            Err(TlsWrapError::Io(io::Error::new(io::ErrorKind::Other, "handshake completed, no peer cert")))
+        }
         Err(e) => {
             let invalid_cert = e
                 .get_ref()

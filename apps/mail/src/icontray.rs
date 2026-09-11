@@ -64,7 +64,7 @@ pub(crate) fn icontray_server() {
                     log::warn!("Release called with an invalid or absent token");
                 }
             }),
-            Some(Opcode::Input) => {} // no free-text input in the mail shell
+            Some(Opcode::Input) => {}  // no free-text input in the mail shell
             Some(Opcode::Picked) => {} // ignored
             Some(Opcode::Prediction) => {
                 // The GAM queries all four slots on every keypress; we always
