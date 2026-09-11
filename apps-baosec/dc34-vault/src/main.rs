@@ -139,7 +139,6 @@ fn main() -> ! {
 
     log::info!("menus");
     let menu_sid = xous::create_server().unwrap();
-    let menu_mgr = submenu::create_submenu(conn, actions_conn, menu_sid);
     let tour_menu_sid = xous::create_server().unwrap();
     let tour_menu_mgr = tourmenu::create_submenu(conn, actions_conn, tour_menu_sid);
     let gene_menu_sid = xous::create_server().unwrap();
@@ -190,7 +189,16 @@ fn main() -> ! {
     vault_ui.set_global_config(global_config.clone());
 
     log::info!("Fido2 service");
-    fido2::fido2_handler(conn, allow_host.clone(), opensk_mutex.clone(), animate.clone());
+    let is_fido_unused = Arc::new(AtomicBool::new(false));
+    let is_unused_set = Arc::new(AtomicBool::new(false));
+    fido2::fido2_handler(
+        conn,
+        allow_host.clone(),
+        opensk_mutex.clone(),
+        animate.clone(),
+        is_fido_unused.clone(),
+        is_unused_set.clone(),
+    );
 
     // overrides for testing
     #[cfg(feature = "production")]
@@ -326,6 +334,32 @@ fn main() -> ! {
             "Trusted init state is inconsistent; check that connection count required for keystore is consistent with reality."
         );
     }
+
+    // This block of code fixes a bug that happened in the shipping DC34 badges. An issue with TRNG seeding
+    // was identified that could reduce the original entropy pool to as little as 64 bits. This has since
+    // been fixed. The primary impact is the CRED_RANDOM_SECRET *might* have less entropy than intended -
+    // emphasis on might because the TRNG reseeds itself frequently. However, the most conservative
+    // assumption is that no reseed operation was hit and thus this one secret has less entropy than
+    // desired. This code detects if the device was ever used as a FIDO token (if it was used, then, a
+    // certain set of *other* secrets are on-demand generated). If it hasn't been used, the
+    // CRED_RANDOM_SECRET is regenerated from scratch, fixing the potential issue. If it has been used, a
+    // menu option offering users a one-time ability to regenerate their FIDO token is offered.
+    while !is_unused_set.load(Ordering::SeqCst) {
+        xous::yield_slice();
+    }
+    log::info!("Is FIDO feature unused: {:?}", is_fido_unused.load(Ordering::SeqCst));
+    let offer_reset = keystore.get_owc(FIDO_REINIT).unwrap() == 0;
+    // if the system hasn't been used, just regenerate all the keys without asking.
+    if offer_reset && is_fido_unused.load(Ordering::SeqCst) {
+        // safety: the constant is defined and in-range
+        unsafe { keystore.inc_owc(FIDO_REINIT).unwrap() };
+        pddb.delete_dict("opensk", None).ok();
+        pddb.delete_dict("fido.u2fapps", None).ok();
+        pddb.sync().unwrap();
+        let susres = susres::Susres::new_without_hook(&xns).unwrap();
+        susres.reboot(true).unwrap();
+    }
+    let menu_mgr = submenu::create_submenu(conn, actions_conn, menu_sid, offer_reset);
 
     let mut menu_active = false;
     let mut jig_ready_seen = false;
@@ -1080,6 +1114,33 @@ fn main() -> ! {
                 };
                 kbd_key.write(&map_code.to_le_bytes()).ok();
                 usb.set_key_map(map_code.into());
+            }
+            Some(VaultOp::ResetToken) => {
+                modals.add_list_item("No").unwrap();
+                modals.add_list_item("Yes").unwrap();
+                modals
+                    .get_radiobutton("Regenerate FIDO token? DANGER: permanent loss of existing token data.")
+                    .unwrap();
+                match modals.get_radio_index() {
+                    Ok(code) => {
+                        // the offer_reset check is included here to catch any cases where ResetToken was
+                        // accidentally triggered due to other code bugs. Basically,
+                        // once the FIDO_REINIT has been incremented, it
+                        // should be impossible to enter the path that wipes the FIDO store.
+                        if code == 1 && offer_reset {
+                            // safety: the constant is defined and in-range
+                            unsafe { keystore.inc_owc(FIDO_REINIT).unwrap() };
+                            pddb.delete_dict("opensk", None).ok();
+                            pddb.delete_dict("fido.u2fapps", None).ok();
+                            pddb.sync().unwrap();
+                            let susres = susres::Susres::new_without_hook(&xns).unwrap();
+                            susres.reboot(true).unwrap();
+                        }
+                    }
+                    Err(_) => {
+                        log::error!("Error in user query, cowardly not doing anything");
+                    }
+                };
             }
             Some(VaultOp::Jig) => {
                 *mode.lock().unwrap() = VaultMode::FactoryTest;

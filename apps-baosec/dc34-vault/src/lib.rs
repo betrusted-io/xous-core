@@ -18,7 +18,8 @@
 #[macro_use]
 extern crate arrayref;
 
-use crate::ctap::hid::HidPacket;
+use crate::ctap::storage::pin_hash;
+use crate::ctap::{hid::HidPacket, storage::count_credentials};
 use crate::ctap::main_hid::MainHid;
 #[cfg(feature = "vendor_hid")]
 use crate::ctap::vendor_hid::VendorHid;
@@ -72,6 +73,23 @@ impl<E: Env> Ctap<E> {
             #[cfg(feature = "vendor_hid")]
             vendor_hid,
         }
+    }
+
+    pub fn is_unused(&mut self) -> bool {
+        let master_keys_exist = self.env.store().find_handle(crate::api::key_store::STORAGE_KEY).unwrap().is_some();
+        let residential_credentials = count_credentials(&mut self.env).unwrap();
+        let sig_counter_written = self.env.store().find_handle(crate::ctap::storage::key::GLOBAL_SIGNATURE_COUNTER).unwrap().is_some();
+        let pin_set = pin_hash(&mut self.env).unwrap().is_some();
+
+        log::debug!("master keys: {:?}", master_keys_exist);
+        log::debug!("residentials: {}", residential_credentials);
+        log::debug!("sig_counter_written: {:?}", sig_counter_written);
+        log::debug!("pin_set: {:?}", pin_set);
+
+        !master_keys_exist
+            && residential_credentials == 0
+            && !sig_counter_written
+            && !pin_set
     }
 
     pub fn state(&mut self) -> &mut CtapState {
