@@ -1,5 +1,4 @@
 use alloc::boxed::Box;
-use alloc::vec;
 use alloc::vec::Vec;
 use core::convert::TryFrom;
 
@@ -8,6 +7,7 @@ use bao1x_hal::rram::Reram;
 mod shiftxor;
 use crate::SerialInteract;
 use crate::erase::shiftxor::ShiftXor;
+use crate::platform;
 
 /// Represents a contiguous block of memory to overwrite or read back.
 trait MemRegion {
@@ -15,8 +15,7 @@ trait MemRegion {
     fn start(&self) -> u32;
     /// End address.
     fn end(&self) -> u32;
-    /// Write a slice to the start of the region. Returns a BadAlignment error if the update is not
-    /// a multiple of the minimum update size.
+    /// Write a slice to the start of the region.
     fn write_slice(&self, data: &[u8]) -> Result<(), xous::Error>;
     /// Clip off a portion of the start of the region.
     fn advance(&mut self, nbytes: usize) -> Result<(), xous::Error>;
@@ -77,29 +76,26 @@ struct ReramRegion {
 }
 
 impl ReramRegion {
-    fn new(baremetal_rram_offset: u32) -> Result<Self, xous::Error> {
-        // Get the writeable section of RRAM that is past boot1 and the specified range reserved for
-        // the baremetal image. The baremetal code actually starts at an offset of
-        // 1024 from BAREMETAL_START.
-        let mut start = bao1x_api::BAREMETAL_START + 1024 + baremetal_rram_offset as usize;
+    // Empirically, the baremetal code actually starts at an offset of
+    // 1024 from BAREMETAL_START. (TODO: what is there and can we overwrite it?)
+    const CODE_START: usize = bao1x_api::BAREMETAL_START + 1024;
 
+    /// Get the remainder of RRAM that past a certain start offset from Self::CODE_START.  The
+    /// offset must be aligned to the erasure key size.
+    fn new(start_offset: usize) -> Result<Self, xous::Error> {
+        let start = Self::CODE_START + start_offset;
         let end = utralib::HW_RERAM_MEM + bao1x_api::RRAM_STORAGE_LEN;
-        if start % Erasure::KEY_BYTES != 0 {
-            // If the start address is not a multiple of the key size, write some zeroes as padding.
-            let offset = start as usize - utralib::HW_RERAM_MEM;
-            let nbytes = Erasure::KEY_BYTES - offset % Erasure::KEY_BYTES;
-            start += nbytes;
-            let data = vec![0u8; nbytes];
-            let mut rram = Reram::new();
-            let len = rram.write_slice(offset, data.as_slice())?;
-            if len != data.len() {
-                return Err(xous::Error::InternalError);
-            }
-        }
-        if end < start {
+        if start_offset % Erasure::KEY_BYTES != 0 || end < start {
             return Err(xous::Error::ParseError);
         }
         Ok(ReramRegion { start: start as u32, end: end as u32 })
+    }
+
+    /// Get the region of RRAM that represents the text region of the loaded baremetal image.
+    fn code(code_size: usize) -> Self {
+        let start = Self::CODE_START;
+        let end = start + code_size;
+        ReramRegion { start: start as u32, end: end as u32 }
     }
 }
 
@@ -137,7 +133,6 @@ impl MemRegion for ReramRegion {
 struct MemoryTraversal {
     idx: usize,
     blocks: Vec<Box<dyn MemRegion>>,
-    // TODO: investigate/add mem regions from utralib/src/generated/bao1x.rs
 }
 
 macro_rules! mem {
@@ -147,11 +142,27 @@ macro_rules! mem {
 }
 
 impl MemoryTraversal {
-    fn new(baremetal_rram_offset: u32) -> Result<Self, xous::Error> {
+    fn new(code_size: usize) -> Result<Self, xous::Error> {
         let mut blocks: Vec<Box<dyn MemRegion>> = Vec::new();
-        blocks.push(Box::new(ReramRegion::new(baremetal_rram_offset)?));
 
-        // TODO: SRAM
+        // RRAM: get the region past the (block-aligned) end of the code.
+        let rram_start_offset = if code_size % Erasure::KEY_BYTES == 0 {
+            code_size
+        } else {
+            code_size - code_size % Erasure::KEY_BYTES + Erasure::KEY_BYTES
+        };
+        blocks.push(Box::new(ReramRegion::new(rram_start_offset)?));
+
+        // SRAM: get the region past the stack, heap, exception scratch, etc.
+        let sram_start = platform::SRAM_RESERVED_END;
+        let sram_len =
+            utralib::HW_SRAM_MEM + utralib::HW_SRAM_MEM_LEN - platform::STACK_SIZE_BYTES - sram_start;
+        blocks.push(Box::new(GenericMemRegion::new(sram_start, sram_len)));
+
+        // TODO: looks like IFRAM1 holds USB stuff and IFRAM0 holds UART stuff. Should check if
+        // IFRAM0 wiping still works with hard serial and if IFRAM1 wiping works in that case, and
+        // maybe make the range wiped conditional on which interface is enabled. Can use
+        // IFRAM{0,1}_RESERVED_PAGE_RANGE to examine these potentially.
 
         blocks.push(Box::new(mem!(HW_BIO_IMEM0_MEM, HW_BIO_IMEM0_MEM_LEN)));
         blocks.push(Box::new(mem!(HW_BIO_IMEM1_MEM, HW_BIO_IMEM1_MEM_LEN)));
@@ -252,6 +263,7 @@ impl MemoryTraversal {
 
 pub struct Erasure {
     traversal: MemoryTraversal,
+    code_size: usize,
     bytes_written: usize,
 }
 
@@ -259,12 +271,16 @@ impl Erasure {
     // Determines the chunk size for ShiftXor.
     const KEY_BYTES: usize = 16;
 
-    pub fn new(baremetal_rram_offset: u32) -> Result<Self, xous::Error> {
-        Ok(Erasure { traversal: MemoryTraversal::new(baremetal_rram_offset)?, bytes_written: 0 })
+    pub fn new(code_size: u32) -> Result<Self, xous::Error> {
+        Ok(Erasure {
+            traversal: MemoryTraversal::new(code_size as usize)?,
+            code_size: code_size as usize,
+            bytes_written: 0,
+        })
     }
 
     /// Creates an empty erasure representing no memory.
-    pub fn empty() -> Self { Erasure { traversal: MemoryTraversal::empty(), bytes_written: 0 } }
+    pub fn empty() -> Self { Erasure { traversal: MemoryTraversal::empty(), code_size: 0, bytes_written: 0 } }
 
     /// Remaining length to fill.
     pub fn len(&self) -> usize { self.traversal.len() }
@@ -280,13 +296,17 @@ impl Erasure {
     /// Recover the key from the ciphertext, shift seed, and key block.
     pub fn recover_key(&self, shift_seed: &[u8], key_block: &[u8]) -> Result<[u8; 16], xous::Error> {
         let mut shifter = ShiftXor::<{ Self::KEY_BYTES }>::new(shift_seed, key_block);
-        // Start a traversal that *includes* the baremetal rram code.
-        let reader = MemoryTraversal::new(0)?;
+        // Absorb the code region (with zero-padding for block alignment).
+        let text_region = ReramRegion::code(self.code_size);
+        // safety: this data should remain constant, so reading it is hopefully OK.
+        let text_mem = unsafe { text_region.as_slice() };
+        shifter.absorb_with_padding(text_mem);
+
+        // Traverse the data the host wrote.
+        let reader = MemoryTraversal::new(self.code_size)?;
         for block in reader.all_blocks() {
             // safety: we need to ensure no one else takes ownership of this memory while we're
             // reading it. The program is single-threaded and memory is only allocated from SRAM.
-            // TODO: when writing SRAM, make sure we can block off only a small section of it for
-            // runtime allocations.
             let mem = unsafe { block.as_slice() };
             shifter.absorb(mem);
         }
@@ -387,10 +407,10 @@ impl SerialInteract for OneShotErasure {
                 if self.rx.len() >= 8 {
                     let (chunks, _) = self.rx.as_chunks::<4>();
                     let stride = u32::from_le_bytes(chunks[0]);
-                    let rram_offset = u32::from_le_bytes(chunks[1]);
+                    let code_size = u32::from_le_bytes(chunks[1]);
                     self.ack_stride = stride as usize;
                     self.rx.clear();
-                    match Erasure::new(rram_offset) {
+                    match Erasure::new(code_size) {
                         Ok(erasure) => {
                             self.state = State::Erase;
                             self.bytes_to_fill = erasure.len();

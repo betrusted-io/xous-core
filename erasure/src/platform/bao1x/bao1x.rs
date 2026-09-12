@@ -16,13 +16,19 @@ pub const SIGBLOCK_LEN: usize = 768; // this is adjusted inside builder.rs, in t
 
 const DATA_SIZE_BYTES: usize = 0x6000;
 pub const HEAP_START: usize = RAM_BASE + DATA_SIZE_BYTES;
-pub const HEAP_LEN: usize = 1024 * 256;
+pub const HEAP_LEN: usize = 1024 * 4; // small heap for erasure target
+
+// Stack occurs at the very end of SRAM.
+pub const STACK_SIZE_BYTES: usize = 0x4000;
 
 // scratch page for exceptions
 //   - scratch data is stored in positive offsets from here
 //   - exception stack is stored in negative offsets from here, hence the +4096
 // total occupied area is [HEAP_START + HEAP_LEN..HEAP_START + HEAP_LEN + 8192]
 pub const SCRATCH_PAGE: usize = HEAP_START + HEAP_LEN + 4096;
+
+// End of reserved sections at the start of SRAM.
+pub const SRAM_RESERVED_END: usize = SCRATCH_PAGE + 4096;
 
 pub const UART_IFRAM_ADDR: usize = bao1x_hal::board::UART_DMA_TX_BUF_PHYS;
 

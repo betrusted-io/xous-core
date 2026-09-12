@@ -75,6 +75,18 @@ impl<const N: usize> ShiftXor<N> {
         }
     }
 
+    pub fn absorb_with_padding(&mut self, ciphertext: &[u8]) {
+        let (chunks, remainder) = ciphertext.as_chunks::<N>();
+        for chunk in chunks {
+            self.absorb_chunk(chunk);
+        }
+        if remainder.len() > 0 {
+            let mut last: [u8; N] = [0u8; N];
+            last[..remainder.len()].copy_from_slice(&remainder);
+            self.absorb_chunk(&last);
+        }
+    }
+
     pub fn key(&self) -> &[u8] { &self.key_block }
 }
 
