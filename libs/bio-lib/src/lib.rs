@@ -36,6 +36,8 @@
 #[cfg(feature = "av-trng")]
 pub mod av_trng;
 pub mod c;
+#[cfg(feature = "can-bus")]
+pub mod can_bus;
 #[cfg(feature = "captouch")]
 pub mod captouch;
 #[cfg(feature = "dali")]

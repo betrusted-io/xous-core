@@ -28,6 +28,7 @@ ws2812 = []
 captouch = []
 av-trng = []
 dali = []
+can-bus = []
 
 # This shouldn't be a default - but provided so that code automation
 # targets can easily crawl the whole library with a single flag.
@@ -38,6 +39,7 @@ all = [
     "captouch",
     "av-trng",
     "c-colorwheel",
+	"can-bus",
 	"dali",
 ]
 
