@@ -39,8 +39,8 @@ work that already landed on `feature/usb-bao1x-ccid-openpgp`.
   boot and not “missing ATR builder logic” in isolation (inline GetSlotStatus /
   IccPowerOn never get a chance if WriteUSB never completes).
 - **Discrimination (already run):**
-  - **8-process** (`images/dabao-ccid/openpgp-apdu/`): enum OK, WriteUSB timeout.
-  - **7-process known-good** (`images/dabao-ccid/known-good/`): enum OK,
+  - **8-process** (``cargo xtask dabao-ccid openpgp-apdu --no-verify` (target release UF2s) `): enum OK, WriteUSB timeout.
+  - **7-process known-good** (``cargo xtask dabao-ccid --no-verify` (target release UF2s) `): enum OK,
     **Card inserted**, ATR
     `3B DA 18 FF 81 B1 FE 75 1F 03 00 31 C5 73 C0 01 40 00 90 00 0C`.
 
@@ -57,18 +57,18 @@ work that already landed on `feature/usb-bao1x-ccid-openpgp`.
 ### Mechanism
 
 1. openpgp-apdu waits for Configured by calling `link.link_status()` about every
-   20 ms ([`services/openpgp-apdu/src/main.rs` 50–64](../services/openpgp-apdu/src/main.rs)).
+   20 ms ([`services/openpgp-apdu/src/main.rs` 50–64](../../services/openpgp-apdu/src/main.rs)).
 2. Each `Opcode::LinkStatus` that reports **Configured** calls soft
-   **`prime_bulk_out()`** ([`services/usb-bao1x/src/main.rs` 1179–1196](../services/usb-bao1x/src/main.rs)
+   **`prime_bulk_out()`** ([`services/usb-bao1x/src/main.rs` 1179–1196](../../services/usb-bao1x/src/main.rs)
    — note: **not** `force_prime` on this path).
 3. After Configured, `receive_rx()` parks on `CcidRxDeferred`; empty-queue path
    calls soft **`prime_bulk_out()`** again
-   ([`main.rs` 610–616](../services/usb-bao1x/src/main.rs)).
+   ([`main.rs` 610–616](../../services/usb-bao1x/src/main.rs)).
 4. Independently, a timer thread sends `CcidPrimeBulkOut` every 100 ms; when
    Configured, that path calls **`force_prime_bulk_out()`**
-   ([`main.rs` 332–346, 645–659](../services/usb-bao1x/src/main.rs)).
-5. In [`force_prime_bulk_out`](../libs/bao1x-hal/src/usb/driver.rs)
-   ([`driver.rs` 2898–2953](../libs/bao1x-hal/src/usb/driver.rs)): if
+   ([`main.rs` 332–346, 645–659](../../services/usb-bao1x/src/main.rs)).
+5. In [`force_prime_bulk_out`](../../libs/bao1x-hal/src/usb/driver.rs)
+   ([`driver.rs` 2898–2953](../../libs/bao1x-hal/src/usb/driver.rs)): if
    `app_enq_index != app_deq_index` (**2927–2940**), re-arm is **skipped**
    (no synthetic retire). If software advanced enqueue (e.g. `get_app_buf_ptr` +
    `bulk_xfer`) but the completion path never retires the slot
@@ -101,11 +101,11 @@ work that already landed on `feature/usb-bao1x-ccid-openpgp`.
 
 | Hypothesis | Status | Evidence |
 |------------|--------|----------|
-| RefCell held across park | RULED OUT | [`main.rs` 600](../services/usb-bao1x/src/main.rs), park at 611 |
+| RefCell held across park | RULED OUT | [`main.rs` 600](../../services/usb-bao1x/src/main.rs), park at 611 |
 | usb-bao1x main blocked by park | RULED OUT | `msg_opt.take()` + return; `reply_and_receive_next` continues |
 | IRQ handler blocked by park | RULED OUT | `composite_handler` is IRQ-context; park is main IPC only |
 | CcidRxDeferred skips re-arm | RULED OUT | Soft `prime_bulk_out()` at **616** |
-| `irq_serviced` breaks OUT | UNLIKELY | Set in `poll_bulk_in` after IN write ([`ccid_transport.rs` ~370](../services/usb-bao1x/src/ccid_transport.rs)) |
+| `irq_serviced` breaks OUT | UNLIKELY | Set in `poll_bulk_in` after IN write ([`ccid_transport.rs` ~370](../../services/usb-bao1x/src/ccid_transport.rs)) |
 
 **Not:** RefCell deadlock, IPC parking of the whole USB process, IRQ stall, or “forgot to call prime.”
 
@@ -117,11 +117,11 @@ work that already landed on `feature/usb-bao1x-ccid-openpgp`.
 
 | Issue | File | Lines | What to look for |
 |-------|------|-------|------------------|
-| Configured wait + LinkStatus poll | [`openpgp-apdu/.../main.rs`](../services/openpgp-apdu/src/main.rs) | 50–64, 66–73 | How often LinkStatus hits before/after park |
-| LinkStatus soft prime | [`usb-bao1x/.../main.rs`](../services/usb-bao1x/src/main.rs) | 1179–1196 | `Configured` → `prime_bulk_out()` every poll |
+| Configured wait + LinkStatus poll | [`openpgp-apdu/.../main.rs`](../../services/openpgp-apdu/src/main.rs) | 50–64, 66–73 | How often LinkStatus hits before/after park |
+| LinkStatus soft prime | [`usb-bao1x/.../main.rs`](../../services/usb-bao1x/src/main.rs) | 1179–1196 | `Configured` → `prime_bulk_out()` every poll |
 | Soft prime during park | same | 590–641 (esp. **616**) | Empty queue → park → `prime_bulk_out()` |
 | Periodic force_prime | same | 332–346, 645–659 | 100 ms `CcidPrimeBulkOut` |
-| `force_prime` gate | [`bao1x-hal/.../driver.rs`](../libs/bao1x-hal/src/usb/driver.rs) | **2927–2940** | Skip when `enq != deq`; no sync-back |
+| `force_prime` gate | [`bao1x-hal/.../driver.rs`](../../libs/bao1x-hal/src/usb/driver.rs) | **2927–2940** | Skip when `enq != deq`; no sync-back |
 | Completion retire | same | ~**3345** (`UsbBus::read`) | Does `retire_app_buf_ptr` always run after OUT DMA done? |
 | `ep_out_ready` | same | ~2892–2951, ~3371+ | Stuck true → soft prime no-op |
 
@@ -147,7 +147,7 @@ Flash the 8-process image, reproduce timeout (`pcsc_scan` / `opensc-tool -a` /
 `gpg --card-status`), then:
 
 ```bash
-python3 tools/bulk_trb_trace_poll.py -o bulk-trb-after-timeout.log
+python3 tools/ccid/bulk_trb_trace_poll.py -o bulk-trb-after-timeout.log
 ```
 
 **Look for:**
@@ -166,7 +166,7 @@ on the 8-process image, deferred park + park-time prime are implicated.
 
 ### Experiment 3: Limit LinkStatus priming (code change)
 
-Gate [`main.rs` 1193–1194](../services/usb-bao1x/src/main.rs) so soft prime runs
+Gate [`main.rs` 1193–1194](../../services/usb-bao1x/src/main.rs) so soft prime runs
 **once** on first Configured LinkStatus (or rely only on the 100 ms
 `CcidPrimeBulkOut` path), not on every openpgp-apdu poll. If GetSlotStatus
 recovers, LinkStatus priming churn is the trigger.
@@ -174,7 +174,7 @@ recovers, LinkStatus priming churn is the trigger.
 ### Experiment 4: Known-good baseline (already run)
 
 ```bash
-# Flash images/dabao-ccid/known-good/ (no openpgp-apdu)
+# Flash `cargo xtask dabao-ccid --no-verify` (target release UF2s)  (no openpgp-apdu)
 sudo systemctl restart pcscd.socket pcscd.service
 timeout 8 pcsc_scan -n
 timeout 10 opensc-tool -a
@@ -212,7 +212,7 @@ transport work for maintainers or future contributors.
 ## Quick reproduction (8-process fail)
 
 ```bash
-# Flash images/dabao-ccid/openpgp-apdu/ → boot → wait for 1d50:6197
+# Flash `cargo xtask dabao-ccid openpgp-apdu --no-verify` (target release UF2s)  → boot → wait for 1d50:6197
 lsusb -d 1d50:6197
 sudo systemctl restart pcscd.socket pcscd.service
 timeout 8 pcsc_scan -n          # reader may appear; Card state: Status unavailable

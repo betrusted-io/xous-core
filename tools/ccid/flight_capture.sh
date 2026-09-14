@@ -74,7 +74,7 @@ dump_pair() {
   ts="$("${PY[@]}" -c 'from datetime import datetime, timezone; print(datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"))')"
   local ring_out="$1"
   local bulk_out="$2"
-  "${PY[@]}" tools/ring_buffer_dump.py -o "${ring_out}.tmp" >/dev/null 2>&1 \
+  "${PY[@]}" tools/ccid/ring_buffer_dump.py -o "${ring_out}.tmp" >/dev/null 2>&1 \
     && mv -f "${ring_out}.tmp" "${ring_out}" \
     || return 1
   # Stamp the ring header line is already inside the dump; also note ts in bulk log.

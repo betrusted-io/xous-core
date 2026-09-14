@@ -56,7 +56,7 @@ Flashed image?
   |         dabao-ccid / baosec-ccid / ccid-hil = CCID transport enabled
   |         dabao-ccid openpgp-apdu = 8-process image; currently does NOT enum
   |         Hardware-confirmed CCID enum: Dabao dabao-ccid (1d50:6197, HS bulk MPS 512)
-  |         Archives: images/dabao-ccid/known-good/ vs images/dabao-ccid/openpgp-apdu/
+  |         Builds: `dabao-ccid` vs `dabao-ccid openpgp-apdu` (rebuild locally; not in git)
   |
   +-- Known target --> Host: lsusb -d 1d50:  (6196=boot1, 6197=dabao kernel, 6198=baosec)
         |
@@ -68,11 +68,11 @@ Flashed image?
         |     --> Discriminate BEFORE treating as base USB:
         |         1. dmesg error -32 / -71 then 1d50:6197 a few seconds later
         |            = expected SE0 gap (boot1 drop, usb-bao1x attach). SUCCESS.
-        |         2. Flashed images/dabao-ccid/openpgp-apdu/ or
+        |         2. Flashed `dabao-ccid openpgp-apdu` build or
         |            cargo xtask dabao-ccid openpgp-apdu --no-verify
         |            = 8-process boot failure. UART on PB13/PB14 1M 8N1.
         |            See OPENPGP_APDU_BOOT_DEBUG.md. Do not debug CCID framing.
-        |         3. Confirm known-good: images/dabao-ccid/known-good/ or
+        |         3. Confirm known-good: `dabao-ccid` build or
         |            cargo xtask dabao-ccid --no-verify (7 processes). Must get 6197.
         |         4. If known-good also never appears: pre-CCID (power, cable,
         |            incomplete UF2 MSC write — serial uf2send.py). Stock dabao
@@ -102,7 +102,7 @@ Flashed image?
 ```
 
 **Minimum report** (if still stuck after the tree): flashed `xtask` target or
-which `images/dabao-ccid/` folder, output of `lsusb -d 1d50:`, whether
+which xtask image was flashed, output of `lsusb -d 1d50:`, whether
 `dabao-ccid` known-good enumerates as `6197` on the same board, and whether
 dmesg showed `-32`/`-71` then `6197` or never returned. No firmware source
 paste required if this table was followed.
@@ -165,12 +165,11 @@ across classes (not independent subtotals). Each `reserve_before_alloc` runs
 before that class's `alloc.*` calls; after all classes,
 `assert_matches_live(cw.allocated_non_ep0_count())` checks the shared counter
 updated inside `CorigineWrapper::alloc_ep`. Per-class `assert_class_ep_budget`
-remains. Regression: `ep_budget` tests + `tools/test_ep_budget_cumulative.py`
+remains. Regression: `ep_budget` tests + `tools/ccid/test_ep_budget_cumulative.py`
 (fake class on a full stack must trip cumulative; independent checks would not).
 
 **Service boot order (CCID images):** `ccid-openpgp` does **not** call
-`Pddb::new()` (that blocked USB bring-up). Optional `ccid_store` lives behind
-`ccid-pddb` and is not enabled by any xtask image. SE0 sequencing matches
+`Pddb::new()` (that blocked USB bring-up). PDDB provisioning was removed from this PR. SE0 sequencing matches
 boot1 (`setup_usb_pins` → Low → 500 ms → `cu.init()` → 150 ms → High);
 `Keyboard::new()` is deferred until after SE0 High (KPC / SFR_IOX conflict on PF5).
 
@@ -218,18 +217,17 @@ Shared queues on `Bao1xUsb` (`hw.rs`):
 
 | File | What to change here |
 |------|---------------------|
-| [`libs/bao1x-hal/src/usb/driver.rs`](../libs/bao1x-hal/src/usb/driver.rs) | Corigine UDC: `handle_event_inner`, EP0, `set_device_address`, `PollResult`, port reset |
-| [`services/usb-bao1x/Cargo.toml`](../services/usb-bao1x/Cargo.toml) | Feature flags: `ccid-openpgp`, `ccid-echo`; optional `pddb` dep |
-| [`services/usb-bao1x/src/api.rs`](../services/usb-bao1x/src/api.rs) | IPC contract: `Opcode::{CcidRxDeferred,CcidTx,IrqCcidRx}`, `CcidMsgIpc`, `CcidCode` |
-| [`services/usb-bao1x/src/ep_budget.rs`](../services/usb-bao1x/src/ep_budget.rs) | Cumulative EP ledger; regression: fake class on **6/8** |
-| [`services/usb-bao1x/src/ccid_framing.rs`](../services/usb-bao1x/src/ccid_framing.rs) | Wire math: `CCID_WIRE_MAX` (271), `CCID_BULK_MAX_PACKET` (**512** HS), `append_bulk_out`, `drain_complete_frames`, `next_tx_chunk`, `is_get_slot_status`, `is_icc_power_on`, `rdr_to_pc_slot_status_ok`, `rdr_to_pc_data_block_atr`; **unit tests (9/9)** |
-| [`services/usb-bao1x/src/ccid_transport.rs`](../services/usb-bao1x/src/ccid_transport.rs) | USB class 0x0B descriptors, bulk OUT assembly, bulk IN chunking (512-byte packets), inline GetSlotStatus + IccPowerOn ATR, `enqueue_response` / `prime_bulk_out` / `force_prime_bulk_out` |
-| [`services/usb-bao1x/src/ccid_store.rs`](../services/usb-bao1x/src/ccid_store.rs) | PDDB dict `usb.ccid`; compiled only with `ccid-pddb`; not used at boot |
-| [`services/usb-bao1x/src/hw.rs`](../services/usb-bao1x/src/hw.rs) | Composite gadget, EP budget assert, `device.poll`; `composite_handler` independent CORIGINE + SW IRQ branches |
-| [`services/usb-bao1x/src/main.rs`](../services/usb-bao1x/src/main.rs) | Boot, SE0 Low/High timing, IPC loop, `CcidRxDeferred` TOCTOU re-check, `CcidTx` `irq_serviced` wait; serial opcodes gated off on CCID |
-| [`services/usb-bao1x/src/lib.rs`](../services/usb-bao1x/src/lib.rs) | Public `ccid_framing` module; U2F client API (template for handler IPC) |
-| [`services/openpgp-apdu/`](../services/openpgp-apdu/) | In-tree deferred APDU harness (SELECT / GET DATA / VERIFY fixtures). **8-process dabao-ccid image does not enumerate**; UART needed — [`OPENPGP_APDU_BOOT_DEBUG.md`](OPENPGP_APDU_BOOT_DEBUG.md) |
-| [`xtask/src/main.rs`](../xtask/src/main.rs) | `dabao` / `baosec` = no CCID; `dabao-ccid` / `baosec-ccid` add `ccid-openpgp`; `ccid-hil` adds echo + `oem-baosec-lite`; positional `openpgp-apdu` or `--with-openpgp-test-apdu` |
+| [`libs/bao1x-hal/src/usb/driver.rs`](../../libs/bao1x-hal/src/usb/driver.rs) | Corigine UDC: `handle_event_inner`, EP0, `set_device_address`, `PollResult`, port reset |
+| [`services/usb-bao1x/Cargo.toml`](../../services/usb-bao1x/Cargo.toml) | Feature flags: `ccid-openpgp`, `ccid-echo` |
+| [`services/usb-bao1x/src/api.rs`](../../services/usb-bao1x/src/api.rs) | IPC contract: `Opcode::{CcidRxDeferred,CcidTx,IrqCcidRx}`, `CcidMsgIpc`, `CcidCode` |
+| [`services/usb-bao1x/src/ep_budget.rs`](../../services/usb-bao1x/src/ep_budget.rs) | Cumulative EP ledger; regression: fake class on **6/8** |
+| [`services/usb-bao1x/src/ccid_framing.rs`](../../services/usb-bao1x/src/ccid_framing.rs) | Wire math: `CCID_WIRE_MAX` (271), `CCID_BULK_MAX_PACKET` (**512** HS), `append_bulk_out`, `drain_complete_frames`, `next_tx_chunk`, `is_get_slot_status`, `is_icc_power_on`, `rdr_to_pc_slot_status_ok`, `rdr_to_pc_data_block_atr`; **unit tests (9/9)** |
+| [`services/usb-bao1x/src/ccid_transport.rs`](../../services/usb-bao1x/src/ccid_transport.rs) | USB class 0x0B descriptors, bulk OUT assembly, bulk IN chunking (512-byte packets), inline GetSlotStatus + IccPowerOn ATR, `enqueue_response` / `prime_bulk_out` / `force_prime_bulk_out` |
+| [`services/usb-bao1x/src/hw.rs`](../../services/usb-bao1x/src/hw.rs) | Composite gadget, EP budget assert, `device.poll`; `composite_handler` independent CORIGINE + SW IRQ branches |
+| [`services/usb-bao1x/src/main.rs`](../../services/usb-bao1x/src/main.rs) | Boot, SE0 Low/High timing, IPC loop, `CcidRxDeferred` TOCTOU re-check, `CcidTx` `irq_serviced` wait; serial opcodes gated off on CCID |
+| [`services/usb-bao1x/src/lib.rs`](../../services/usb-bao1x/src/lib.rs) | Public `ccid_framing` module; U2F client API (template for handler IPC) |
+| [`services/openpgp-apdu/`](../../services/openpgp-apdu/) | In-tree deferred APDU harness (SELECT / GET DATA / VERIFY fixtures). **8-process dabao-ccid image does not enumerate**; UART needed — [`OPENPGP_APDU_BOOT_DEBUG.md`](OPENPGP_APDU_BOOT_DEBUG.md) |
+| [`xtask/src/main.rs`](../../xtask/src/main.rs) | `dabao` / `baosec` = no CCID; `dabao-ccid` / `baosec-ccid` add `ccid-openpgp`; `ccid-hil` adds echo + `oem-baosec-lite`; positional `openpgp-apdu` or `--with-openpgp-test-apdu` |
 
 ---
 
@@ -254,8 +252,6 @@ Shared queues on `Bao1xUsb` (`hw.rs`):
 | In-tree APDU harness | `services/openpgp-apdu/src/main.rs` `ccid_main`; `usb_link.rs` `CcidLink::connect_to_usb_driver` (`"_Xous USB device driver_"`) |
 | HIL echo (non-production) | `main.rs` — `#[cfg(feature = "ccid-echo")]` inside `IrqCcidRx` |
 | Second listener rejected | `main.rs` — `CcidRxDeferred` sets `CcidCode::Denied` for other PIDs |
-| Already provisioned? | `ccid_store.rs` — only with `ccid-pddb`; **not** called from `main.rs` at boot |
-| Offline PIN seed helper | `ccid_store.rs` — `save_provisioned_pins` (not USB-wired; feature `ccid-pddb`) |
 | PMIC unplug reset | `main.rs` — `Opcode::PmicIrq`, `cu.unplug()` |
 
 ---
@@ -282,8 +278,6 @@ Shared queues on `Bao1xUsb` (`hw.rs`):
 | Oversize frame / silent drop | `append_bulk_out` overflow in `ccid_transport.rs` `endpoint_out` |
 | Bulk IN stuck / no reply | `poll_bulk_in`, `tx_pending` in `ccid_transport.rs`; handler called `CcidTx`? soft IRQ armed? |
 | No USB CDC / no provision port on CCID | Expected (Persona A); use UART (`xous-log`) for debug |
-| PDDB not OKV1 on CCID image | Expected when `ccid-pddb` unused; seed PDDB offline — no USB provision |
-| PDDB keys wrong / missing | `ccid_store.rs`; PDDB basis policy (out of tree) |
 | `test_provision.py` fails | CDC present (Persona A regression) or pyusb/permissions; not “missing provision port” |
 | `test_provision.py` PASS | Confirms no CDC — does **not** prove PDDB OKV1 |
 | Board compile error in CI | `ccid-ci.yml`; `RefCell`/`borrow` in `hw.rs` / `main.rs` |
@@ -313,7 +307,7 @@ lsusb -d 1d50:6197 -v 2>/dev/null | grep -E 'bInterfaceClass|iInterface|idProduc
 dmesg -T | tail -40
 
 # Step 4 — CCID transport only (ccid-hil or *-ccid + ccid-echo image)
-python3 tools/ccid_smoke.py --vid 0x1d50 --pid 0x6197
+python3 tools/ccid/ccid_smoke.py --vid 0x1d50 --pid 0x6197
 ```
 
 Expected `idProduct`: dabao `0x6197`, baosec `0x6198` (`hw.rs` `UsbVidPid(0x1d50, pid)`).
@@ -322,8 +316,7 @@ CCID bulk MPS 512; `pcsc_scan` reader + ATR + OpenPGP Card V2 (with stub). Petrn
 on known-good: 7 processes, `usb-bao1x` PID 6, then host `1d50:6197`. See
 [`CCID_TEST_REPORT.md`](CCID_TEST_REPORT.md).
 
-Flash archives (in git): `images/dabao-ccid/known-good/` and
-`images/dabao-ccid/openpgp-apdu/` (`loader.uf2`, `xous.uf2`, `apps.uf2`).
+Flash sets are built with `cargo xtask dabao-ccid` / `dabao-ccid openpgp-apdu` (not checked into git).
 `xtask` still overwrites `target/.../release/`. If MSC copy is unreliable,
 `python3 bao1x-boot/uf2send.py <file.uf2>` from boot1.
 
@@ -333,16 +326,16 @@ Flash archives (in git): `images/dabao-ccid/known-good/` and
 
 | File | Role |
 |------|------|
-| [`tools/ccid_smoke.py`](../tools/ccid_smoke.py) | Single-shot enumeration + echo check |
-| [`tools/ccid_hil/ccid_usb.py`](../tools/ccid_hil/ccid_usb.py) | Frame builders, device find, bulk roundtrip |
-| [`tools/ccid_hil/test_enumerate.py`](../tools/ccid_hil/test_enumerate.py) | Descriptor field assertions (`HIL-01`) |
-| [`tools/ccid_hil/test_echo.py`](../tools/ccid_hil/test_echo.py) | GetSlotStatus / XfrBlock echo (`HIL-03`, `HIL-05`) |
-| [`tools/ccid_hil/test_provision.py`](../tools/ccid_hil/test_provision.py) | HIL-02: assert **no CDC** on CCID images (Persona A); why: USB PIN path must stay gone |
-| [`tools/check_ep_budget.py`](../tools/check_ep_budget.py) | Static EP totals vs `CRG_EP_NUM` (why: catch overflow before HIL) |
-| [`tools/test_ep_budget_cumulative.py`](../tools/test_ep_budget_cumulative.py) | Old independent vs cumulative guard gap |
-| [`services/usb-bao1x/src/ep_budget.rs`](../services/usb-bao1x/src/ep_budget.rs) | Cumulative `EpBudgetLedger` + unit tests |
-| [`tools/ccid_hil/run_all.sh`](../tools/ccid_hil/run_all.sh) | Ordered suite driver |
-| [`tools/ccid_hil/wait_device.sh`](../tools/ccid_hil/wait_device.sh) | USB presence gate |
+| [`tools/ccid/ccid_smoke.py`](../../tools/ccid/ccid_smoke.py) | Single-shot enumeration + echo check |
+| [`tools/ccid/ccid_hil/ccid_usb.py`](../../tools/ccid/ccid_hil/ccid_usb.py) | Frame builders, device find, bulk roundtrip |
+| [`tools/ccid/ccid_hil/test_enumerate.py`](../../tools/ccid/ccid_hil/test_enumerate.py) | Descriptor field assertions (`HIL-01`) |
+| [`tools/ccid/ccid_hil/test_echo.py`](../../tools/ccid/ccid_hil/test_echo.py) | GetSlotStatus / XfrBlock echo (`HIL-03`, `HIL-05`) |
+| [`tools/ccid/ccid_hil/test_provision.py`](../../tools/ccid/ccid_hil/test_provision.py) | HIL-02: assert **no CDC** on CCID images (Persona A); why: USB PIN path must stay gone |
+| [`tools/ccid/check_ep_budget.py`](../../tools/ccid/check_ep_budget.py) | Static EP totals vs `CRG_EP_NUM` (why: catch overflow before HIL) |
+| [`tools/ccid/test_ep_budget_cumulative.py`](../../tools/ccid/test_ep_budget_cumulative.py) | Old independent vs cumulative guard gap |
+| [`services/usb-bao1x/src/ep_budget.rs`](../../services/usb-bao1x/src/ep_budget.rs) | Cumulative `EpBudgetLedger` + unit tests |
+| [`tools/ccid/ccid_hil/run_all.sh`](../../tools/ccid/ccid_hil/run_all.sh) | Ordered suite driver |
+| [`tools/ccid/ccid_hil/wait_device.sh`](../../tools/ccid/ccid_hil/wait_device.sh) | USB presence gate |
 
 To reproduce a HIL failure: run the failing script, then match the step to the
 symptom table above.
@@ -353,9 +346,9 @@ symptom table above.
 
 | Path | Runs |
 |------|------|
-| [`.github/workflows/ccid-ci.yml`](../.github/workflows/ccid-ci.yml) | `ccid_framing` + `ep_budget` unit tests + hosted/board check + `baosec-ccid` + `ccid-hil` compile |
-| [`.github/workflows/build.yml`](../.github/workflows/build.yml) | Full `cargo xtask baosec` matrix (default image, no CCID) |
-| [`.github/workflows/ccid-hil.yml`](../.github/workflows/ccid-hil.yml) | Self-hosted `tools/ccid_hil/run_all.sh` (scaffolding; no runner yet) |
+| [`.github/workflows/ccid-ci.yml`](../../.github/workflows/ccid-ci.yml) | `ccid_framing` + `ep_budget` unit tests + hosted/board check + `baosec-ccid` + `ccid-hil` compile |
+| [`.github/workflows/build.yml`](../../.github/workflows/build.yml) | Full `cargo xtask baosec` matrix (default image, no CCID) |
+| [`.github/workflows/ccid-hil.yml`](../../.github/workflows/ccid-hil.yml) | Self-hosted `tools/ccid/ccid_hil/run_all.sh` (scaffolding; no runner yet) |
 
 Local equivalents:
 
@@ -370,7 +363,7 @@ cargo xtask dabao-ccid openpgp-apdu --no-verify    # 8-process; currently no USB
 cargo xtask baosec --no-verify                     # baseline USB (no CCID)
 cargo xtask baosec-ccid --no-verify                # baosec CCID transport
 cargo xtask ccid-hil --no-verify                   # CCID + echo for bench
-python3 tools/ccid_smoke.py --vid 0x1d50 --pid 0x6197
+python3 tools/ccid/ccid_smoke.py --vid 0x1d50 --pid 0x6197
 ```
 
 ---
@@ -382,10 +375,9 @@ When reading `main.rs`, note `cfg` gates:
 | `cfg` | Effect |
 |-------|--------|
 | `feature = "ccid-openpgp"` | CCID+FIDO+NKRO; no USB CDC; no boot PDDB check |
-| `feature = "ccid-pddb"` | Compiles `ccid_store` only; not enabled by any xtask image |
 | `feature = "ccid-echo"` | `IrqCcidRx` echoes frames; **disables** `CcidRxDeferred` handler path |
 | `not(feature = "ccid-echo")` | Production path: deferred listener + `CcidRxDeferred` opcodes |
-| `target_os = "xous"` | `ccid_transport` / `ccid_store` are device-only modules |
+| `target_os = "xous"` | `ccid_transport` is a device-only module |
 
 ---
 
@@ -401,8 +393,8 @@ cargo xtask dabao-ccid openpgp-apdu --no-verify
 
 | Item | Status |
 |------|--------|
-| Known-good (7 processes, no handler) | Enumerates `1d50:6197`. Archive: `images/dabao-ccid/known-good/` |
-| With `openpgp-apdu` (8 processes, PID 8) | **Does not enumerate.** Archive: `images/dabao-ccid/openpgp-apdu/` |
+| Known-good (7 processes, no handler) | Enumerates `1d50:6197`. Build: `cargo xtask dabao-ccid --no-verify` |
+| With `openpgp-apdu` (8 processes, PID 8) | **Does not enumerate.** Build: `cargo xtask dabao-ccid openpgp-apdu --no-verify` |
 | Deferred-path fixes in `usb-bao1x` | Present in both images; known-good still enums, so not the 8-process cause |
 | Hosted unit tests | `cargo test -p openpgp-apdu --lib` |
 
@@ -446,15 +438,12 @@ the product's Xous service table (`xtask` positional cratespec).
 | `services/usb-bao1x/src/main.rs` | Boot, SE0, IPC loop, `CcidRxDeferred` TOCTOU, configured gates |
 | `services/usb-bao1x/src/ccid_transport.rs` | USB CCID class driver |
 | `services/usb-bao1x/src/ccid_framing.rs` | Wire format helpers + unit tests |
-| `services/usb-bao1x/src/ccid_store.rs` | PDDB provisioning storage |
 | `services/usb-bao1x/src/api.rs` | IPC opcodes and `CcidMsgIpc`; `"_Xous USB device driver_"` |
 | `services/openpgp-apdu/` | In-tree deferred APDU harness (8-process image does not enum) |
-| `images/dabao-ccid/known-good/` | Flash set that enumerates `1d50:6197` |
-| `images/dabao-ccid/openpgp-apdu/` | Flash set that drops off USB |
 | `xtask/src/main.rs` | Image targets and service order; `dabao-ccid openpgp-apdu` |
-| `docs/OPENPGP_APDU_BOOT_DEBUG.md` | UART procedure for the 8-process boot failure |
-| `tools/ccid_smoke.py` | Host smoke test |
-| `tools/ccid_hil/` | HIL scripts and suite |
+| `OPENPGP_APDU_BOOT_DEBUG.md` | UART procedure for the 8-process boot failure |
+| `tools/ccid/ccid_smoke.py` | Host smoke test |
+| `tools/ccid/ccid_hil/` | HIL scripts and suite |
 | `bao1x-boot/uf2send.py` | Serial UF2 when MSC copy is unreliable |
 | `.github/workflows/ccid-ci.yml` | CI compile + `ccid_framing` / `ep_budget` unit tests |
 | `.github/workflows/ccid-hil.yml` | Nightly Pi HIL (scaffolding) |

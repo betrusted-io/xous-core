@@ -19,17 +19,18 @@ UART yet.
 
 | Document | Contents |
 |----------|----------|
-| [`docs/CCID_PROTOCOL_AND_HIL.md`](../../docs/CCID_PROTOCOL_AND_HIL.md) | **Main reference** — smart-card/CCID background, architecture, IPC handler guide, **security considerations**, Pi setup, full testing guide |
-| [`docs/CCID_TEST_REPORT.md`](../../docs/CCID_TEST_REPORT.md) | Recorded verification results and CI status |
-| [`docs/OPENPGP_APDU_BOOT_DEBUG.md`](../../docs/OPENPGP_APDU_BOOT_DEBUG.md) | `dabao-ccid openpgp-apdu` does not enumerate (UART, not HIL framing) |
-| [`CCID_EP_BUDGET_AND_HIL_LOCAL.md`](../../CCID_EP_BUDGET_AND_HIL_LOCAL.md) | Local working EP-budget / HIL notes (uncommitted convention) |
+| [`docs/ccid/CCID_PROTOCOL_AND_HIL.md`](../../../docs/ccid/CCID_PROTOCOL_AND_HIL.md) | **Main reference** — smart-card/CCID background, architecture, IPC handler guide, security considerations, Pi setup, testing guide |
+| [`docs/ccid/code_map.md`](../../../docs/ccid/code_map.md) | **Code map** — symptom-to-source navigation for debugging and fixes |
+| [`docs/ccid/CCID_TEST_REPORT.md`](../../../docs/ccid/CCID_TEST_REPORT.md) | Recorded verification results and CI status |
+| [`docs/ccid/OPENPGP_APDU_BOOT_DEBUG.md`](../../../docs/ccid/OPENPGP_APDU_BOOT_DEBUG.md) | `dabao-ccid openpgp-apdu` does not enumerate (UART, not HIL framing) |
+| [`docs/ccid/CCID_EP_BUDGET_AND_HIL_LOCAL.md`](../../../docs/ccid/CCID_EP_BUDGET_AND_HIL_LOCAL.md) | Local working EP-budget / HIL notes (uncommitted convention) |
 
 ## Quick start
 
 ```bash
 # 0. Local EP budget arithmetic (no hardware)
-python3 tools/check_ep_budget.py
-python3 tools/sim_persona_a_composite.py
+python3 tools/ccid/check_ep_budget.py
+python3 tools/ccid/sim_persona_a_composite.py
 
 # 1. Build and flash HIL image (ccid-openpgp + ccid-echo)
 cargo xtask ccid-hil
@@ -42,12 +43,12 @@ cargo test -p usb-bao1x --lib ccid_framing
 
 # 4. Smoke test (~30 s)
 pip install pyusb
-python3 tools/ccid_smoke.py
+python3 tools/ccid/ccid_smoke.py
 
 # 5. Full suite (~2 min)
 pip install pyusb
-chmod +x tools/ccid_hil/*.sh
-tools/ccid_hil/run_all.sh
+chmod +x tools/ccid/ccid_hil/*.sh
+tools/ccid/ccid_hil/run_all.sh
 ```
 
 ## Requirements
@@ -89,4 +90,4 @@ flash if product needs `OKV1`.
 
 The `ccid-echo` feature echoes host frames on bulk IN so transport can be tested
 without an OpenPGP handler service. **HIL images only — never ship `ccid-echo`
-in production** (see [security boundary](../../docs/CCID_PROTOCOL_AND_HIL.md#production-vs-hil-ccid-echo-security-boundary) in the main doc).
+in production** (see [security boundary](../../../docs/ccid/CCID_PROTOCOL_AND_HIL.md#production-vs-hil-ccid-echo-security-boundary) in the main doc).

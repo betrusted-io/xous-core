@@ -941,7 +941,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         Some("dabao-ccid") => {
             // Same package set as dabao (no pddb service — dabao has no SPI flash).
-            // USB CCID transport only; does not enable ccid-pddb.
+            // USB CCID transport only (no PDDB provisioning path).
             let board = "board-dabao";
             let sigblock_size = bao1x_api::signatures::SIGBLOCK_LEN;
             update_flash_origin(

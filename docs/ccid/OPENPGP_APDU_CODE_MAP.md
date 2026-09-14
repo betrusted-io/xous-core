@@ -607,9 +607,9 @@ IPC payload is `CcidMsgIpc { data: Vec<u8>, code: CcidCode }` (rkyv), same layou
 
 **Build:** `cargo xtask dabao-ccid --no-verify` (7 processes, no openpgp-apdu)
 
-**Flash archive:** `images/dabao-ccid/known-good/`
+**Flash archive:** ``cargo xtask dabao-ccid --no-verify` (target release UF2s) `
 
-**Failing counterpart:** `cargo xtask dabao-ccid openpgp-apdu --no-verify` — archive `images/dabao-ccid/openpgp-apdu/`
+**Failing counterpart:** `cargo xtask dabao-ccid openpgp-apdu --no-verify` — archive ``cargo xtask dabao-ccid openpgp-apdu --no-verify` (target release UF2s) `
 
 **Services included:**
 
@@ -711,5 +711,5 @@ Recorded so later readers do not chase stale line numbers.
 | `services/xous-log/src/main.rs` | PID 4 |
 | `services/xous-names/src/main.rs` | PID 5 |
 | `services/bao1x-hal-service/src/main.rs` | PID 7 |
-| `docs/CCID_TEST_REPORT.md`, `OPENPGP_APDU_BOOT_DEBUG.md`, `code_map.md` | Hardware status |
+| `CCID_TEST_REPORT.md`, `OPENPGP_APDU_BOOT_DEBUG.md`, `code_map.md` | Hardware status |
 | git: `f265ee346`, `f2c6dfbb8`, parents | Before/after |

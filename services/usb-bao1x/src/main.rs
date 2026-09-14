@@ -1,6 +1,4 @@
 mod api;
-#[cfg(all(feature = "ccid-pddb", target_os = "xous"))]
-mod ccid_store;
 #[cfg(all(feature = "ccid-openpgp", target_os = "xous"))]
 mod ccid_transport;
 mod debug;

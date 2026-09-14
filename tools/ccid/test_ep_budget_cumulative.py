@@ -8,7 +8,7 @@ Demonstrates the guard gap closed by EpBudgetLedger:
 
 Mirrors services/usb-bao1x/src/ep_budget.rs unit tests (run those with cargo).
 
-  python3 tools/test_ep_budget_cumulative.py
+  python3 tools/ccid/test_ep_budget_cumulative.py
 """
 
 from __future__ import annotations

@@ -21,7 +21,7 @@ Response (little-endian):
   u16 out_enq_index, out_deq_index
   u16 in_enq_index, in_deq_index
 
-Can run concurrently with tools/irq_pending_trace_poll.py (0x42) — independent
+Can run concurrently with tools/ccid/irq_pending_trace_poll.py (0x42) — independent
 EP0 vendor requests; neither claims an interface, so pcscd can keep CCID.
 
 Does not claim any interface — EP0 only.
@@ -31,8 +31,8 @@ This script never creates/modifies system files or escalates privileges.
 On EACCES it prints a copy-pasteable sudo suggestion and exits.
 
 Example:
-  python3 tools/bulk_trb_trace_poll.py -o bulk-trb-trace.log
-  # optional parallel: python3 tools/irq_pending_trace_poll.py -o irq-pending-trace.log
+  python3 tools/ccid/bulk_trb_trace_poll.py -o bulk-trb-trace.log
+  # optional parallel: python3 tools/ccid/irq_pending_trace_poll.py -o irq-pending-trace.log
   # in another terminal: watch -n 2 gpg --card-status
 """
 
@@ -72,7 +72,7 @@ def _is_access_denied(err: BaseException) -> bool:
 
 def _exit_permission_denied(vid: int, pid: int) -> None:
     args = " ".join(sys.argv[1:])
-    cmd = f"sudo python3 tools/bulk_trb_trace_poll.py {args}".rstrip()
+    cmd = f"sudo python3 tools/ccid/bulk_trb_trace_poll.py {args}".rstrip()
     print(
         f"Permission denied opening {vid:04x}:{pid:04x}.\n"
         "This script will not modify any system files or permissions on its own.\n"

@@ -29,8 +29,8 @@ Intended use: once after a failure / recovery / replug — not continuous pollin
 Requires: pip install pyusb  (and permission to open 1d50:6197)
 
 Example:
-  python3 tools/ring_buffer_dump.py
-  python3 tools/ring_buffer_dump.py -o flight-ring.log --last 40
+  python3 tools/ccid/ring_buffer_dump.py
+  python3 tools/ccid/ring_buffer_dump.py -o flight-ring.log --last 40
 """
 
 from __future__ import annotations
@@ -81,7 +81,7 @@ SOURCE_NAMES = {
 
 def _suggest_sudo(argv: list[str]) -> None:
     args = " ".join(argv[1:])
-    cmd = f"sudo python3 tools/ring_buffer_dump.py {args}".rstrip()
+    cmd = f"sudo python3 tools/ccid/ring_buffer_dump.py {args}".rstrip()
     print(
         "Permission denied opening the USB device.\n"
         f"Re-run with sudo, e.g.:\n  {cmd}",

@@ -7,8 +7,8 @@ against `CRG_EP_NUM=8` (`libs/bao1x-hal/src/usb/driver.rs`).
 
 Run anytime a USB class is added or an xtask feature set changes:
 
-  python3 tools/check_ep_budget.py
-  python3 tools/check_ep_budget.py --fail-fragile   # also fail if headroom < 2
+  python3 tools/ccid/check_ep_budget.py
+  python3 tools/ccid/check_ep_budget.py --fail-fragile   # also fail if headroom < 2
 
 This is intentionally a standalone arithmetic check: constructing `Bao1xUsb::new`
 needs live Corigine MMIO and is not unit-testable in isolation here.
@@ -160,7 +160,7 @@ def main() -> int:
     print("  EpBudgetLedger (services/usb-bao1x/src/ep_budget.rs) tracks CUMULATIVE totals.")
     print("  Per-class assert_class_ep_budget remains; live count: CorigineWrapper.allocated_non_ep0.")
     print("  Regression: cargo test -p usb-bao1x --lib ep_budget")
-    print("             python3 tools/test_ep_budget_cumulative.py")
+    print("             python3 tools/ccid/test_ep_budget_cumulative.py")
     print()
     print("Other xtask USB composites:")
     print("  precursor usbdev/usb-device-xous — Spinal UDC, not CRG_EP_NUM (out of scope).")

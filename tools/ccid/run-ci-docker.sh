@@ -4,9 +4,9 @@
 # Run GitHub-hosted CI workflows locally inside the rust-xous Docker image.
 #
 # Usage (from repo root):
-#   tools/run-ci-docker.sh              # all hosted CI (incl. PDDB Renode)
-#   tools/run-ci-docker.sh --quick      # skip PDDB Renode (~30-75 min saved)
-#   tools/run-ci-docker.sh --inner      # already inside container; do not re-exec
+#   tools/ccid/run-ci-docker.sh              # all hosted CI (incl. PDDB Renode)
+#   tools/ccid/run-ci-docker.sh --quick      # skip PDDB Renode (~30-75 min saved)
+#   tools/ccid/run-ci-docker.sh --inner      # already inside container; do not re-exec
 #
 # Uses docker when the daemon is reachable; falls back to podman otherwise.
 # Container runs as root so apt works; build artifacts under target/ may be root-owned.
@@ -211,4 +211,4 @@ INNER_ARGS=(--inner)
   -v "${REPO_ROOT}:/home/baozi/xous-core:Z" \
   -w /home/baozi/xous-core \
   "${RUST_IMAGE}" \
-  bash -lc "tools/run-ci-docker.sh ${INNER_ARGS[*]}"
+  bash -lc "tools/ccid/run-ci-docker.sh ${INNER_ARGS[*]}"

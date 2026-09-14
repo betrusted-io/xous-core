@@ -8,7 +8,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-HIL="${ROOT}/tools/ccid_hil"
+HIL="${ROOT}/tools/ccid/ccid_hil"
 OUT="${CCID_HIL_OUT:-/tmp/ccid-hil-out}"
 VID="${CCID_VID:-1d50}"
 PID="${CCID_PID:-6198}"

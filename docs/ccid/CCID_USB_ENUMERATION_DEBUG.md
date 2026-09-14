@@ -33,10 +33,10 @@ the actual driver code.
 
 Related maps (also verify against HEAD):
 
-- [`docs/CCID_PROTOCOL_AND_HIL.md`](CCID_PROTOCOL_AND_HIL.md) — protocol, images, HIL
-- [`docs/code_map.md`](code_map.md) — symptom-to-source navigation
-- [`docs/OPENPGP_APDU_BOOT_DEBUG.md`](OPENPGP_APDU_BOOT_DEBUG.md) — 8-process `openpgp-apdu` image never enumerates
-- Local EP arithmetic: `tools/check_ep_budget.py`, `tools/test_ep_budget_cumulative.py`
+- [`CCID_PROTOCOL_AND_HIL.md`](CCID_PROTOCOL_AND_HIL.md) — protocol, images, HIL
+- [`code_map.md`](code_map.md) — symptom-to-source navigation
+- [`OPENPGP_APDU_BOOT_DEBUG.md`](OPENPGP_APDU_BOOT_DEBUG.md) — 8-process `openpgp-apdu` image never enumerates
+- Local EP arithmetic: `tools/ccid/check_ep_budget.py`, `tools/ccid/test_ep_budget_cumulative.py`
 - Cumulative guard: `services/usb-bao1x/src/ep_budget.rs`
 
 ---
@@ -75,7 +75,7 @@ frustratingly generic:
 - Device never appears at all
 - `lsusb` / `system_profiler` shows nothing, or shows the device stuck at
   "unknown" with no interface descriptors
-- Host-side tooling (`tools/ccid_hil/*.py`, pyusb) times out waiting for
+- Host-side tooling (`tools/ccid/ccid_hil/*.py`, pyusb) times out waiting for
   the device, or raises a generic "device not found" error
 
 None of these tell you why. On BAO1x, the actual cause is almost always
@@ -223,7 +223,7 @@ A regression test proves the old logic's blind spot: adding one fake
 endpoint-consuming class to a 6/8 CCID build — independent subtotals still
 "pass", cumulative reserve must panic. See
 `cargo test -p usb-bao1x --lib ep_budget` and
-`python3 tools/test_ep_budget_cumulative.py`.
+`python3 tools/ccid/test_ep_budget_cumulative.py`.
 
 ---
 
@@ -253,7 +253,7 @@ For any change that adds, removes, or reconfigures a USB class:
    call sites and count exactly what it claims.
 4. Sum them. Compare to the hardware limit.
 
-Or run: `python3 tools/check_ep_budget.py`
+Or run: `python3 tools/ccid/check_ep_budget.py`
 
 This alone catches the entire class of bug described in section 3, with zero
 hardware required.
@@ -326,11 +326,11 @@ from source, docs, or comments, ask whoever owns the product decision.
 
 | Tool | What it checks | Hardware? |
 |------|----------------|-----------|
-| `python3 tools/check_ep_budget.py` | Known targets vs `CRG_EP_NUM=8` | No |
-| `python3 tools/test_ep_budget_cumulative.py` | Cumulative vs independent-subtotal gap | No |
+| `python3 tools/ccid/check_ep_budget.py` | Known targets vs `CRG_EP_NUM=8` | No |
+| `python3 tools/ccid/test_ep_budget_cumulative.py` | Cumulative vs independent-subtotal gap | No |
 | `cargo test -p usb-bao1x --lib ep_budget` | Ledger unit + fake-class regression | No |
-| `python3 tools/sim_persona_a_composite.py` | Host-side Persona A layout asserts (mock) | No |
-| `tools/ccid_hil/*.py` | Real enumeration / echo / Persona A CDC absence | Yes |
+| `python3 tools/ccid/sim_persona_a_composite.py` | Host-side Persona A layout asserts (mock) | No |
+| `tools/ccid/ccid_hil/*.py` | Real enumeration / echo / Persona A CDC absence | Yes |
 
 Board compile gate (needs `cargo xtask install-toolkit`):
 

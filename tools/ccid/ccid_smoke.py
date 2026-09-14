@@ -16,7 +16,7 @@ import argparse
 import sys
 from pathlib import Path
 
-# Allow running as tools/ccid_smoke.py or from tools/ccid_hil/
+# Allow running as tools/ccid/ccid_smoke.py or from tools/ccid/ccid_hil/
 sys.path.insert(0, str(Path(__file__).resolve().parent / "ccid_hil"))
 
 from ccid_usb import (  # noqa: E402

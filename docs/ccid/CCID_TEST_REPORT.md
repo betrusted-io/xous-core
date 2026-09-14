@@ -93,8 +93,8 @@ Related unit / static gates (CI / local):
 | Area | Method | Status |
 |------|--------|--------|
 | Cumulative EP budget (ledger) | `cargo test -p usb-bao1x --lib ep_budget` | Pass (CI): **4** tests |
-| EP budget arithmetic | `python3 tools/check_ep_budget.py` | Pass (local) |
-| Persona A layout mock | `python3 tools/sim_persona_a_composite.py` | Pass (local) |
+| EP budget arithmetic | `python3 tools/ccid/check_ep_budget.py` | Pass (local) |
+| Persona A layout mock | `python3 tools/ccid/sim_persona_a_composite.py` | Pass (local) |
 
 ## Known limitations / not yet tested
 
@@ -107,7 +107,7 @@ Related unit / static gates (CI / local):
 
 ## Build notes
 
-- `ccid-openpgp` does **not** depend on `pddb` (dabao has no SPI flash / gen2 PDDB path). Optional offline PDDB helpers are behind `ccid-pddb`.
+- `ccid-openpgp` does not depend on PDDB (dabao has no SPI flash / gen2 PDDB path).
 - `CCID_BULK_MAX_PACKET = 512` for high-speed USB; `CCID_WIRE_MAX = 271` for CCID message framing (chunked across bulk packets).
 - xtask recipe `dabao-ccid` added (same packages as `dabao` + `ccid-openpgp`).
 - `baosec-ccid` / `ccid-hil` remain compile targets for baosec-shaped images; they were not the board under test for this report.
@@ -136,7 +136,7 @@ Fork CI: fetch annotated tags from `betrusted-io/xous-core` before swap signing.
 ## Historical note
 
 An earlier draft referenced in-tree OpenPGP crates and USB provisioning CDC.
-Current design: transport only on dabao-ccid; optional PDDB helpers via `ccid-pddb`
+Current design: transport only on dabao-ccid; no in-tree PDDB provisioning path
 on baosec; Persona A drops all USB CDC on CCID images. Production OpenPGP crypto
 stays out-of-tree via `CcidRxDeferred` / `CcidTx`. An in-tree fixture harness
 (`services/openpgp-apdu`) exists but the 8-process image does not enumerate.

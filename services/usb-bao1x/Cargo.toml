@@ -47,9 +47,6 @@ usbd-serial = { git = "https://github.com/betrusted-io/usbd-serial.git", branch 
     "max-packet-size-512",
 ] }
 
-# Optional PDDB helpers for offline CCID provisioning tooling (not required for USB transport).
-pddb = { path = "../pddb", optional = true, default-features = false, features = ["mbbb"] }
-
 [features]
 bao1x = []
 board-baosec = [
@@ -59,7 +56,6 @@ board-baosec = [
     "bao1x-hal/board-baosec",
     "bao1x-hal-service",
     "bao1x-hal-service/board-baosec",
-    "pddb?/board-baosec",
 ]
 oem-baosec-lite = ["bao1x-hal/oem-baosec-lite"]
 board-dabao = [
@@ -76,7 +72,6 @@ hosted-baosec = [
     "bao1x-emu",
     "dep:ux-api",
     "ux-api/hosted-baosec",
-    "pddb?/hosted-baosec",
 ]
 # none of these other modes are actually supported, but are listed here
 # to allow direct re-use of API code
@@ -100,10 +95,7 @@ prototyping = [
 ] # temporary feature-out for figuring out the code; remove this if you don't recognize it anymore
 
 # Generic USB CCID bulk transport (Persona A: no USB CDC on CCID images).
-# Does not require pddb — dabao has no SPI flash / gen2 PDDB path.
 ccid-openpgp = []
-# Optional offline PDDB provisioning helpers (baosec images with a PDDB service).
-ccid-pddb = ["dep:pddb", "ccid-openpgp"]
 # HIL personality: echo PC_to_RDR frames on bulk IN (requires ccid-openpgp).
 ccid-echo = ["ccid-openpgp"]
 

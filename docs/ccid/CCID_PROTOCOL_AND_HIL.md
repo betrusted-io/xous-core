@@ -14,14 +14,14 @@ Raspberry Pi or desktop Linux host.
 **Audience:** reviewers who are not CCID experts, firmware developers wiring an
 APDU handler, and anyone setting up hardware-in-the-loop (HIL) regression tests.
 
-**Code navigation:** [`docs/code_map.md`](code_map.md) — debug decision tree,
+**Code navigation:** [`code_map.md`](code_map.md) — debug decision tree,
 USB enumeration flow, symptom-to-source map, and host `lsusb` checks (start here
 for "device not visible" or CCID issues).
 
-**`openpgp-apdu` boot failure:** [`docs/OPENPGP_APDU_BOOT_DEBUG.md`](OPENPGP_APDU_BOOT_DEBUG.md)
+**`openpgp-apdu` boot failure:** [`OPENPGP_APDU_BOOT_DEBUG.md`](OPENPGP_APDU_BOOT_DEBUG.md)
 — 8-process `dabao-ccid openpgp-apdu` does not enumerate; UART on PB13/PB14.
 
-**Enumeration deep-dive (community):** [`docs/CCID_USB_ENUMERATION_DEBUG.md`](CCID_USB_ENUMERATION_DEBUG.md)
+**Enumeration deep-dive (community):** [`CCID_USB_ENUMERATION_DEBUG.md`](CCID_USB_ENUMERATION_DEBUG.md)
 — worked example of Corigine endpoint-budget overflow, static diagnostic method,
 Persona A trade-offs; not official support.
 
@@ -103,7 +103,7 @@ OpenPGP application logic runs in a **separate Xous service** on the device.
 |-------|----------------|---------------|
 | USB CCID descriptors, bulk IN/OUT, frame assembly | Transport | **Yes** (`ccid_transport.rs`, `ccid_framing.rs`) |
 | Deferred IPC for complete host frames | Transport API | **Yes** (`CcidRxDeferred` / `CcidTx`) |
-| Persist / read opaque PIN lines in PDDB (`OKV1`) | Provisioning storage | **Optional** (`ccid-pddb` / `ccid_store.rs`); **no USB CDC capture**; not called at boot |
+| Persist / read opaque PIN lines in PDDB (`OKV1`) | Provisioning storage | **Not in this PR** (removed; untested on dabao). See DRIVER_CHANGES.md. |
 | Parse most `PC_to_RDR_*` message types | Protocol | **No** (exceptions: GetSlotStatus and IccPowerOn answered inline) |
 | `PC_to_RDR_GetSlotStatus` → `RDR_to_PC_SlotStatus` | Transport | **Yes** (IRQ path; see framing / CreateChannel note) |
 | `PC_to_RDR_IccPowerOn` → `RDR_to_PC_DataBlock` + OpenPGP ATR | Transport | **Yes** (IRQ path; ATR bytes in `ccid_framing::OPENPGP_ATR`) |
@@ -137,7 +137,7 @@ process must use correctly.
 - Present a USB CCID bulk interface to a connected host.
 - Reassemble and forward complete `PC_to_RDR` frames to one deferred IPC listener.
 - Accept complete `RDR_to_PC` reply blobs from that listener and stream them on bulk IN.
-- Optional PDDB helpers (`ccid-pddb` / `ccid_store.rs`) to store PIN lines remain for offline seeding. **No xtask image enables `ccid-pddb`**, and `main.rs` does **not** call PDDB at boot (that blocked USB init).
+- PDDB helpers (`ccid-pddb` / `ccid_store.rs`) were removed from this PR. `main.rs` does not call PDDB at boot.
 - **Persona A:** CCID images do **not** expose USB CDC for debug or PIN provisioning (Corigine 8-endpoint budget).
 
 **Explicit non-goals (must be provided elsewhere):**
@@ -255,7 +255,7 @@ USB host therefore **cannot** write PIN lines through `usb-bao1x` on these image
 | (c) Skip USB provision if PDDB is already `OKV1` | **Implemented** as a no-op: there is no USB provision path |
 | Unprovisioned CCID image (`OKV1` missing) | USB still enumerates as CCID+FIDO+NKRO; no USB PIN capture |
 
-`ccid_store::save_provisioned_pins` remains in-tree for factory tools that seed
+`ccid_store::save_provisioned_pins` was removed from this PR; a future design may seed
 PDDB offline; it is **not** wired to any USB RX path on CCID builds.
 
 **Mitigation:** ship images with PDDB already provisioned, or seed PDDB before
@@ -269,10 +269,10 @@ PIN lines are **opaque blobs** to `usb-bao1x`:
   (out of tree), not the transport crate.
 - Semantic validation belongs in the handler or factory tool that seeds PDDB.
 
-#### What is stored in PDDB and who can read it later?
+#### What was previously stored in PDDB (removed from this PR)
 
-Written by `ccid_store.rs` into dictionary **`usb.ccid`** (typically offline /
-factory seed; not via USB on Persona A images):
+Historical keys that factory tooling *could* use offline (not via USB on Persona A
+images; `ccid_store.rs` is no longer in this PR):
 
 | Key | Max size | Content |
 |-----|----------|---------|
@@ -359,7 +359,7 @@ as pre-USB-serial and non-CDC platforms — not a new UART driver in `usb-bao1x`
 `EpBudgetLedger` verifies the **cumulative** class total (with per-class sanity
 checks kept) before each allocating constructor and against
 `allocated_non_ep0` after build — see `ep_budget` tests /
-`tools/test_ep_budget_cumulative.py`.
+`tools/ccid/test_ep_budget_cumulative.py`.
 
 | Interface | When present | Purpose |
 |-----------|--------------|---------|
@@ -396,7 +396,6 @@ Defined in `services/usb-bao1x/Cargo.toml`:
 | Feature | Depends on | Effect |
 |---------|------------|--------|
 | `ccid-openpgp` | (none) | CCID bulk transport; **no USB CDC** (Persona A); no `pddb` |
-| `ccid-pddb` | `dep:pddb`, `ccid-openpgp` | Optional offline PDDB provisioning helpers (baosec) |
 | `ccid-echo` | `ccid-openpgp` | Echo every received `PC_to_RDR` frame on bulk IN (HIL only) |
 
 Build commands:
@@ -475,7 +474,7 @@ contiguous `RDR_to_PC` buffer and streamed on bulk IN.
 
 ### Common message types
 
-Used in HIL tests (`tools/ccid_hil/ccid_usb.py`) and typical OpenPGP reader
+Used in HIL tests (`tools/ccid/ccid_hil/ccid_usb.py`) and typical OpenPGP reader
 traffic:
 
 | Value | Name | Direction | Role |
@@ -508,7 +507,7 @@ the stack worked. Inline IRQ replies keep CreateChannel within budget so
 
 ### Example CCID hex dumps
 
-The examples below match what `tools/ccid_smoke.py` and `tools/ccid_hil/ccid_usb.py`
+The examples below match what `tools/ccid/ccid_smoke.py` and `tools/ccid/ccid_hil/ccid_usb.py`
 send on the wire. All multi-byte integers are **little-endian**. Offsets are
 zero-based within each CCID message.
 
@@ -869,7 +868,7 @@ validate format, derive keys, or interpret content.
 `cu.init()` blocked USB bring-up on first-boot format. USB composite is always
 CCID+FIDO+NKRO on CCID images (no provision CDC).
 
-`ccid_store` compiles only with feature `ccid-pddb`. No current `cargo xtask`
+`ccid_store` / `ccid-pddb` were removed from this PR. No current `cargo xtask`
 image enables that feature; factory tools that seed PDDB do so offline.
 
 ### PDDB keys
@@ -880,13 +879,13 @@ image enables that feature; factory tools that seed PDDB do so offline.
 | `usb.ccid` / `admin_pin_line` | Second line (opaque bytes) |
 | `usb.ccid` / `provisioned` | Marker `OKV1` |
 
-Maximum key size is 256 bytes per PIN line in `ccid_store.rs`.
-`save_provisioned_pins` can seed these offline; nothing in the USB IRQ/IPC path
-calls it on Persona A images.
+Maximum key size was 256 bytes per PIN line in the removed `ccid_store.rs`.
+Offline seeding of these keys is out of scope for this PR; nothing in the USB
+IRQ/IPC path writes them on Persona A images.
 
 ### HIL follow-up
 
-`tools/ccid_hil/test_provision.py` (HIL-02) was **rewritten for Persona A**:
+`tools/ccid/ccid_hil/test_provision.py` (HIL-02) was **rewritten for Persona A**:
 it asserts the device presents **no CDC ACM** interfaces (and the shared
 Persona A composite checks). It does **not** send PIN lines over USB.
 `--legacy-usb-provision` exits 2. `run_all.sh` always runs HIL-02.
@@ -967,9 +966,9 @@ tests below.
 ```bash
 cargo test -p usb-bao1x --lib ccid_framing
 cargo test -p usb-bao1x --lib ep_budget
-python3 tools/check_ep_budget.py
-python3 tools/test_ep_budget_cumulative.py
-python3 tools/sim_persona_a_composite.py
+python3 tools/ccid/check_ep_budget.py
+python3 tools/ccid/test_ep_budget_cumulative.py
+python3 tools/ccid/sim_persona_a_composite.py
 ```
 
 - `ccid_framing`: partial-frame handling, oversize rejection, reassembly, TX chunking, `OKV1` marker, GetSlotStatus / IccPowerOn helpers (**9/9**).
@@ -1002,7 +1001,7 @@ Requires `ccid-hil` image flashed.
 ```bash
 pip install pyusb
 lsusb -d 1d50:6198
-python3 tools/ccid_smoke.py
+python3 tools/ccid/ccid_smoke.py
 ```
 
 **Pass criteria:**
@@ -1016,17 +1015,17 @@ python3 tools/ccid_smoke.py
 Flags:
 
 ```bash
-python3 tools/ccid_smoke.py --timeout 120
-python3 tools/ccid_smoke.py --skip-echo
-python3 tools/ccid_smoke.py --vid 0x1d50 --pid 0x6197   # dabao
+python3 tools/ccid/ccid_smoke.py --timeout 120
+python3 tools/ccid/ccid_smoke.py --skip-echo
+python3 tools/ccid/ccid_smoke.py --vid 0x1d50 --pid 0x6197   # dabao
 ```
 
 ### Tier 4: Full HIL suite (~2 minutes)
 
 ```bash
 pip install pyusb
-chmod +x tools/ccid_hil/*.sh
-tools/ccid_hil/run_all.sh
+chmod +x tools/ccid/ccid_hil/*.sh
+tools/ccid/ccid_hil/run_all.sh
 ```
 
 | Step | Script | Checks | Pass line | Why |
@@ -1132,13 +1131,8 @@ python3 -m venv ~/ccid-venv
 source ~/ccid-venv/bin/activate
 pip install pyusb
 
-python3 tools/ccid_smoke.py
-
-# Full HIL suite (enumeration, echo, stress)
-tools/ccid_hil/run_all.sh
-
-# Include provisioning test (factory-reset / unprovisioned device only)
-CCID_HIL_PROVISION=1 tools/ccid_hil/run_all.sh
+python3 tools/ccid/ccid_smoke.py
+tools/ccid/ccid_hil/run_all.sh
 ```
 
 Logs are written to `/tmp/ccid-hil-out/` by default.
@@ -1149,7 +1143,7 @@ Logs are written to `/tmp/ccid-hil-out/` by default.
    `baosec-hil`.
 2. Runner user in `plugdev` and `dialout`.
 3. Flash `ccid-hil` image once on the bench (workflow does not flash today).
-4. Nightly `ccid-hil.yml` runs `tools/ccid_hil/run_all.sh`.
+4. Nightly `ccid-hil.yml` runs `tools/ccid/ccid_hil/run_all.sh`.
 
 ---
 
@@ -1163,21 +1157,5 @@ Logs are written to `/tmp/ccid-hil-out/` by default.
 | HIL transport | Pi self-hosted | Enum, no-CDC (HIL-02), echo, stress |
 | OpenPGP E2E | Out of tree + Dabao HIL | Stub: `pcsc_scan` ATR / OpenPGP Card V2; full GnuPG = handler repo |
 
-See also [`docs/CCID_TEST_REPORT.md`](CCID_TEST_REPORT.md) for recorded
-verification results.
-
----
-
-## Related files
-
-| Path | Purpose |
-|------|---------|
-| `services/usb-bao1x/src/ccid_transport.rs` | USB CCID class driver |
-| `services/usb-bao1x/src/ccid_framing.rs` | Wire format helpers + unit tests |
-| `services/usb-bao1x/src/ccid_store.rs` | PDDB provisioning storage |
-| `services/usb-bao1x/src/api.rs` | IPC opcodes and `CcidMsgIpc` |
-| `services/usb-bao1x/src/main.rs` | Deferred listener, echo, provisioning |
-| `tools/ccid_smoke.py` | Host smoke test |
-| `tools/ccid_hil/` | HIL scripts |
-| `.github/workflows/ccid-ci.yml` | CI compile + unit tests |
-| `.github/workflows/ccid-hil.yml` | Nightly Pi HIL |
+See also [`CCID_TEST_REPORT.md`](CCID_TEST_REPORT.md) for recorded
+verification results and [`code_map.md`](code_map.md) for source navigation.

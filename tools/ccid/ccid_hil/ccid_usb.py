@@ -33,7 +33,7 @@ USB_CLASS_CDC_DATA = 0x0A
 CCID_HEADER_LEN = 10
 
 # Persona A expected unidirectional non-EP0 slots on Corigine (CRG_EP_NUM=8).
-# Per class (see tools/check_ep_budget.py and source cites therein):
+# Per class (see tools/ccid/check_ep_budget.py and source cites therein):
 #   CCID bulk OUT+IN (2), FIDO (2), NKRO (2) => 6; no CDC; interrupt IN omitted.
 PERSONA_A_EXPECTED_NON_EP0 = 6
 PERSONA_A_MAX_NON_EP0 = 8

@@ -25,7 +25,7 @@ This script never creates/modifies system files or escalates privileges.
 On EACCES it prints a copy-pasteable sudo suggestion and exits.
 
 Example:
-  python3 tools/composite_handler_trace_poll.py -o composite-handler-trace.log
+  python3 tools/ccid/composite_handler_trace_poll.py -o composite-handler-trace.log
 """
 
 from __future__ import annotations
@@ -63,7 +63,7 @@ def _is_access_denied(err: BaseException) -> bool:
 
 def _exit_permission_denied(vid: int, pid: int) -> None:
     args = " ".join(sys.argv[1:])
-    cmd = f"sudo python3 tools/composite_handler_trace_poll.py {args}".rstrip()
+    cmd = f"sudo python3 tools/ccid/composite_handler_trace_poll.py {args}".rstrip()
     print(
         f"Permission denied opening {vid:04x}:{pid:04x}.\n"
         "This script will not modify any system files or permissions on its own.\n"
