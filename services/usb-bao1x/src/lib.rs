@@ -1,9 +1,11 @@
 #![cfg_attr(target_os = "none", no_std)]
 
+pub mod api;
 pub mod ccid_framing;
 pub mod ep_budget;
 pub use api::*;
 pub use ep_budget::{CRG_EP_NUM as USB_EP_BUDGET_SLOTS, EpBudgetLedger, assert_class_ep_budget};
+use bao1x_api::keyboard::KeyMap;
 use num_traits::*;
 use packed_struct::PackedStruct;
 use rkyv::option::ArchivedOption;
