@@ -10,8 +10,8 @@ use std::sync::atomic::{AtomicBool, AtomicPtr, Ordering};
 use num_traits::ToPrimitive;
 use usb_bao1x::ccid_framing::{
     CCID_BULK_MAX_PACKET as CCID_BULK_MAX_PACKET_BYTES, CCID_HEADER_LEN, append_bulk_out, consume_tx_chunk,
-    drain_complete_frames, frame_total_len, is_get_slot_status, is_icc_power_on, next_tx_chunk,
-    rdr_to_pc_data_block_atr, rdr_to_pc_slot_status_ok,
+    deferred_unhandled_response, drain_complete_frames, frame_total_len, is_get_slot_status, is_icc_power_on,
+    next_tx_chunk, rdr_to_pc_data_block_atr, rdr_to_pc_slot_status_ok,
 };
 use usb_device::Result as UsbResult;
 use usb_device::UsbError;
@@ -159,6 +159,10 @@ pub struct CcidTransportClass<'a, B: UsbBus> {
     notify_cid: xous::CID,
     /// Set by [`UsbClass::reset`]; main clears deferred `CcidRxDeferred` waiter.
     session_hangup: AtomicBool,
+    /// Set when a process parks `CcidRxDeferred` (e.g. openpgp-apdu). Until then,
+    /// deferred opcodes are answered inline so 7-process dabao-ccid never leaves
+    /// the host ReadUSB hanging.
+    deferred_handler_claimed: AtomicBool,
     /// Clone of the live `UsbBusAllocator` bus (filled `ep_meta`) for force-prime.
     /// Attached after `UsbDevice` is built; `Endpoint::bus()` is crate-private.
     force_bus: Option<bao1x_hal::usb::driver::CorigineWrapper>,
@@ -184,9 +188,24 @@ impl<'a, B: UsbBus> CcidTransportClass<'a, B> {
             complete_rx,
             notify_cid,
             session_hangup: AtomicBool::new(false),
+            deferred_handler_claimed: AtomicBool::new(false),
             force_bus: None,
             irq_serviced: AtomicPtr::new(core::ptr::null_mut()),
         }
+    }
+
+    /// Mark that an external process owns deferred CCID frames (`CcidRxDeferred`).
+    pub fn claim_deferred_handler(&self) {
+        self.deferred_handler_claimed.store(true, Ordering::SeqCst);
+    }
+
+    /// Clear deferred ownership (USB reset / unplug / hangup).
+    pub fn release_deferred_handler(&self) {
+        self.deferred_handler_claimed.store(false, Ordering::SeqCst);
+    }
+
+    pub fn deferred_handler_claimed(&self) -> bool {
+        self.deferred_handler_claimed.load(Ordering::SeqCst)
     }
 
     /// Wire the main-thread flag CcidTx waits on. Must outlive this transport.
@@ -321,6 +340,16 @@ impl<'a, B: UsbBus> CcidTransportClass<'a, B> {
                             g.tx_buf.extend_from_slice(&resp);
                             g.tx_pending = true;
                             Step::Inline
+                        } else if !self.deferred_handler_claimed.load(Ordering::SeqCst) {
+                            // No CcidRxDeferred listener (7-process dabao-ccid): answer in
+                            // IRQ context like GetSlotStatus so ReadUSB cannot hang ~13s.
+                            // Main-thread IrqCcidRx auto-reply alone was insufficient — the
+                            // notify can be lost and GetSlotStatus (inline) never re-wakes it.
+                            let resp = deferred_unhandled_response(&frame);
+                            g.tx_buf.clear();
+                            g.tx_buf.extend_from_slice(&resp);
+                            g.tx_pending = true;
+                            Step::Inline
                         } else {
                             self.complete_rx.borrow_mut().push_back(frame);
                             Step::Queued
@@ -413,6 +442,7 @@ impl<'a, B: UsbBus> UsbClass<B> for CcidTransportClass<'a, B> {
         self.complete_rx.borrow_mut().clear();
         // Wake main so deferred CcidRxDeferred waiters get Hangup (arg1=1).
         self.session_hangup.store(true, Ordering::SeqCst);
+        self.deferred_handler_claimed.store(false, Ordering::SeqCst);
         xous::try_send_message(
             self.notify_cid,
             xous::Message::new_scalar(Opcode::IrqCcidRx.to_usize().unwrap(), 1, 0, 0, 0),

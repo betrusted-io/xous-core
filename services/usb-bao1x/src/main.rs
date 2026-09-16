@@ -397,6 +397,7 @@ pub(crate) fn main_hw() -> ! {
                             response.replace(deferred_buf).unwrap();
                         }
                         ccid_listener_pid = None;
+                        cu.ccid.release_deferred_handler();
                         let _ = cu.ccid.take_session_hangup();
                     }
                 }
@@ -427,6 +428,7 @@ pub(crate) fn main_hw() -> ! {
                                 response.replace(deferred_buf).unwrap();
                             }
                             ccid_listener_pid = None;
+                            cu.ccid.release_deferred_handler();
                             let _ = cu.ccid.take_session_hangup();
                         }
                     }
@@ -590,6 +592,8 @@ pub(crate) fn main_hw() -> ! {
             Opcode::CcidRxDeferred => {
                 if ccid_listener_pid.is_none() {
                     ccid_listener_pid = msg.sender.pid();
+                    // Stop IRQ-path stub replies; this process owns deferred frames.
+                    cu.ccid.claim_deferred_handler();
                 }
                 if ccid_listener_pid == msg.sender.pid() {
                     // Pop in its own statement so the RefMut is dropped before the else
@@ -701,6 +705,7 @@ pub(crate) fn main_hw() -> ! {
                             response.replace(deferred_buf).unwrap();
                         }
                         ccid_listener_pid = None;
+                        cu.ccid.release_deferred_handler();
                         continue;
                     }
                 }
