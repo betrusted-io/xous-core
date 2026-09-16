@@ -79,6 +79,7 @@ board-baosec = [
     "bmp180",
     "utralib/bao1x",
     "ux-api/board-baosec",
+    "ux-api/bao1x",
     "ux-api/std",
 ] # USB form factor token
 # "lite" variant of baosec. Shares the same basic flags but some things remapped when this is added.
@@ -113,6 +114,9 @@ verilator-only = ["utralib/bao1x"]
 mpw = ["utralib/bao1x"]
 hdl-test = ["utralib/bao1x"]
 verbose-debug = []
+# Instrumentation only: log/count EV_PENDING bits cleared by enable_interrupts().
+# Does not change IRQ control flow. Enable via usb-bao1x `irq-pending-trace`.
+irq-pending-trace = []
 debug-print = []
 debug-print-duart = ["debug-print", "debug-countermeasures"]
 debug-print-uart = ["debug-print"]

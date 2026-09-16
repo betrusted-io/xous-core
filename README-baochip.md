@@ -82,6 +82,20 @@ Three application targets are supported by Xous. Click the target names in this 
 - [`dabao`](./apps-dabao/) is a Xous environment. It boots a full kernel, supports `std`, and features "detached-apps", i.e., users can develop stand-alone applications that run on the OS without having to touch the kernel image.
 - [`baosec`](./apps-baosec/) is a Xous environment. It is like `dabao`, but supports swap memory. As a result it can run much larger, more complicated applications. The on-chip RRAM is reserved for the kernel, while the off-chip swap contains user applications.
 
+### USB CCID images (optional)
+
+USB CCID (smart-card class `0x0B`) is **not** in the default `dabao` / `baosec` images. CCID images drop USB CDC (debug and provisioning) so the composite fits the Corigine 8-endpoint budget: CCID bulk IN/OUT + FIDO + NKRO (**6/8**).
+
+- `cargo xtask dabao-ccid` — Dabao; hardware-confirmed enumeration (`1d50:6197`)
+- `cargo xtask baosec-ccid` — Baosec CCID transport (no `ccid-echo`)
+- `cargo xtask ccid-hil` — lab/HIL image with `ccid-echo` (do not ship)
+
+`xtask` writes `loader.uf2`, `xous.uf2`, and `apps.uf2` to
+`target/riscv32imac-unknown-xous-elf/release/` (overwritten on every rebuild).
+Rebuild locally for flash sets; demo binaries are not checked into the repo.
+See [`docs/ccid/OPENPGP_APDU_BOOT_DEBUG.md`](./docs/ccid/OPENPGP_APDU_BOOT_DEBUG.md)
+and [`docs/ccid/CCID_PROTOCOL_AND_HIL.md`](./docs/ccid/CCID_PROTOCOL_AND_HIL.md).
+
 Code is delivered via `boot1`. `boot1` is entered by holding down a button while power the device on. The device will show up as a USB mass storage device, at which point a .uf2 file containing the application image is copied to the device, and the update is applied.
 
 #### Out of Tree Application Builds

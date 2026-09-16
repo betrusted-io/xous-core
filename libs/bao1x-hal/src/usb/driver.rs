@@ -1,7 +1,9 @@
 use core::convert::TryFrom;
 use core::mem::size_of;
+#[cfg(feature = "irq-pending-trace")]
+use core::sync::atomic::AtomicU32;
 #[cfg(feature = "std")]
-use core::sync::atomic::AtomicBool;
+use core::sync::atomic::{AtomicBool, AtomicUsize};
 use core::sync::atomic::{AtomicPtr, Ordering, compiler_fence};
 #[cfg(feature = "std")]
 use std::sync::{Arc, Mutex};
@@ -894,8 +896,9 @@ pub struct CorigineUsb {
     stall_spec: [Option<bool>; CRG_EP_NUM * 2 + 2],
 
     pub max_packet_size: [Option<usize>; CRG_EP_NUM * 2 + 2],
-    app_enq_index: [usize; CRG_EP_NUM + 1],
-    app_deq_index: [usize; CRG_EP_NUM + 1],
+    /// Per-PEI bump indices (IN and OUT of the same EP number must not share a ring).
+    app_enq_index: [usize; CRG_EP_NUM * 2 + 2],
+    app_deq_index: [usize; CRG_EP_NUM * 2 + 2],
 
     speed: UsbDeviceSpeed,
 
@@ -969,8 +972,8 @@ impl CorigineUsb {
             setup: None,
             stall_spec: [None; CRG_EP_NUM * 2 + 2],
             max_packet_size: [None; CRG_EP_NUM * 2 + 2],
-            app_enq_index: [0; CRG_EP_NUM + 1],
-            app_deq_index: [0; CRG_EP_NUM + 1],
+            app_enq_index: [0; CRG_EP_NUM * 2 + 2],
+            app_deq_index: [0; CRG_EP_NUM * 2 + 2],
             setup_tag: 0,
             speed: UsbDeviceSpeed::Unknown,
             ep0_buf: AtomicPtr::new(core::ptr::null_mut()),
@@ -1109,33 +1112,26 @@ impl CorigineUsb {
     }
 
     pub fn get_app_buf_ptr(&mut self, ep_num: u8, dir: bool) -> Option<usize> {
-        let mut enq_index = self.app_enq_index[ep_num as usize];
         let pei = CorigineUsb::pei(ep_num, dir);
         let mps = self.max_packet_size[pei].expect("max packet size was not initialized!");
-        let ep_num = ep_num as usize;
-        let mut new_index = self.app_enq_index[ep_num] + mps;
+        let enq_index = self.app_enq_index[pei];
+        // End offset of this allocation (exclusive). One mps-sized slot fits when enq==0
+        // and mps==CRG_UDC_APP_BUF_LEN (e.g. CCID bulk 512).
+        let new_index = enq_index + mps;
 
-        // normally check for overflow, but in the case of serial it seems to do better
-        // if we don't do that. I'm still not sure why we seem to miss some IN ACKs.
-        // TODO: figure this out
-        if new_index + mps > CRG_UDC_APP_BUF_LEN {
-            // ignore the the dq pointer, overflow for now -- for some reason, we aren't
-            // getting all the interrupts we expect to be getting. Maybe some of them are
-            // being combined in a race condition or something like that?
-            new_index = 0;
-            enq_index = 0;
-            self.app_enq_index[ep_num] = 0;
-        }
-        if
-        /* new_index + mps > CRG_UDC_APP_BUF_LEN */
-        false {
-            // we could do a circular buffer for enq/deq but I think a couple entries with a reset
-            // is typically enough. If we hit this, then yah, we have to implement a full circular buffer.
+        // Ring full until retire_app_buf_ptr runs on transfer completion. Returning None
+        // makes UsbBus::write WouldBlock so we do not overwrite a buffer still in DMA use.
+        // Note: the old wrap path used `new_index + mps > LEN` as a wrap trigger; as a
+        // hard full check that condition rejects even the first 512-byte slot.
+        if new_index > CRG_UDC_APP_BUF_LEN {
             #[cfg(feature = "verbose-debug")]
             crate::println!("enqueue overflow");
             None
         } else {
-            self.app_enq_index[ep_num] = new_index;
+            self.app_enq_index[pei] = new_index;
+            #[cfg(feature = "irq-pending-trace")]
+            bulk_trb_trace_mirror_indices(ep_num, dir, self.app_enq_index[pei], self.app_deq_index[pei]);
+            let ep_num = ep_num as usize;
             if ep_num == 0 {
                 let addr = self.ifram_base_ptr + CRG_UDC_EP0_BUF_OFFSET + enq_index;
                 #[cfg(feature = "verbose-debug")]
@@ -1159,32 +1155,34 @@ impl CorigineUsb {
     }
 
     pub fn retire_app_buf_ptr(&mut self, ep_num: u8, dir: bool) -> usize {
-        let ep_num = ep_num as usize;
-        let deq_index = self.app_deq_index[ep_num];
-        self.app_deq_index[ep_num] +=
-            self.max_packet_size[ep_num].expect("max packet size was not initialized!");
+        let pei = CorigineUsb::pei(ep_num, dir);
+        let ep_idx = ep_num as usize;
+        let deq_index = self.app_deq_index[pei];
+        self.app_deq_index[pei] += self.max_packet_size[pei].expect("max packet size was not initialized!");
         #[cfg(feature = "verbose-debug")]
         crate::println!(
             "ep{} retire: enq_index {}; deq_index {}",
             ep_num,
-            self.app_enq_index[ep_num],
-            self.app_deq_index[ep_num]
+            self.app_enq_index[pei],
+            self.app_deq_index[pei]
         );
-        if self.app_deq_index[ep_num] == self.app_enq_index[ep_num] {
+        if self.app_deq_index[pei] == self.app_enq_index[pei] {
             #[cfg(feature = "verbose-debug")]
             crate::println!("Deq reset pointers to 0, ep{}", ep_num);
             // reset the pointers to 0 if we're empty
-            self.app_deq_index[ep_num] = 0;
-            self.app_enq_index[ep_num] = 0;
+            self.app_deq_index[pei] = 0;
+            self.app_enq_index[pei] = 0;
         }
-        if ep_num == 0 {
+        #[cfg(feature = "irq-pending-trace")]
+        bulk_trb_trace_mirror_indices(ep_num, dir, self.app_enq_index[pei], self.app_deq_index[pei]);
+        if ep_idx == 0 {
             let ptr = self.ifram_base_ptr + CRG_UDC_EP0_BUF_OFFSET + deq_index;
             udc_pointer_check!(ptr, CRG_UDC_APP_BUF_LEN);
             ptr
-        } else if ep_num <= CRG_EP_NUM {
+        } else if ep_idx <= CRG_EP_NUM {
             let ptr = self.ifram_base_ptr
                 + CRG_UDC_APP_BUFOFFSET
-                + ((ep_num - 1) as usize * 2 + if dir { 1 } else { 0 }) * CRG_UDC_APP_BUF_LEN
+                + ((ep_idx - 1) * 2 + if dir { 1 } else { 0 }) * CRG_UDC_APP_BUF_LEN
                 + deq_index;
             udc_pointer_check!(ptr, CRG_UDC_APP_BUF_LEN);
             ptr
@@ -2268,6 +2266,8 @@ impl CorigineUsb {
         }
 
         self.knock_doorbell(pei as _);
+        #[cfg(feature = "irq-pending-trace")]
+        bulk_trb_trace_note_armed(dir);
     }
 
     /*
@@ -2317,18 +2317,488 @@ pub struct CorigineWrapper {
     pub hw: Arc<Mutex<CorigineUsb>>,
     /// Tuple is (type of endpoint, max packet size)
     pub ep_meta: [Option<(EpType, usize)>; CRG_EP_NUM],
+    /// Running count of non-EP0 slots written into `ep_meta` via `alloc_ep`.
+    /// Shared across `clone()` so callers holding an outer wrapper can observe
+    /// allocations performed on the `UsbBusAllocator`-owned clone.
+    pub allocated_non_ep0: Arc<AtomicUsize>,
     pub ep_out_ready: Box<[Arc<AtomicBool>]>,
     pub address_is_set: Arc<AtomicBool>,
     pub event: Option<CrgEvent>,
     pub irq_csr: AtomicCsr<u32>,
 }
+
+/// `irq-pending-trace`: atomics for lost-wakeup evidence (no control-flow effect).
+#[cfg(feature = "irq-pending-trace")]
+static IRQ_TRACE_ENABLE_CLEARED_NONEMPTY: AtomicU32 = AtomicU32::new(0);
+#[cfg(feature = "irq-pending-trace")]
+static IRQ_TRACE_DISABLE_WITH_PENDING: AtomicU32 = AtomicU32::new(0);
+#[cfg(feature = "irq-pending-trace")]
+static IRQ_TRACE_LAST_CLEARED_PENDING: AtomicU32 = AtomicU32::new(0);
+#[cfg(feature = "irq-pending-trace")]
+static IRQ_TRACE_SEQ: AtomicU32 = AtomicU32::new(0);
+/// Last `UsbBus::write` ep index (0 = unset / EP0 / non-write site).
+#[cfg(feature = "irq-pending-trace")]
+static IRQ_TRACE_WRITE_EP: AtomicU32 = AtomicU32::new(0);
+/// 0=unset, 1=write-ok, 2=write-WouldBlock, 3=reset-path, 4=force-reset-path, 5=other
+#[cfg(feature = "irq-pending-trace")]
+static IRQ_TRACE_WRITE_PATH: AtomicU32 = AtomicU32::new(0);
+
+/// EP0 vendor control-IN `bRequest` for host telemetry (device-directed).
+///
+/// Setup: `bmRequestType=0xC0` (Device-to-Host | Vendor | Device), `bRequest=0x42`,
+/// `wValue=0`, `wIndex=0`, `wLength>=16`.
+///
+/// Response (16 bytes LE):
+/// `[u32 enable_cleared_nonempty][u32 disable_with_pending][u32 last_pending][u32 seq]`
+///
+/// `seq` is a monotonic event counter (ENABLE-CLEAR / DISABLE / CLEAR sites) so the
+/// host can tell "no new events" from a stalled poll. Reads only atomics — never
+/// takes the Corigine `hw` mutex used by bulk `write()`.
+pub const IRQ_PENDING_TRACE_BREQUEST: u8 = 0x42;
+/// Wire payload length for [`IRQ_PENDING_TRACE_BREQUEST`].
+pub const IRQ_PENDING_TRACE_RESP_LEN: usize = 16;
+
+/// Lock-free snapshot of irq-pending-trace counters (+ seq). Zeros if feature off.
+///
+/// Safe to call from EP0 / IRQ context: only `AtomicU32` loads, no USB mutex.
+pub fn irq_pending_trace_stats_snapshot() -> (u32, u32, u32, u32) {
+    #[cfg(feature = "irq-pending-trace")]
+    {
+        (
+            IRQ_TRACE_ENABLE_CLEARED_NONEMPTY.load(Ordering::Relaxed),
+            IRQ_TRACE_DISABLE_WITH_PENDING.load(Ordering::Relaxed),
+            IRQ_TRACE_LAST_CLEARED_PENDING.load(Ordering::Relaxed),
+            IRQ_TRACE_SEQ.load(Ordering::Relaxed),
+        )
+    }
+    #[cfg(not(feature = "irq-pending-trace"))]
+    {
+        (0, 0, 0, 0)
+    }
+}
+
+#[cfg(feature = "irq-pending-trace")]
+fn irq_trace_note_write_context(ep_index: u8, would_block: bool) {
+    IRQ_TRACE_WRITE_EP.store(ep_index as u32, Ordering::Relaxed);
+    IRQ_TRACE_WRITE_PATH.store(if would_block { 2 } else { 1 }, Ordering::Relaxed);
+}
+
+/// `irq-pending-trace`: bulk TRB arm/consume lifecycle (OUT-drop quirk evidence).
+#[cfg(feature = "irq-pending-trace")]
+static BULK_TRB_OUT_ARMED: AtomicU32 = AtomicU32::new(0);
+#[cfg(feature = "irq-pending-trace")]
+static BULK_TRB_OUT_CONSUMED: AtomicU32 = AtomicU32::new(0);
+#[cfg(feature = "irq-pending-trace")]
+static BULK_TRB_IN_ARMED: AtomicU32 = AtomicU32::new(0);
+#[cfg(feature = "irq-pending-trace")]
+static BULK_TRB_IN_CONSUMED: AtomicU32 = AtomicU32::new(0);
+#[cfg(feature = "irq-pending-trace")]
+static BULK_TRB_OUT_FORCE_PRIME: AtomicU32 = AtomicU32::new(0);
+#[cfg(feature = "irq-pending-trace")]
+static BULK_TRB_SEQ: AtomicU32 = AtomicU32::new(0);
+/// Mirrored `app_enq_index` / `app_deq_index` for last non-EP0 OUT PEI (byte offsets).
+#[cfg(feature = "irq-pending-trace")]
+static BULK_TRB_OUT_ENQ: AtomicU32 = AtomicU32::new(0);
+#[cfg(feature = "irq-pending-trace")]
+static BULK_TRB_OUT_DEQ: AtomicU32 = AtomicU32::new(0);
+/// Mirrored `app_enq_index` / `app_deq_index` for last non-EP0 IN PEI (byte offsets).
+#[cfg(feature = "irq-pending-trace")]
+static BULK_TRB_IN_ENQ: AtomicU32 = AtomicU32::new(0);
+#[cfg(feature = "irq-pending-trace")]
+static BULK_TRB_IN_DEQ: AtomicU32 = AtomicU32::new(0);
+
+/// EP0 vendor control-IN `bRequest` for bulk-TRB lifecycle telemetry.
+///
+/// Setup: `bmRequestType=0xC0`, `bRequest=0x43`, `wValue=0`, `wIndex=0`, `wLength>=32`.
+/// Distinct from [`IRQ_PENDING_TRACE_BREQUEST`] (`0x42`).
+///
+/// Response (32 bytes LE) — offsets:
+/// - `0..4`   `out_trb_armed` (`u32`)
+/// - `4..8`   `out_trb_consumed` (`u32`) — successful `UsbBus::read` OUT retire only
+/// - `8..12`  `in_trb_armed` (`u32`)
+/// - `12..16` `in_trb_consumed` (`u32`) — IN complete retire in `handle_event_inner`
+/// - `16..20` `out_force_prime_calls` (`u32`)
+/// - `20..24` `seq` (`u32`) — bumps on each of the above events
+/// - `24..26` `out_enq_index` (`u16`) — mirrored `app_enq_index` (byte offset)
+/// - `26..28` `out_deq_index` (`u16`) — mirrored `app_deq_index`
+/// - `28..30` `in_enq_index` (`u16`)
+/// - `30..32` `in_deq_index` (`u16`)
+///
+/// Underlying ring indices are `usize` (byte offsets within a `CRG_UDC_APP_BUF_LEN`
+/// slot); wire uses `u16` (values always fit: buffer is 512 bytes).
+///
+/// Index fields are lock-free mirrors updated at `get_app_buf_ptr` /
+/// `retire_app_buf_ptr` — EP0 must not take the Corigine `hw` mutex.
+pub const BULK_TRB_TRACE_BREQUEST: u8 = 0x43;
+/// Wire payload length for [`BULK_TRB_TRACE_BREQUEST`].
+pub const BULK_TRB_TRACE_RESP_LEN: usize = 32;
+
+/// Lock-free bulk-TRB telemetry snapshot. Zeros if feature off.
+///
+/// Returns `(out_armed, out_consumed, in_armed, in_consumed, force_prime, seq,
+/// out_enq, out_deq, in_enq, in_deq)` with index fields as `u16` wire values.
+pub fn bulk_trb_trace_stats_snapshot() -> (u32, u32, u32, u32, u32, u32, u16, u16, u16, u16) {
+    #[cfg(feature = "irq-pending-trace")]
+    {
+        (
+            BULK_TRB_OUT_ARMED.load(Ordering::Relaxed),
+            BULK_TRB_OUT_CONSUMED.load(Ordering::Relaxed),
+            BULK_TRB_IN_ARMED.load(Ordering::Relaxed),
+            BULK_TRB_IN_CONSUMED.load(Ordering::Relaxed),
+            BULK_TRB_OUT_FORCE_PRIME.load(Ordering::Relaxed),
+            BULK_TRB_SEQ.load(Ordering::Relaxed),
+            BULK_TRB_OUT_ENQ.load(Ordering::Relaxed) as u16,
+            BULK_TRB_OUT_DEQ.load(Ordering::Relaxed) as u16,
+            BULK_TRB_IN_ENQ.load(Ordering::Relaxed) as u16,
+            BULK_TRB_IN_DEQ.load(Ordering::Relaxed) as u16,
+        )
+    }
+    #[cfg(not(feature = "irq-pending-trace"))]
+    {
+        (0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
+    }
+}
+
+#[cfg(feature = "irq-pending-trace")]
+fn bulk_trb_trace_bump(counter: &AtomicU32, flight_src: Option<u8>) {
+    counter.fetch_add(1, Ordering::Relaxed);
+    BULK_TRB_SEQ.fetch_add(1, Ordering::Relaxed);
+    if let Some(src) = flight_src {
+        // Bulk arm/consume + force_prime: always record (handler path stays 1/32).
+        // Prior capture had zero src 4/5 in the ring because they were downsampled away.
+        match src {
+            USB_FLIGHT_SRC_FORCE_PRIME
+            | USB_FLIGHT_SRC_OUT_CONSUMED
+            | USB_FLIGHT_SRC_IN_CONSUMED
+            | USB_FLIGHT_SRC_OUT_ARMED
+            | USB_FLIGHT_SRC_IN_ARMED => usb_flight_record(src, 0),
+            _ => usb_flight_record_irq_sampled(src, 0),
+        }
+    }
+}
+
+#[cfg(feature = "irq-pending-trace")]
+fn bulk_trb_trace_note_armed(dir: bool) {
+    // `value` = enq | (deq << 16) from the lock-free index mirrors (byte offsets).
+    if dir == CRG_OUT {
+        bulk_trb_trace_bump(&BULK_TRB_OUT_ARMED, None);
+        let enq = BULK_TRB_OUT_ENQ.load(Ordering::Relaxed) & 0xffff;
+        let deq = BULK_TRB_OUT_DEQ.load(Ordering::Relaxed) & 0xffff;
+        usb_flight_record(USB_FLIGHT_SRC_OUT_ARMED, enq | (deq << 16));
+    } else {
+        bulk_trb_trace_bump(&BULK_TRB_IN_ARMED, None);
+        let enq = BULK_TRB_IN_ENQ.load(Ordering::Relaxed) & 0xffff;
+        let deq = BULK_TRB_IN_DEQ.load(Ordering::Relaxed) & 0xffff;
+        usb_flight_record(USB_FLIGHT_SRC_IN_ARMED, enq | (deq << 16));
+    }
+}
+
+#[cfg(feature = "irq-pending-trace")]
+fn bulk_trb_trace_mirror_indices(ep_num: u8, dir: bool, enq: usize, deq: usize) {
+    if ep_num == 0 {
+        return;
+    }
+    if dir == CRG_OUT {
+        BULK_TRB_OUT_ENQ.store(enq as u32, Ordering::Relaxed);
+        BULK_TRB_OUT_DEQ.store(deq as u32, Ordering::Relaxed);
+    } else {
+        BULK_TRB_IN_ENQ.store(enq as u32, Ordering::Relaxed);
+        BULK_TRB_IN_DEQ.store(deq as u32, Ordering::Relaxed);
+    }
+}
+
+/// `irq-pending-trace`: `composite_handler` entry/exit + IRQ `try_lock` outcomes.
+#[cfg(feature = "irq-pending-trace")]
+static COMPOSITE_HANDLER_ENTRIES: AtomicU32 = AtomicU32::new(0);
+#[cfg(feature = "irq-pending-trace")]
+static COMPOSITE_HANDLER_EXITS: AtomicU32 = AtomicU32::new(0);
+#[cfg(feature = "irq-pending-trace")]
+static COMPOSITE_HANDLER_LOCK_ACQUIRED: AtomicU32 = AtomicU32::new(0);
+#[cfg(feature = "irq-pending-trace")]
+static COMPOSITE_HANDLER_LOCK_CONTENDED: AtomicU32 = AtomicU32::new(0);
+#[cfg(feature = "irq-pending-trace")]
+static COMPOSITE_HANDLER_SEQ: AtomicU32 = AtomicU32::new(0);
+
+/// EP0 vendor control-IN `bRequest` for composite_handler / IRQ lock telemetry.
+///
+/// Setup: `bmRequestType=0xC0`, `bRequest=0x44`, `wValue=0`, `wIndex=0`, `wLength>=20`.
+/// Distinct from `0x42` / `0x43`.
+///
+/// Response (20 bytes LE) — offsets:
+/// - `0..4`   `composite_handler_entries` (`u32`)
+/// - `4..8`   `composite_handler_exits` (`u32`)
+/// - `8..12`  `lock_acquired` (`u32`) — IRQ-path `hw.try_lock()` Ok
+/// - `12..16` `lock_contended` (`u32`) — IRQ-path `hw.try_lock()` Err (early return)
+/// - `16..20` `seq` (`u32`) — bumps on each of the above events
+///
+/// Atomics only — safe during stalls; no Corigine `hw` mutex.
+pub const COMPOSITE_HANDLER_TRACE_BREQUEST: u8 = 0x44;
+/// Wire payload length for [`COMPOSITE_HANDLER_TRACE_BREQUEST`].
+pub const COMPOSITE_HANDLER_TRACE_RESP_LEN: usize = 20;
+
+/// Lock-free composite_handler telemetry snapshot. Zeros if feature off.
+pub fn composite_handler_trace_stats_snapshot() -> (u32, u32, u32, u32, u32) {
+    #[cfg(feature = "irq-pending-trace")]
+    {
+        (
+            COMPOSITE_HANDLER_ENTRIES.load(Ordering::Relaxed),
+            COMPOSITE_HANDLER_EXITS.load(Ordering::Relaxed),
+            COMPOSITE_HANDLER_LOCK_ACQUIRED.load(Ordering::Relaxed),
+            COMPOSITE_HANDLER_LOCK_CONTENDED.load(Ordering::Relaxed),
+            COMPOSITE_HANDLER_SEQ.load(Ordering::Relaxed),
+        )
+    }
+    #[cfg(not(feature = "irq-pending-trace"))]
+    {
+        (0, 0, 0, 0, 0)
+    }
+}
+
+/// First statement of `composite_handler` — call before any other work.
+#[cfg(feature = "irq-pending-trace")]
+pub fn composite_handler_trace_note_entry() {
+    COMPOSITE_HANDLER_ENTRIES.fetch_add(1, Ordering::Relaxed);
+    COMPOSITE_HANDLER_SEQ.fetch_add(1, Ordering::Relaxed);
+    usb_flight_record_irq_sampled(USB_FLIGHT_SRC_HANDLER_ENTRY, 0);
+}
+
+/// Paired with [`composite_handler_trace_note_entry`] via Drop guard on every return.
+#[cfg(feature = "irq-pending-trace")]
+pub fn composite_handler_trace_note_exit() {
+    COMPOSITE_HANDLER_EXITS.fetch_add(1, Ordering::Relaxed);
+    COMPOSITE_HANDLER_SEQ.fetch_add(1, Ordering::Relaxed);
+    usb_flight_record_irq_sampled(USB_FLIGHT_SRC_HANDLER_EXIT, 0);
+}
+
+#[cfg(feature = "irq-pending-trace")]
+pub fn composite_handler_trace_note_lock_acquired() {
+    COMPOSITE_HANDLER_LOCK_ACQUIRED.fetch_add(1, Ordering::Relaxed);
+    COMPOSITE_HANDLER_SEQ.fetch_add(1, Ordering::Relaxed);
+    usb_flight_record_irq_sampled(USB_FLIGHT_SRC_LOCK_ACQUIRED, 0);
+}
+
+#[cfg(feature = "irq-pending-trace")]
+pub fn composite_handler_trace_note_lock_contended() {
+    COMPOSITE_HANDLER_LOCK_CONTENDED.fetch_add(1, Ordering::Relaxed);
+    COMPOSITE_HANDLER_SEQ.fetch_add(1, Ordering::Relaxed);
+    // Always record — rare and high-signal.
+    usb_flight_record(USB_FLIGHT_SRC_LOCK_CONTENDED, 0);
+}
+
+/// Record raw `EV_PENDING` then `EV_ENABLE` into the flight ring (IRQ or exit path).
+#[cfg(feature = "irq-pending-trace")]
+pub fn usb_flight_record_ev_regs(pending: u32, enable: u32) {
+    usb_flight_record_irq_sampled(USB_FLIGHT_SRC_EV_PENDING, pending);
+    usb_flight_record_irq_sampled(USB_FLIGHT_SRC_EV_ENABLE, enable);
+}
+
+/// Main-loop observational snapshot: irqarray pending/enable + Corigine `USBSTS`.
+///
+/// `value` packing for [`USB_FLIGHT_SRC_MAIN_LOOP_STATUS`]:
+/// `pending` in bits `[15:0]`, `enable` in bits `[31:16]`.
+/// A second event [`USB_FLIGHT_SRC_MAIN_LOOP_USBSTS`] carries the raw `USBSTS` read.
+///
+/// Reads must be volatile CSR loads only (no ack/clear). `USBSTS` sticky bits are
+/// W1C on write, not clear-on-read.
+#[cfg(feature = "irq-pending-trace")]
+pub fn usb_flight_record_main_loop_status(pending: u32, enable: u32, usbsts: u32) {
+    let packed = (pending & 0xffff) | ((enable & 0xffff) << 16);
+    usb_flight_record(USB_FLIGHT_SRC_MAIN_LOOP_STATUS, packed);
+    usb_flight_record(USB_FLIGHT_SRC_MAIN_LOOP_USBSTS, usbsts);
+}
+
+// ---------------------------------------------------------------------------
+// Flight-recorder ring (post-mortem dump via EP0 `0x45`; survives EP0 cliffs)
+// ---------------------------------------------------------------------------
+
+/// Compact flight-recorder entry (`#[repr(C)]`, 12 bytes, little-endian on wire).
+///
+/// Layout:
+/// - `0..4`  `tick` (`u32`) — monotonic write sequence at insert time
+/// - `4..8`  `value` (`u32`) — source-dependent payload
+/// - `8`     `source` (`u8`) — see `USB_FLIGHT_SRC_*`
+/// - `9..12` `_pad` (zeros)
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct UsbFlightEvent {
+    pub tick: u32,
+    pub value: u32,
+    pub source: u8,
+    pub _pad: [u8; 3],
+}
+
+impl UsbFlightEvent {
+    /// Unwritten slot marker (`source=0xFF`); must not collide with `USB_FLIGHT_SRC_*`.
+    pub const ZERO: Self = Self { tick: 0, value: 0, source: 0xff, _pad: [0; 3] };
+}
+
+/// Ring capacity: 256 entries × 12 B = 3 KiB — fits debug budget; EP0 dumps in chunks.
+pub const USB_FLIGHT_RING_CAP: usize = 256;
+/// Wire / in-RAM size of [`UsbFlightEvent`].
+pub const USB_FLIGHT_EVENT_SIZE: usize = 12;
+/// Per-chunk header length for [`USB_FLIGHT_TRACE_BREQUEST`].
+pub const USB_FLIGHT_CHUNK_HEADER_LEN: usize = 16;
+/// Entries per EP0 chunk: `(256 - 16) / 12 = 20`.
+pub const USB_FLIGHT_ENTRIES_PER_CHUNK: usize = 20;
+/// Chunks needed to dump the full ring: `ceil(256 / 20) = 13`.
+pub const USB_FLIGHT_CHUNK_COUNT: usize = 13;
+/// Max EP0 response size (matches `usb-device` `control-buffer-256`).
+pub const USB_FLIGHT_TRACE_RESP_LEN: usize = 256;
+
+pub const USB_FLIGHT_SRC_HANDLER_ENTRY: u8 = 0;
+pub const USB_FLIGHT_SRC_HANDLER_EXIT: u8 = 1;
+pub const USB_FLIGHT_SRC_LOCK_ACQUIRED: u8 = 2;
+pub const USB_FLIGHT_SRC_LOCK_CONTENDED: u8 = 3;
+pub const USB_FLIGHT_SRC_OUT_CONSUMED: u8 = 4;
+pub const USB_FLIGHT_SRC_IN_CONSUMED: u8 = 5;
+pub const USB_FLIGHT_SRC_FORCE_PRIME: u8 = 6;
+pub const USB_FLIGHT_SRC_EV_PENDING: u8 = 7;
+pub const USB_FLIGHT_SRC_EV_ENABLE: u8 = 8;
+pub const USB_FLIGHT_SRC_MAIN_LOOP_STATUS: u8 = 9;
+pub const USB_FLIGHT_SRC_MAIN_LOOP_USBSTS: u8 = 10;
+pub const USB_FLIGHT_SRC_OUT_ARMED: u8 = 11;
+pub const USB_FLIGHT_SRC_IN_ARMED: u8 = 12;
+/// `force_prime_bulk_out` skipped re-arm because `enq != deq` (no synthetic retire).
+pub const USB_FLIGHT_SRC_FORCE_PRIME_SYNTHETIC_RETIRE: u8 = 13;
+
+/// EP0 vendor control-IN `bRequest` for flight-recorder ring dump.
+///
+/// Setup: `bmRequestType=0xC0`, `bRequest=0x45`, `wValue=chunk_index` (`0..12`),
+/// `wIndex=0`, `wLength>=256`. Distinct from `0x42`/`0x43`/`0x44`.
+///
+/// Chunk 0 freezes a snapshot of the live ring + `write_seq` into a side buffer;
+/// chunks 1..12 read that frozen copy so a multi-transfer dump is not torn by
+/// concurrent IRQ/main writers (which previously left only ~16 live events).
+///
+/// Each response is up to 256 bytes LE:
+/// - `0..4`   `write_seq` (`u32`) — seq captured at freeze (chunk 0)
+/// - `4..8`   `capacity` (`u32`) — always [`USB_FLIGHT_RING_CAP`]
+/// - `8..12`  `chunk_index` (`u32`) — echo of `wValue`
+/// - `12..16` `n_entries` (`u32`) — entries in this chunk (≤20)
+/// - `16..`   `n_entries` × [`UsbFlightEvent`] (12 bytes each, physical slot order)
+///
+/// Host fetches chunk 0 first, then 1..12, then sorts by `tick`.
+pub const USB_FLIGHT_TRACE_BREQUEST: u8 = 0x45;
+
+/// IRQ-path flight records are kept 1-in-N so main-loop samples survive in the ring.
+pub const USB_FLIGHT_IRQ_SAMPLE_EVERY: u32 = 32;
+
+#[cfg(feature = "irq-pending-trace")]
+static USB_FLIGHT_WRITE: AtomicU32 = AtomicU32::new(0);
+#[cfg(feature = "irq-pending-trace")]
+static USB_FLIGHT_IRQ_SAMPLE: AtomicU32 = AtomicU32::new(0);
+#[cfg(feature = "irq-pending-trace")]
+static USB_FLIGHT_SNAP_SEQ: AtomicU32 = AtomicU32::new(0);
+#[cfg(feature = "irq-pending-trace")]
+static mut USB_FLIGHT_RING: [UsbFlightEvent; USB_FLIGHT_RING_CAP] =
+    [UsbFlightEvent::ZERO; USB_FLIGHT_RING_CAP];
+#[cfg(feature = "irq-pending-trace")]
+static mut USB_FLIGHT_SNAP: [UsbFlightEvent; USB_FLIGHT_RING_CAP] =
+    [UsbFlightEvent::ZERO; USB_FLIGHT_RING_CAP];
+
+const _: () = assert!(core::mem::size_of::<UsbFlightEvent>() == USB_FLIGHT_EVENT_SIZE);
+const _: () = assert!(
+    USB_FLIGHT_CHUNK_HEADER_LEN + USB_FLIGHT_ENTRIES_PER_CHUNK * USB_FLIGHT_EVENT_SIZE
+        <= USB_FLIGHT_TRACE_RESP_LEN
+);
+
+/// Lock-free append into the flight ring. Safe from IRQ and main; no mutex.
+#[cfg(feature = "irq-pending-trace")]
+pub fn usb_flight_record(source: u8, value: u32) {
+    let seq = USB_FLIGHT_WRITE.fetch_add(1, Ordering::Relaxed);
+    let idx = (seq as usize) % USB_FLIGHT_RING_CAP;
+    let ev = UsbFlightEvent { tick: seq, value, source, _pad: [0; 3] };
+    unsafe {
+        core::ptr::write_volatile(core::ptr::addr_of_mut!(USB_FLIGHT_RING[idx]), ev);
+    }
+}
+
+/// Downsampled IRQ-path record (entry/exit/lock-ok/EV/TRB consume). Counters stay full-rate.
+#[cfg(feature = "irq-pending-trace")]
+fn usb_flight_record_irq_sampled(source: u8, value: u32) {
+    let n = USB_FLIGHT_IRQ_SAMPLE.fetch_add(1, Ordering::Relaxed);
+    if n % USB_FLIGHT_IRQ_SAMPLE_EVERY == 0 {
+        usb_flight_record(source, value);
+    }
+}
+
+#[cfg(feature = "irq-pending-trace")]
+fn usb_flight_freeze_snapshot() {
+    let seq = USB_FLIGHT_WRITE.load(Ordering::Relaxed);
+    // Best-effort copy: may tear a single in-flight slot; far better than 13 live EP0 reads.
+    unsafe {
+        for i in 0..USB_FLIGHT_RING_CAP {
+            let ev = core::ptr::read_volatile(core::ptr::addr_of!(USB_FLIGHT_RING[i]));
+            core::ptr::write_volatile(core::ptr::addr_of_mut!(USB_FLIGHT_SNAP[i]), ev);
+        }
+    }
+    USB_FLIGHT_SNAP_SEQ.store(seq, Ordering::Relaxed);
+}
+
+/// Fill `buf` with one dump chunk. Returns bytes written (0 if `buf` too small).
+///
+/// Chunk 0 freezes the live ring into [`USB_FLIGHT_SNAP`]; later chunks read the snap.
+pub fn usb_flight_trace_fill_chunk(chunk_index: u16, buf: &mut [u8]) -> usize {
+    if buf.len() < USB_FLIGHT_CHUNK_HEADER_LEN {
+        return 0;
+    }
+    #[cfg(feature = "irq-pending-trace")]
+    {
+        if buf.len() < USB_FLIGHT_TRACE_RESP_LEN {
+            return 0;
+        }
+        if chunk_index == 0 {
+            usb_flight_freeze_snapshot();
+        }
+        let write_seq = USB_FLIGHT_SNAP_SEQ.load(Ordering::Relaxed);
+        let start = (chunk_index as usize).saturating_mul(USB_FLIGHT_ENTRIES_PER_CHUNK);
+        if start >= USB_FLIGHT_RING_CAP {
+            buf[0..4].copy_from_slice(&write_seq.to_le_bytes());
+            buf[4..8].copy_from_slice(&(USB_FLIGHT_RING_CAP as u32).to_le_bytes());
+            buf[8..12].copy_from_slice(&(chunk_index as u32).to_le_bytes());
+            buf[12..16].copy_from_slice(&0u32.to_le_bytes());
+            return USB_FLIGHT_CHUNK_HEADER_LEN;
+        }
+        let n = USB_FLIGHT_ENTRIES_PER_CHUNK.min(USB_FLIGHT_RING_CAP - start);
+        buf[0..4].copy_from_slice(&write_seq.to_le_bytes());
+        buf[4..8].copy_from_slice(&(USB_FLIGHT_RING_CAP as u32).to_le_bytes());
+        buf[8..12].copy_from_slice(&(chunk_index as u32).to_le_bytes());
+        buf[12..16].copy_from_slice(&(n as u32).to_le_bytes());
+        for i in 0..n {
+            let ev = unsafe { core::ptr::read_volatile(core::ptr::addr_of!(USB_FLIGHT_SNAP[start + i])) };
+            let off = USB_FLIGHT_CHUNK_HEADER_LEN + i * USB_FLIGHT_EVENT_SIZE;
+            buf[off..off + 4].copy_from_slice(&ev.tick.to_le_bytes());
+            buf[off + 4..off + 8].copy_from_slice(&ev.value.to_le_bytes());
+            buf[off + 8] = ev.source;
+            buf[off + 9] = ev._pad[0];
+            buf[off + 10] = ev._pad[1];
+            buf[off + 11] = ev._pad[2];
+        }
+        USB_FLIGHT_CHUNK_HEADER_LEN + n * USB_FLIGHT_EVENT_SIZE
+    }
+    #[cfg(not(feature = "irq-pending-trace"))]
+    {
+        buf[0..4].copy_from_slice(&0u32.to_le_bytes());
+        buf[4..8].copy_from_slice(&(USB_FLIGHT_RING_CAP as u32).to_le_bytes());
+        buf[8..12].copy_from_slice(&(chunk_index as u32).to_le_bytes());
+        buf[12..16].copy_from_slice(&0u32.to_le_bytes());
+        USB_FLIGHT_CHUNK_HEADER_LEN
+    }
+}
+
 #[cfg(feature = "std")]
 impl CorigineWrapper {
+    // IRQARRAY1 bits used by usb-bao1x composite_handler (CORIGINE_IRQ_MASK | SW_IRQ_MASK).
+    // Duplicated here so bao1x-hal can decode pending without depending on the service crate.
+    pub const IRQ1_CORIGINE: u32 = 0x1;
+    pub const IRQ1_SW: u32 = 0x2;
+
     pub fn new(obj: CorigineUsb) -> Self {
         let irq_csr = obj.irq_csr.clone();
         let c = Self {
             hw: Arc::new(Mutex::new(obj)),
             ep_meta: [None; CRG_EP_NUM],
+            allocated_non_ep0: Arc::new(AtomicUsize::new(0)),
             ep_out_ready: (0..CRG_EP_NUM + 1)
                 .map(|_| Arc::new(AtomicBool::new(false)))
                 .collect::<Vec<_>>()
@@ -2344,6 +2814,7 @@ impl CorigineWrapper {
         let mut c = Self {
             hw: self.hw.clone(),
             ep_meta: [None; CRG_EP_NUM],
+            allocated_non_ep0: self.allocated_non_ep0.clone(),
             ep_out_ready: self.ep_out_ready.clone(),
             event: None,
             address_is_set: self.address_is_set.clone(),
@@ -2356,6 +2827,14 @@ impl CorigineWrapper {
         c
     }
 
+    /// Occupied entries in this instance's `ep_meta` snapshot.
+    /// Note: `UsbBusAllocator` owns a separate clone's array after `clone()` at
+    /// boot; prefer [`Self::allocated_non_ep0_count`] for a cross-clone total.
+    pub fn ep_meta_occupied_count(&self) -> usize { self.ep_meta.iter().filter(|e| e.is_some()).count() }
+
+    /// Authoritative non-EP0 allocation count shared across wrapper clones.
+    pub fn allocated_non_ep0_count(&self) -> usize { self.allocated_non_ep0.load(Ordering::SeqCst) }
+
     pub fn core(&self) -> std::sync::MutexGuard<'_, CorigineUsb> {
         /*
         #[cfg(feature = "verbose-debug")]
@@ -2364,11 +2843,136 @@ impl CorigineWrapper {
         self.hw.lock().unwrap()
     }
 
-    pub fn disable_interrupts(&self) { self.irq_csr.wo(utralib::utra::irqarray1::EV_ENABLE, 0); }
+    /// Mask all IRQARRAY1 enables for a short critical section; return the previous `EV_ENABLE`.
+    ///
+    /// Pair with [`Self::restore_interrupts`]. Does **not** touch `EV_PENDING` — an IRQ that
+    /// latches while masked must remain pending and run after restore (same contract as
+    /// `serial_write_irq_safe` in usb-bao1x). irqarray1 is left at default level-triggered
+    /// (EV_EDGE_TRIGGERED not programmed in `start()`), so a pending bit + enable re-asserts.
+    ///
+    /// With `irq-pending-trace`: if `EV_PENDING` is already nonzero at mask time, increments
+    /// `disable_with_pending` (read-only; does not clear).
+    pub fn disable_interrupts(&self) -> u32 {
+        let previous_enable = self.irq_csr.r(utralib::utra::irqarray1::EV_ENABLE);
+        #[cfg(feature = "irq-pending-trace")]
+        {
+            let pending = self.irq_csr.r(utralib::utra::irqarray1::EV_PENDING);
+            if pending != 0 {
+                IRQ_TRACE_DISABLE_WITH_PENDING.fetch_add(1, Ordering::Relaxed);
+                IRQ_TRACE_SEQ.fetch_add(1, Ordering::Relaxed);
+            }
+        }
+        self.irq_csr.wo(utralib::utra::irqarray1::EV_ENABLE, 0);
+        previous_enable
+    }
 
-    pub fn enable_interrupts(&self) {
+    /// Restore `EV_ENABLE` to `previous_enable` from [`Self::disable_interrupts`].
+    ///
+    /// Does **not** write `EV_PENDING`. Nesting is stack-safe: each restore puts back exactly
+    /// what its matching disable observed (including nested 0→0).
+    ///
+    /// With `irq-pending-trace`: samples pending at restore into `last_pending` / `seq` for
+    /// visibility, but does **not** increment `enable_cleared_nonempty` (that counter is only
+    /// for paths that still blanket-clear pending — see [`Self::enable_interrupts_clear_pending`]).
+    pub fn restore_interrupts(&self, previous_enable: u32) {
+        #[cfg(feature = "irq-pending-trace")]
+        {
+            let pending = self.irq_csr.r(utralib::utra::irqarray1::EV_PENDING);
+            if pending != 0 {
+                IRQ_TRACE_LAST_CLEARED_PENDING.store(pending, Ordering::Relaxed);
+                IRQ_TRACE_SEQ.fetch_add(1, Ordering::Relaxed);
+            }
+        }
+        self.irq_csr.wo(utralib::utra::irqarray1::EV_ENABLE, previous_enable);
+    }
+
+    /// Blanket-clear `EV_PENDING` then set `EV_ENABLE = 3` (CORIGINE|SW).
+    ///
+    /// For **reset/init** only — discards stale pending after hardware re-init.
+    /// Do not use around `UsbBus::write()`; that path must use
+    /// [`Self::disable_interrupts`] / [`Self::restore_interrupts`].
+    pub fn enable_interrupts_clear_pending(&self) {
+        #[cfg(feature = "irq-pending-trace")]
+        {
+            let pending = self.irq_csr.r(utralib::utra::irqarray1::EV_PENDING);
+            if pending != 0 {
+                IRQ_TRACE_ENABLE_CLEARED_NONEMPTY.fetch_add(1, Ordering::Relaxed);
+                IRQ_TRACE_LAST_CLEARED_PENDING.store(pending, Ordering::Relaxed);
+                IRQ_TRACE_SEQ.fetch_add(1, Ordering::Relaxed);
+            }
+        }
         self.irq_csr.wo(utralib::utra::irqarray1::EV_PENDING, 0xFFFF_FFFF);
         self.irq_csr.wo(utralib::utra::irqarray1::EV_ENABLE, 3);
+    }
+
+    /// Snapshot of `irq-pending-trace` counters (zeros when the feature is off).
+    /// Does not take the USB `hw` mutex — safe during bulk stalls.
+    pub fn irq_pending_trace_stats(&self) -> (u32, u32, u32) {
+        let (clears, disable_pending, last, _seq) = irq_pending_trace_stats_snapshot();
+        (clears, disable_pending, last)
+    }
+
+    /// Force-queue a bulk OUT receive TRB for `ep`, ignoring `ep_out_ready`.
+    ///
+    /// `UsbBus::read` only arms when `ep_out_ready[ep]` is false; if that flag is stuck
+    /// true without a live TRB, periodic primes via `read` become no-ops. Clear the flag
+    /// and call `get_app_buf_ptr` + `bulk_xfer` directly (main context only — not IRQ).
+    /// No-op when `address_is_set` is false or `ep` is not a bulk OUT.
+    pub fn force_prime_bulk_out(&self, ep: usize) {
+        #[cfg(feature = "irq-pending-trace")]
+        bulk_trb_trace_bump(&BULK_TRB_OUT_FORCE_PRIME, Some(USB_FLIGHT_SRC_FORCE_PRIME));
+        if !self.address_is_set.load(Ordering::SeqCst) {
+            return;
+        }
+        if ep == 0 || ep >= self.ep_out_ready.len() {
+            return;
+        }
+        let pei_offset = CorigineUsb::pei(ep as u8, CRG_OUT).saturating_sub(2);
+        if pei_offset >= self.ep_meta.len() {
+            return;
+        }
+        let Some((EpType::BulkOutbound, max_packet_size)) = self.ep_meta[pei_offset] else {
+            return;
+        };
+
+        self.ep_out_ready[ep].store(false, Ordering::SeqCst);
+
+        let len = CRG_UDC_APP_BUF_LEN.min(max_packet_size);
+        let mut hw = self.core();
+        let pei = CorigineUsb::pei(ep as u8, CRG_OUT);
+        // Do NOT call retire_app_buf_ptr here. A prior force-prime path retired any
+        // outstanding OUT slot on `enq != deq` with no hardware-completion check,
+        // advancing software `deq` while bypassing `out_trb_consumed` (flight src 4).
+        // Captures showed src 13 (synthetic retire) continuing with src 4 frozen —
+        // data-integrity hazard, not just a stall. `deq` may only advance from the
+        // genuine `UsbBus::read` completion path. If a slot is already outstanding,
+        // leave it alone and wait for that completion (re-arm is a no-op for now).
+        if hw.app_enq_index[pei] != hw.app_deq_index[pei] {
+            #[cfg(feature = "irq-pending-trace")]
+            {
+                // Still record that we skipped — same packing as former src 13 site,
+                // but we no longer retire. Reuses src 13 so post-fix dumps show the
+                // gate firing without index mutation (value = pre-skip enq|deq<<16).
+                let enq = (hw.app_enq_index[pei] as u32) & 0xffff;
+                let deq = (hw.app_deq_index[pei] as u32) & 0xffff;
+                usb_flight_record(USB_FLIGHT_SRC_FORCE_PRIME_SYNTHETIC_RETIRE, enq | (deq << 16));
+            }
+            drop(hw);
+            // Keep ready false so a later genuine read / idle prime can proceed.
+            return;
+        }
+        match hw.get_app_buf_ptr(ep as u8, CRG_OUT) {
+            Some(addr) => {
+                udc_pointer_check!(addr, len);
+                hw.bulk_xfer(ep as u8, CRG_OUT, addr, len, CRG_INT_TARGET, 0);
+                drop(hw);
+                self.ep_out_ready[ep].store(true, Ordering::SeqCst);
+            }
+            None => {
+                // Leave ready false so a later `read` / force can retry.
+                drop(hw);
+            }
+        }
     }
 }
 
@@ -2498,6 +3102,7 @@ impl UsbBus for CorigineWrapper {
         if allocated_ep != 0 {
             // also record metadata for non-0 EPs
             self.ep_meta[pei - 2] = Some((hw_ep_type, max_packet_size as usize));
+            self.allocated_non_ep0.fetch_add(1, Ordering::SeqCst);
             crate::println!("ep_meta[{}]: {:?}", pei - 2, self.ep_meta[pei - 2]);
         }
 
@@ -2519,7 +3124,7 @@ impl UsbBus for CorigineWrapper {
     fn reset(&self) {
         self.address_is_set.store(false, Ordering::SeqCst);
         crate::println!(" ******** reset");
-        let irq_csr = {
+        {
             let mut hw = self.core();
             // disable IRQs
             hw.irq_csr.wo(utralib::utra::irqarray1::EV_ENABLE, 0);
@@ -2527,16 +3132,13 @@ impl UsbBus for CorigineWrapper {
             hw.init(None); // default to high speed
             hw.start();
             hw.update_current_speed();
-            // IRQ enable must happen without dependency on the hardware lock
-            hw.irq_csr.clone()
-        };
+        }
         // reset the ready state
         for ready in self.ep_out_ready.iter() {
             ready.store(false, Ordering::SeqCst);
         }
-        // the lock is released, now we can enable irqs
-        irq_csr.wo(utralib::utra::irqarray1::EV_PENDING, 0xffff_ffff); // blanket clear
-        irq_csr.wo(utralib::utra::irqarray1::EV_ENABLE, 3); // FIXME: hard coded value that enables CORIGINE_IRQ_MASK | SW_IRQ_MASK
+        // the lock is released, now we can enable irqs (blanket-clear stale pending — reset only)
+        self.enable_interrupts_clear_pending();
 
         // TODO -- figure out what this means
         // self.force_reset().ok();
@@ -2568,6 +3170,43 @@ impl UsbBus for CorigineWrapper {
         }
         crate::println!("enabled EPs: {:b}", self.core().csr.r(EPENABLE));
         crate::println!("running EPs: {:b}", self.core().csr.r(EPRUNNING));
+
+        // Queue the first receive TRB for each bulk OUT now that enq_pt is valid.
+        // Boot1 does the same after enable (bulk_xfer on USB_RECV). UsbBus::read
+        // cannot be called re-entrantly from here; mirror its BulkOutbound arm path.
+        for (index, &maybe_ep) in self.ep_meta.iter().enumerate() {
+            let Some((EpType::BulkOutbound, max_packet_size)) = maybe_ep else {
+                continue;
+            };
+            let ep_num = CorigineUsb::pei_to_ep(index + 2);
+            let ep_idx = ep_num as usize;
+            if ep_idx >= self.ep_out_ready.len() {
+                continue;
+            }
+            // Mark ready before queueing so a concurrent read() does not double-arm.
+            if self.ep_out_ready[ep_idx].swap(true, Ordering::SeqCst) {
+                continue;
+            }
+            let len = CRG_UDC_APP_BUF_LEN.min(max_packet_size);
+            let mut hw = self.core();
+            match hw.get_app_buf_ptr(ep_num, CRG_OUT) {
+                Some(addr) => {
+                    udc_pointer_check!(addr, len);
+                    hw.bulk_xfer(ep_num, CRG_OUT, addr, len, CRG_INT_TARGET, 0);
+                    crate::println!(
+                        "primed bulk OUT ep{} after set_address @ {:x} len {}",
+                        ep_num,
+                        addr,
+                        len
+                    );
+                }
+                None => {
+                    drop(hw);
+                    self.ep_out_ready[ep_idx].store(false, Ordering::SeqCst);
+                    crate::println!("failed to prime bulk OUT ep{} (no app buf)", ep_num);
+                }
+            }
+        }
     }
 
     /// Writes a single packet of data to the specified endpoint and returns number of bytes
@@ -2615,7 +3254,7 @@ impl UsbBus for CorigineWrapper {
                 buf.len(),
                 &buf[..8.min(buf.len())]
             );
-            self.disable_interrupts();
+            let irq_prev = self.disable_interrupts();
             let addr = match self.core().get_app_buf_ptr(ep_addr.index() as u8, CRG_IN) {
                 Some(addr) => addr,
                 None => {
@@ -2624,7 +3263,9 @@ impl UsbBus for CorigineWrapper {
 
                     // `disable_interrupts()` was called above, so every return
                     // path after that point must restore the USB interrupts.
-                    self.enable_interrupts();
+                    #[cfg(feature = "irq-pending-trace")]
+                    irq_trace_note_write_context(ep_addr.index() as u8, true);
+                    self.restore_interrupts(irq_prev);
                     return Err(UsbError::WouldBlock);
                 }
             };
@@ -2660,7 +3301,9 @@ impl UsbBus for CorigineWrapper {
             }
             #[cfg(feature = "verbose-debug")]
             crate::println!("ep{} initiated {}", ep_addr.index(), buf.len());
-            self.enable_interrupts();
+            #[cfg(feature = "irq-pending-trace")]
+            irq_trace_note_write_context(ep_addr.index() as u8, false);
+            self.restore_interrupts(irq_prev);
             Ok(buf.len())
         }
     }
@@ -2721,6 +3364,10 @@ impl UsbBus for CorigineWrapper {
                         udc_pointer_check!(ptr, len);
                         self.ep_out_ready[ep_addr.index()].store(false, Ordering::SeqCst);
                         let app_buf = unsafe { core::slice::from_raw_parts(ptr as *const u8, len) };
+                        // DMA for this OUT is finished; reclaim the PEI ring slot before re-arm.
+                        self.core().retire_app_buf_ptr(ep_addr.index() as u8, CRG_OUT);
+                        #[cfg(feature = "irq-pending-trace")]
+                        bulk_trb_trace_bump(&BULK_TRB_OUT_CONSUMED, Some(USB_FLIGHT_SRC_OUT_CONSUMED));
                         if buf.len() < app_buf.len() {
                             crate::println!(
                                 "overflow: app_buf.len() {} >= buf.len() {}",
@@ -2894,7 +3541,7 @@ impl UsbBus for CorigineWrapper {
             eor.store(false, Ordering::SeqCst);
         }
         crate::println!(" ******** reset");
-        let irq_csr = {
+        {
             let mut hw = self.core();
             // disable IRQs
             hw.irq_csr.wo(utralib::utra::irqarray1::EV_ENABLE, 0);
@@ -2902,16 +3549,13 @@ impl UsbBus for CorigineWrapper {
             hw.init(None);
             hw.start();
             hw.update_current_speed();
-            // IRQ enable must happen without dependency on the hardware lock
-            hw.irq_csr.clone()
-        };
+        }
         // reset the ready state
         for ready in self.ep_out_ready.iter() {
             ready.store(false, Ordering::SeqCst);
         }
-        // the lock is released, now we can enable irqs
-        irq_csr.wo(utralib::utra::irqarray1::EV_PENDING, 0xffff_ffff); // blanket clear
-        irq_csr.wo(utralib::utra::irqarray1::EV_ENABLE, 3); // FIXME: hard coded value that enables CORIGINE_IRQ_MASK | SW_IRQ_MASK
+        // the lock is released, now we can enable irqs (blanket-clear stale pending — reset only)
+        self.enable_interrupts_clear_pending();
 
         Ok(())
     }
@@ -3004,10 +3648,13 @@ pub fn handle_event_inner(this: &mut CorigineUsb, event_trb: &mut EventTrbS) -> 
                         ep: ep as u8,
                     });
                     if dir == USB_RECV {
-                        // out
+                        // out — buffer stays until UsbBus::read consumes app_ptr
                         ret = CrgEvent::Data(ep_onehot, 0, 0)
                     } else {
-                        // in
+                        // in — DMA finished reading the app buffer; reclaim the ring slot
+                        this.retire_app_buf_ptr(ep as u8, CRG_IN);
+                        #[cfg(feature = "irq-pending-trace")]
+                        bulk_trb_trace_bump(&BULK_TRB_IN_CONSUMED, Some(USB_FLIGHT_SRC_IN_CONSUMED));
                         ret = CrgEvent::Data(0, ep_onehot, 0)
                     }
                 } else if comp_code == CompletionCode::MissedServiceError {

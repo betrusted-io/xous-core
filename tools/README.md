@@ -198,6 +198,35 @@ before the DUT boots far enough to take its lease. It copies the peer rootfs to
 a per-run scratch file (the peer's flash writes back). Exits non-zero on any
 failure.
 
+## CCID USB testing
+
+Host-side smoke and hardware-in-the-loop tests for the `usb-bao1x` CCID transport
+(`ccid-openpgp`). They check USB enumeration, Persona A layout (no CDC on CCID
+images), and bulk echo — not OpenPGP/APDU. Status: `docs/ccid/CCID_TEST_REPORT.md`.
+
+All CCID host tools live under `tools/ccid/` (could be split into a stacked PR if
+the reviewer prefers that for review size).
+
+```sh
+# Unit tests
+cargo test -p usb-bao1x --lib ccid_framing   # wire math
+cargo test -p usb-bao1x --lib ep_budget      # cumulative EP ledger
+
+# Local EP arithmetic / mock Persona A (no hardware)
+python3 tools/ccid/check_ep_budget.py
+python3 tools/ccid/test_ep_budget_cumulative.py
+python3 tools/ccid/sim_persona_a_composite.py
+
+# Manual USB smoke (flash: cargo xtask ccid-hil)
+python3 tools/ccid/ccid_smoke.py
+
+# Full HIL suite on a Linux USB host
+tools/ccid/ccid_hil/run_all.sh
+```
+
+See `tools/ccid/ccid_hil/README.md`, `docs/ccid/CCID_PROTOCOL_AND_HIL.md`, and
+`docs/ccid/code_map.md` for protocol details and Raspberry Pi HIL setup.
+
 ## Contribution Guidelines
 
 [![Contributor Covenant](https://img.shields.io/badge/Contributor%20Covenant-v2.0%20adopted-ff69b4.svg)](../CODE_OF_CONDUCT.md)
