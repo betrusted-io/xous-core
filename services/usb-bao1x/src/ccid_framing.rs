@@ -107,10 +107,23 @@ pub fn make_get_slot_status(seq: u8) -> [u8; CCID_HEADER_LEN] {
 pub const PC_TO_RDR_GET_SLOT_STATUS: u8 = 0x65;
 /// PC_to_RDR_IccPowerOn (0x62).
 pub const PC_TO_RDR_ICC_POWER_ON: u8 = 0x62;
+/// PC_to_RDR_IccPowerOff (0x63).
+pub const PC_TO_RDR_ICC_POWER_OFF: u8 = 0x63;
+/// PC_to_RDR_XfrBlock (0x6F).
+pub const PC_TO_RDR_XFR_BLOCK: u8 = 0x6F;
+/// PC_to_RDR_Abort (0x72).
+pub const PC_TO_RDR_ABORT: u8 = 0x72;
 /// RDR_to_PC_SlotStatus (0x81).
 pub const RDR_TO_PC_SLOT_STATUS: u8 = 0x81;
 /// RDR_to_PC_DataBlock (0x80).
 pub const RDR_TO_PC_DATA_BLOCK: u8 = 0x80;
+
+/// ISO 7816-4 SW1/SW2 "file not found" — used when no APDU handler is linked.
+pub const APDU_SW_FILE_NOT_FOUND: [u8; 2] = [0x6A, 0x82];
+
+/// CCID `bStatus`/`bError` for CMD_NOT_SUPPORTED (failed command, ICC active).
+pub const CCID_BSTATUS_CMD_FAILED: u8 = 0x40;
+pub const CCID_BERROR_CMD_NOT_SUPPORTED: u8 = 0xFE;
 
 /// OpenPGP smart-card ATR (T=1) returned inline for IccPowerOn.
 /// Final byte `0x0C` is the TCK (exclusive-or of bytes from T0 through historical bytes).
@@ -169,6 +182,55 @@ pub fn rdr_to_pc_data_block_atr(slot: u8, seq: u8) -> [u8; CCID_HEADER_LEN + OPE
     // bStatus = 0, bError = 0, bChainParameter = 0
     frame[CCID_HEADER_LEN..].copy_from_slice(&OPENPGP_ATR);
     frame
+}
+
+/// RDR_to_PC_DataBlock with a two-byte APDU status word (no response data).
+pub fn rdr_to_pc_data_block_apdu_sw(slot: u8, seq: u8, sw: [u8; 2]) -> [u8; CCID_HEADER_LEN + 2] {
+    let mut frame = [0u8; CCID_HEADER_LEN + 2];
+    frame[0] = RDR_TO_PC_DATA_BLOCK;
+    let dw = 2u32.to_le_bytes();
+    frame[1] = dw[0];
+    frame[2] = dw[1];
+    frame[3] = dw[2];
+    frame[4] = dw[3];
+    frame[5] = slot;
+    frame[6] = seq;
+    // bStatus = 0, bError = 0, bChainParameter = 0
+    frame[CCID_HEADER_LEN] = sw[0];
+    frame[CCID_HEADER_LEN + 1] = sw[1];
+    frame
+}
+
+/// RDR_to_PC_SlotStatus: command not supported (`bStatus=0x40`, `bError=0xFE`).
+pub fn rdr_to_pc_slot_status_cmd_not_supported(slot: u8, seq: u8) -> [u8; CCID_HEADER_LEN] {
+    let mut frame = [0u8; CCID_HEADER_LEN];
+    frame[0] = RDR_TO_PC_SLOT_STATUS;
+    frame[5] = slot;
+    frame[6] = seq;
+    frame[7] = CCID_BSTATUS_CMD_FAILED;
+    frame[8] = CCID_BERROR_CMD_NOT_SUPPORTED;
+    frame
+}
+
+/// Bulk-IN reply for a deferred `PC_to_RDR` when no APDU handler is registered.
+///
+/// On the 7-process `dabao-ccid` image nothing parks `CcidRxDeferred`, so without
+/// this the host's ReadUSB after XfrBlock hangs until pcscd's ~13 s timeout.
+/// XfrBlock gets a well-formed DataBlock with SW `6A82` (file/applet not found);
+/// IccPowerOff/Abort get SlotStatus OK (same shape as `openpgp-apdu`); anything
+/// else gets SlotStatus CMD_NOT_SUPPORTED.
+pub fn deferred_unhandled_response(pc_to_rdr: &[u8]) -> Vec<u8> {
+    let slot = pc_to_rdr.get(5).copied().unwrap_or(0);
+    let seq = pc_to_rdr.get(6).copied().unwrap_or(0);
+    match pc_to_rdr.first().copied() {
+        Some(PC_TO_RDR_XFR_BLOCK) => {
+            rdr_to_pc_data_block_apdu_sw(slot, seq, APDU_SW_FILE_NOT_FOUND).to_vec()
+        }
+        Some(PC_TO_RDR_ICC_POWER_OFF) | Some(PC_TO_RDR_ABORT) => {
+            rdr_to_pc_slot_status_ok(slot, seq).to_vec()
+        }
+        _ => rdr_to_pc_slot_status_cmd_not_supported(slot, seq).to_vec(),
+    }
 }
 
 pub fn make_icc_power_on(seq: u8) -> [u8; CCID_HEADER_LEN] {
@@ -286,5 +348,40 @@ mod tests {
         assert_eq!(u32::from_le_bytes([resp[1], resp[2], resp[3], resp[4]]) as usize, OPENPGP_ATR_LEN);
         assert_eq!(&resp[CCID_HEADER_LEN..], &OPENPGP_ATR);
         assert!(!is_icc_power_on(&resp));
+    }
+
+    #[test]
+    fn deferred_unhandled_xfr_block_returns_file_not_found() {
+        // Minimal XfrBlock header + empty APDU payload (dwLength 0).
+        let mut req = [0u8; CCID_HEADER_LEN];
+        req[0] = PC_TO_RDR_XFR_BLOCK;
+        req[5] = 0;
+        req[6] = 4;
+        let resp = deferred_unhandled_response(&req);
+        assert_eq!(resp[0], RDR_TO_PC_DATA_BLOCK);
+        assert_eq!(resp[5], 0);
+        assert_eq!(resp[6], 4);
+        assert_eq!(u32::from_le_bytes([resp[1], resp[2], resp[3], resp[4]]), 2);
+        assert_eq!(&resp[CCID_HEADER_LEN..], &APDU_SW_FILE_NOT_FOUND);
+    }
+
+    #[test]
+    fn deferred_unhandled_unknown_opcode_cmd_not_supported() {
+        let mut req = [0u8; CCID_HEADER_LEN];
+        req[0] = 0x6A; // unknown
+        req[5] = 1;
+        req[6] = 2;
+        let resp = deferred_unhandled_response(&req);
+        assert_eq!(resp, rdr_to_pc_slot_status_cmd_not_supported(1, 2));
+    }
+
+    #[test]
+    fn deferred_unhandled_power_off_slot_status_ok() {
+        let mut req = [0u8; CCID_HEADER_LEN];
+        req[0] = PC_TO_RDR_ICC_POWER_OFF;
+        req[5] = 0;
+        req[6] = 3;
+        let resp = deferred_unhandled_response(&req);
+        assert_eq!(resp, rdr_to_pc_slot_status_ok(0, 3));
     }
 }

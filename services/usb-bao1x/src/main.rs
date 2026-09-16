@@ -729,6 +729,29 @@ pub(crate) fn main_hw() -> ! {
                             deferred_buf.data = frame;
                             deferred_buf.code = CcidCode::RxAck;
                             response.replace(deferred_buf).unwrap();
+                        } else if ccid_listener_pid.is_none() {
+                            // No process has ever parked CcidRxDeferred (7-process
+                            // dabao-ccid has no openpgp-apdu). Answer every deferred
+                            // frame so the host ReadUSB cannot hang ~13s. Once a
+                            // handler has claimed the slot (pid set), re-queue while
+                            // it is momentarily between receive and re-park.
+                            let mut pending = frame;
+                            loop {
+                                let resp =
+                                    usb_bao1x::ccid_framing::deferred_unhandled_response(&pending);
+                                cu.ccid.enqueue_response(resp);
+                                cu.sw_irq(UsbIrqReq::CcidTx);
+                                while !cu.irq_serviced.load(Ordering::SeqCst) {
+                                    xous::yield_slice();
+                                }
+                                cu.irq_serviced.store(false, Ordering::SeqCst);
+                                // Same post-CcidTx OUT re-arm as Opcode::CcidTx.
+                                cu.ccid.force_prime_bulk_out(cu.device.bus());
+                                match cu.ccid_rx.borrow_mut().pop_front() {
+                                    Some(next) => pending = next,
+                                    None => break,
+                                }
+                            }
                         } else {
                             cu.ccid_rx.borrow_mut().push_front(frame);
                         }
