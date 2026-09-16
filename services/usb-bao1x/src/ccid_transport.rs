@@ -10,8 +10,8 @@ use std::sync::atomic::{AtomicBool, AtomicPtr, Ordering};
 use num_traits::ToPrimitive;
 use usb_bao1x::ccid_framing::{
     CCID_BULK_MAX_PACKET as CCID_BULK_MAX_PACKET_BYTES, CCID_HEADER_LEN, append_bulk_out, consume_tx_chunk,
-    frame_total_len, is_get_slot_status, is_icc_power_on, next_tx_chunk, rdr_to_pc_data_block_atr,
-    rdr_to_pc_slot_status_ok,
+    drain_complete_frames, frame_total_len, is_get_slot_status, is_icc_power_on, next_tx_chunk,
+    rdr_to_pc_data_block_atr, rdr_to_pc_slot_status_ok,
 };
 use usb_device::Result as UsbResult;
 use usb_device::UsbError;
@@ -21,10 +21,6 @@ use usb_device::control::{Recipient, RequestType};
 use usb_device::descriptor::DescriptorWriter;
 
 use crate::api::Opcode;
-use usb_bao1x::ccid_framing::{
-    append_bulk_out, consume_tx_chunk, drain_complete_frames, next_tx_chunk,
-    CCID_BULK_MAX_PACKET as CCID_BULK_MAX_PACKET_BYTES,
-};
 
 /// USB interface class: CCID.
 pub const USB_INTERFACE_CLASS_CCID: u8 = 0x0B;
