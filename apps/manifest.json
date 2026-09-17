@@ -119,6 +119,15 @@
             }
         }
     },
+    "mailapp": {
+        "context_name": "mail",
+        "menu_name": {
+            "appmenu.mailapp": {
+                "en": "Mail",
+                "en-tts": "Mail"
+            }
+        }
+    },
     "vault": {
         "context_name": "Key Vault",
         "menu_name": {

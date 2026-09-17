@@ -301,8 +301,25 @@ impl Tls {
     ///
     /// * A Vec<CertificateDer> containing the TLS chain of trust offered by the host
     /// * Error if the communication with the host fails
-    pub fn probe(&self, host: &str) -> Result<Vec<CertificateDer<'_>>, Error> {
-        log::info!("starting TLS probe");
+    pub fn probe(&self, host: &str) -> Result<Vec<CertificateDer<'_>>, Error> { self.probe_port(host, 443) }
+
+    /// Same as [`Tls::probe`], but against an arbitrary port instead of
+    /// the HTTPS default of 443. Needed for any non-HTTPS TLS service
+    /// (IMAPS, SMTPS, etc.) since the certificate on 443 -- if that host
+    /// even listens on 443 at all -- has no guaranteed relationship to
+    /// the certificate offered on another port.
+    ///
+    /// # Arguments
+    ///
+    /// * `host` - the target tls site (i.e. betrusted.io)
+    /// * `port` - the port to probe (443 for HTTPS, 993 for IMAPS, 465 for SMTPS, ...)
+    ///
+    /// # Returns
+    ///
+    /// * A Vec<CertificateDer> containing the TLS chain of trust offered by the host
+    /// * Error if the communication with the host fails
+    pub fn probe_port(&self, host: &str, port: u16) -> Result<Vec<CertificateDer<'_>>, Error> {
+        log::info!("starting TLS probe of {host}:{port}");
         match host.to_owned().try_into() {
             Ok(server_name) => {
                 // Stifle the default rustls certificate verification's complaint about an
@@ -313,8 +330,8 @@ impl Tls {
                     .with_no_client_auth();
                 match rustls::ClientConnection::new(Arc::new(config), server_name) {
                     Ok(mut conn) => {
-                        log::info!("connect TCPstream to {}", host);
-                        match TcpStream::connect((host, 443)) {
+                        log::info!("connect TCPstream to {}:{}", host, port);
+                        match TcpStream::connect((host, port)) {
                             Ok(mut sock) => match conn.complete_io(&mut sock) {
                                 Ok(_) => log::info!("handshake complete"),
                                 Err(e) => log::warn!("{e}"),
