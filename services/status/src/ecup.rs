@@ -497,7 +497,10 @@ pub(crate) fn ecupdate_thread(sid: xous::SID) {
             }
         }
     }
-    xous::destroy_server(sid).unwrap();
+    // safety: server must have no pending blocking messages or lent pages
+    unsafe {
+        xous::destroy_server(sid).unwrap();
+    }
 }
 
 /// copies an image stored in a `package` slice, starting from `pkg_offset` in the `package` with length `len`

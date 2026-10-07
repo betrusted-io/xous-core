@@ -200,7 +200,10 @@ fn keyboard_service() {
         }
     }
     xns.unregister_server(kbd_sid).unwrap();
-    xous::destroy_server(kbd_sid).unwrap();
+    // safety: server must have no pending blocking messages or lent pages
+    unsafe {
+        xous::destroy_server(kbd_sid).unwrap();
+    }
     xous::terminate_process(0)
 }
 

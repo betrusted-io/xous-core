@@ -250,17 +250,9 @@ fn wrapped_main() -> ! {
             }),
             None => {
                 log::error!("couldn't convert opcode");
-                break;
             }
         }
     }
-    // clean up our program
-    log::trace!("main loop exit, destroying servers");
-    unhook(&mut audio_cb_conns);
-    xns.unregister_server(codec_sid).unwrap();
-    xous::destroy_server(codec_sid).unwrap();
-    log::trace!("quitting");
-    xous::terminate_process(0)
 }
 
 fn do_hook(hookdata: ScalarHook, cb_conns: &mut [Option<ScalarCallback>; 32]) {
@@ -284,6 +276,7 @@ fn do_hook(hookdata: ScalarHook, cb_conns: &mut [Option<ScalarCallback>; 32]) {
         log::error!("ran out of space registering callback");
     }
 }
+#[allow(dead_code)]
 fn unhook(cb_conns: &mut [Option<ScalarCallback>; 32]) {
     for entry in cb_conns.iter_mut() {
         if let Some(scb) = entry {

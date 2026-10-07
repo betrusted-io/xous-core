@@ -825,7 +825,10 @@ pub(crate) fn start_time_ux() {
                     }
                 }
             }
-            xous::destroy_server(sid).ok();
+            // safety: server must have no pending blocking messages or lent pages
+            unsafe {
+                xous::destroy_server(sid).ok();
+            }
         }
     });
 }

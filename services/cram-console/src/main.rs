@@ -117,7 +117,10 @@ fn main() {
         }
         _ => {}
     }
-    xous::destroy_server(status_gam_getter).unwrap();
+    // safety: server must have no pending blocking messages or lent pages
+    unsafe {
+        xous::destroy_server(status_gam_getter).unwrap();
+    }
 
     let status_gid: Gid = Gid::new(canvas_gid);
     // Expected connections:
@@ -362,7 +365,9 @@ fn main() {
         xous::disconnect(pump_conn).unwrap();
     }
     xns.unregister_server(status_sid).unwrap();
-    xous::destroy_server(status_sid).unwrap();
+    unsafe {
+        xous::destroy_server(status_sid).unwrap();
+    }
     log::trace!("status thread quitting");
     xous::terminate_process(0)
 }

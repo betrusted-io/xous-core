@@ -386,7 +386,10 @@ pub fn menu_matic(
             }
             log::trace!("menu thread exit, destroying servers");
             // do we want to add a deregister_ux call to the system?
-            xous::destroy_server(menu.lock().unwrap().sid).unwrap();
+            // safety: server must have no pending blocking messages or lent pages
+            unsafe {
+                xous::destroy_server(menu.lock().unwrap().sid).unwrap();
+            }
         }
     });
     if let Some(manager) = maybe_manager {
@@ -453,7 +456,10 @@ pub fn menu_matic(
                         }
                     }
                 }
-                xous::destroy_server(manager).unwrap();
+                // safety: server must have no pending blocking messages or lent pages
+                unsafe {
+                    xous::destroy_server(manager).unwrap();
+                }
             }
         });
         Some(MenuMatic { cid: xous::connect(manager).unwrap() })

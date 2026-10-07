@@ -111,7 +111,10 @@ pub(crate) fn server(_cid: Option<CID>, icons: [&str; 4]) {
     }
     log::trace!("main loop exit, destroying servers");
     xns.unregister_server(ime_sh_sid).unwrap();
-    xous::destroy_server(ime_sh_sid).unwrap();
+    // safety: server must have no pending blocking messages or lent pages
+    unsafe {
+        xous::destroy_server(ime_sh_sid).unwrap();
+    }
     log::trace!("quitting");
     xous::terminate_process(0)
 }

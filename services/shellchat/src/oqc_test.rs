@@ -195,7 +195,10 @@ pub(crate) fn oqc_test(oqc_cid: Arc<AtomicU32>, kbd: keyboard::Keyboard) {
     // clean up our program
     log::trace!("main loop exit, destroying servers");
     xns.unregister_server(oqc_sid).unwrap();
-    xous::destroy_server(oqc_sid).unwrap();
+    // safety: server must have no pending blocking messages or lent pages
+    unsafe {
+        xous::destroy_server(oqc_sid).unwrap();
+    }
     log::trace!("quitting oqc server");
 }
 

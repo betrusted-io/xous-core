@@ -1194,7 +1194,6 @@ fn main() -> ! {
             }
             None => {
                 error!("unknown opcode");
-                break;
             }
         }
 
@@ -1209,11 +1208,6 @@ fn main() -> ! {
             }
         }
     }
-    log::trace!("main loop exit, destroying servers");
-    xns.unregister_server(com_sid).unwrap();
-    xous::destroy_server(com_sid).unwrap();
-    log::trace!("quitting");
-    xous::terminate_process(0)
 }
 
 fn parse_version(com: &mut crate::implementation::XousCom) -> u32 {

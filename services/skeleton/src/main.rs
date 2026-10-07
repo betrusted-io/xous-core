@@ -3,23 +3,20 @@
 
 mod api;
 use api::*;
-
+use log::info;
 use num_traits::FromPrimitive;
 
-use log::info;
-
-
-#[cfg(any(feature="precursor", feature="renode"))]
+#[cfg(any(feature = "precursor", feature = "renode"))]
 mod implementation {
-    use utralib::generated::*;
     // use crate::api::*;
     use log::info;
     use susres::{RegManager, RegOrField, SuspendResume};
+    use utralib::generated::*;
 
     pub struct Codec {
         csr: utralib::CSR<u32>,
         fifo: xous::MemoryRange,
-        susres_manager: RegManager::<{utra::audio::AUDIO_NUMREGS}>,
+        susres_manager: RegManager<{ utra::audio::AUDIO_NUMREGS }>,
     }
 
     impl Codec {
@@ -48,12 +45,9 @@ mod implementation {
             codec
         }
 
-        pub fn suspend(&mut self) {
-            self.susres_manager.suspend();
-        }
-        pub fn resume(&mut self) {
-            self.susres_manager.resume();
-        }
+        pub fn suspend(&mut self) { self.susres_manager.suspend(); }
+
+        pub fn resume(&mut self) { self.susres_manager.resume(); }
     }
 }
 
@@ -62,21 +56,16 @@ mod implementation {
 mod implementation {
     use log::info;
 
-    pub struct Codec {
-    }
+    pub struct Codec {}
 
     impl Codec {
-        pub fn new() -> Codec {
-            Codec {
-            }
-        }
-        pub fn suspend(&self) {
-        }
-        pub fn resume(&self) {
-        }
+        pub fn new() -> Codec { Codec {} }
+
+        pub fn suspend(&self) {}
+
+        pub fn resume(&self) {}
     }
 }
-
 
 fn main() -> ! {
     use crate::implementation::Codec;
@@ -95,7 +84,8 @@ fn main() -> ! {
 
     // register a suspend/resume listener
     let sr_cid = xous::connect(codec_sid).expect("couldn't create suspend callback connection");
-    let mut susres = susres::Susres::new(None, &xns, api::Opcode::SuspendResume as u32, sr_cid).expect("couldn't create suspend/resume object");
+    let mut susres = susres::Susres::new(None, &xns, api::Opcode::SuspendResume as u32, sr_cid)
+        .expect("couldn't create suspend/resume object");
 
     loop {
         let msg = xous::receive_message(codec_sid).unwrap();
@@ -108,7 +98,7 @@ fn main() -> ! {
             Some(Opcode::Quit) => {
                 log::warn!("Quit received, goodbye world!");
                 break;
-            },
+            }
             None => {
                 log::error!("couldn't convert opcode: {:?}", msg);
             }
@@ -117,7 +107,10 @@ fn main() -> ! {
     // clean up our program
     log::trace!("main loop exit, destroying servers");
     xns.unregister_server(codec_sid).unwrap();
-    xous::destroy_server(codec_sid).unwrap();
+    // safety: server must have no pending blocking messages or lent pages
+    unsafe {
+        xous::destroy_server(codec_sid).unwrap();
+    }
     log::trace!("quitting");
     xous::terminate_process(0)
 }

@@ -165,7 +165,10 @@ pub(crate) fn connection_manager(sid: xous::SID, activity_interval: Arc<AtomicU3
                     _ => log::error!("Unrecognized message: {:?}", msg),
                 }
             }
-            xous::destroy_server(sid).unwrap();
+            // safety: server must have no pending blocking messages or lent pages
+            unsafe {
+                xous::destroy_server(sid).unwrap();
+            }
         }
     });
 
@@ -833,7 +836,10 @@ pub(crate) fn connection_manager(sid: xous::SID, activity_interval: Arc<AtomicU3
         }
     }
     unsafe { xous::disconnect(self_cid).ok() };
-    xous::destroy_server(sid).unwrap();
+    // safety: server must have no pending blocking messages or lent pages
+    unsafe {
+        xous::destroy_server(sid).unwrap();
+    }
 }
 
 fn get_next_ssid(

@@ -236,7 +236,10 @@ fn i2c_thread(i2c_sid: xous::SID, power_csr_raw: u32, wfi_state: Arc<AtomicBool>
         }
     }
     xns.unregister_server(i2c_sid).unwrap();
-    xous::destroy_server(i2c_sid).unwrap();
+    // safety: server must have no pending blocking messages or lent pages
+    unsafe {
+        xous::destroy_server(i2c_sid).unwrap();
+    }
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -782,7 +785,10 @@ fn main() -> ! {
     unhook(&mut usb_cb_conns);
     unhook(&mut gpio_cb_conns);
     xns.unregister_server(llio_sid).unwrap();
-    xous::destroy_server(llio_sid).unwrap();
+    // safety: server must have no pending blocking messages or lent pages
+    unsafe {
+        xous::destroy_server(llio_sid).unwrap();
+    }
     log::trace!("quitting");
     xous::terminate_process(0)
 }

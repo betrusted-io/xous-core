@@ -463,7 +463,10 @@ pub(crate) fn main_hw() -> ! {
                     }
                 }
             }
-            xous::destroy_server(to_server).unwrap();
+            // safety: server must have no pending blocking messages or lent pages
+            unsafe {
+                xous::destroy_server(to_server).unwrap();
+            }
         }
     });
 
@@ -1604,7 +1607,8 @@ pub(crate) fn main_hw() -> ! {
                             }
                             /*
                             unsafe{xous::disconnect(trng_cid).ok()};
-                            xous::destroy_server(trng_sid).ok();
+                            // safety: server must have no pending blocking messages or lent pages
+                            unsafe { xous::destroy_server(trng_sid).ok(); }
                             log::info!("TRNG polling loop exited");
                             */
                         }
@@ -1755,7 +1759,10 @@ pub(crate) fn main_hw() -> ! {
     // clean up our program
     log::trace!("main loop exit, destroying servers");
     xns.unregister_server(usbdev_sid).unwrap();
-    xous::destroy_server(usbdev_sid).unwrap();
+    // safety: server must have no pending blocking messages or lent pages
+    unsafe {
+        xous::destroy_server(usbdev_sid).unwrap();
+    }
     log::trace!("quitting");
     xous::terminate_process(0)
 }

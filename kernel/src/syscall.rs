@@ -1146,9 +1146,10 @@ pub fn handle_inner(pid: PID, tid: TID, in_irq: bool, call: SysCall) -> SysCallR
         SysCall::Disconnect(cid) => {
             SystemServices::with_mut(|ss| ss.disconnect_from_server(cid).and(Ok(xous_kernel::Result::Ok)))
         }
-        SysCall::DestroyServer(sid) => {
-            SystemServices::with_mut(|ss| ss.destroy_server(pid, sid).and(Ok(xous_kernel::Result::Ok)))
-        }
+        // safety: the wrapper of this is marked as unsafe, propagating the condition to userland
+        SysCall::DestroyServer(sid) => SystemServices::with_mut(|ss| unsafe {
+            ss.destroy_server(pid, sid).and(Ok(xous_kernel::Result::Ok))
+        }),
         SysCall::JoinThread(other_tid) => {
             if other_tid >= crate::arch::process::MAX_THREAD {
                 return Err(xous_kernel::Error::ThreadNotAvailable);

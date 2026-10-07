@@ -104,5 +104,8 @@ fn shell() {
     // clean up our program
     log::error!("shell loop exit, destroying servers");
     xns.unregister_server(shch_sid).unwrap();
-    xous::destroy_server(shch_sid).unwrap();
+    // safety: server must have no pending blocking messages or lent pages
+    unsafe {
+        xous::destroy_server(shch_sid).unwrap();
+    }
 }

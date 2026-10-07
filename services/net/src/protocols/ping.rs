@@ -237,7 +237,10 @@ impl Ping {
                 } else {
                     panic!("Internal error -- Ping was requested, but the returned memory was malformed");
                 }
-                xous::destroy_server(sid).expect("couldn't destroy one-time use server");
+                // safety: server must have no pending blocking messages or lent pages
+                unsafe {
+                    xous::destroy_server(sid).expect("couldn't destroy one-time use server");
+                }
             }
         });
         handle.join().expect("couldn't join single-use server handle");

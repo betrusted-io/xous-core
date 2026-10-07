@@ -217,7 +217,10 @@ pub fn benchmark_thread(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
             }
         }
     }
-    xous::destroy_server(sid).unwrap();
+    // safety: server must have no pending blocking messages or lent pages
+    unsafe {
+        xous::destroy_server(sid).unwrap();
+    }
 }
 
 mod wycheproof {

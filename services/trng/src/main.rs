@@ -741,7 +741,10 @@ fn main() -> ! {
     log::trace!("main loop exit, destroying servers");
     unhook(&mut error_cb_conns);
     xns.unregister_server(trng_sid).unwrap();
-    xous::destroy_server(trng_sid).unwrap();
+    // safety: server must have no pending blocking messages or lent pages
+    unsafe {
+        xous::destroy_server(trng_sid).unwrap();
+    }
     log::trace!("quitting");
     xous::terminate_process(0)
 }

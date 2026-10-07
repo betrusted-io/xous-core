@@ -24,9 +24,7 @@ impl From<xous::MessageId> for StartupCommand {
 }
 
 #[panic_handler]
-fn handle_panic(_arg: &core::panic::PanicInfo) -> ! {
-    loop {}
-}
+fn handle_panic(_arg: &core::panic::PanicInfo) -> ! { loop {} }
 
 #[no_mangle]
 pub extern "C" fn init(server1: u32, server2: u32, server3: u32, server4: u32) -> ! {
@@ -60,20 +58,11 @@ fn write_memory(memory: Option<&xous::MemoryMessage>) {
         None => return,
     };
 
-    let mut target_memory = xous::map_memory(
-        None,
-        memory.offset,
-        memory.buf.len(),
-        xous::MemoryFlags::R | xous::MemoryFlags::W,
-    )
-    .unwrap();
+    let mut target_memory =
+        xous::map_memory(None, memory.offset, memory.buf.len(), xous::MemoryFlags::R | xous::MemoryFlags::W)
+            .unwrap();
 
-    for (src, dest) in memory
-        .buf
-        .as_slice::<usize>()
-        .iter()
-        .zip(target_memory.as_slice_mut())
-    {
+    for (src, dest) in memory.buf.as_slice::<usize>().iter().zip(target_memory.as_slice_mut()) {
         *dest = *src;
     }
 }
@@ -81,7 +70,10 @@ fn write_memory(memory: Option<&xous::MemoryMessage>) {
 fn finish_startup(server: xous::SID, envelope: xous::MessageEnvelope) -> ! {
     let entrypoint = envelope.body.scalar_message().unwrap().arg1;
     drop(envelope);
-    xous::destroy_server(server).unwrap();
+    // safety: server must have no pending blocking messages or lent pages
+    unsafe {
+        xous::destroy_server(server).unwrap();
+    }
     let entry_fn = unsafe { core::mem::transmute::<_, fn() -> !>(entrypoint) };
     entry_fn();
 }

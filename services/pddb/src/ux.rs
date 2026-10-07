@@ -162,7 +162,10 @@ pub(crate) fn password_ux_manager(
             }
         }
     }
-    xous::destroy_server(ux_sid).unwrap();
+    // safety: server must have no pending blocking messages or lent pages
+    unsafe {
+        xous::destroy_server(ux_sid).unwrap();
+    }
 }
 
 #[allow(dead_code)]

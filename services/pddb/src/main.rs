@@ -625,7 +625,10 @@ fn wrapped_main() -> ! {
                     None => log::warn!("got unrecognized message: {:?}", msg),
                 }
             }
-            xous::destroy_server(poller_sid).ok();
+            // safety: server must have no pending blocking messages or lent pages
+            unsafe {
+                xous::destroy_server(poller_sid).ok();
+            }
         }
     });
 
@@ -2525,7 +2528,10 @@ fn wrapped_main() -> ! {
     #[cfg(feature = "gen1")]
     pw_handle.join().expect("password ux manager thread did not join as expected");
     xns.unregister_server(pddb_sid).unwrap();
-    xous::destroy_server(pddb_sid).unwrap();
+    // safety: server must have no pending blocking messages or lent pages
+    unsafe {
+        xous::destroy_server(pddb_sid).unwrap();
+    }
     log::trace!("quitting");
     xous::terminate_process(0)
 }

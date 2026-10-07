@@ -249,5 +249,8 @@ fn suspend_cb_server(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
             None => (),
         }
     }
-    xous::destroy_server(sid).unwrap();
+    // safety: server has no pending blocking messages or lent pages
+    unsafe {
+        xous::destroy_server(sid).unwrap();
+    }
 }

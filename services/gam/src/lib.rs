@@ -589,7 +589,10 @@ impl Drop for Gam {
             unsafe {
                 xous::disconnect(cid).unwrap();
             }
-            xous::destroy_server(sid).unwrap();
+            // safety: server must have no pending blocking messages or lent pages
+            unsafe {
+                xous::destroy_server(sid).unwrap();
+            }
         }
         if REFCOUNT.fetch_sub(1, Ordering::Relaxed) == 1 {
             unsafe {
@@ -651,6 +654,9 @@ fn forwarding_thread(addr: usize, size: usize, offset: usize) {
         }
     }
     log::trace!("modal forwarding server exiting");
-    xous::destroy_server(xous::SID::from_array(forwarding_config.public_sid))
-        .expect("can't destroy my server on exit!");
+    // safety: server must have no pending blocking messages or lent pages
+    unsafe {
+        xous::destroy_server(xous::SID::from_array(forwarding_config.public_sid))
+            .expect("can't destroy my server on exit!");
+    }
 }

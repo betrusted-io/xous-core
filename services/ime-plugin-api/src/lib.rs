@@ -312,7 +312,10 @@ impl Drop for ImeFrontEnd {
             unsafe {
                 xous::disconnect(cid).unwrap();
             }
-            xous::destroy_server(sid).unwrap();
+            // safety: server must have no pending blocking messages or lent pages
+            unsafe {
+                xous::destroy_server(sid).unwrap();
+            }
         }
         if REFCOUNT.fetch_sub(1, Ordering::Relaxed) == 1 {
             unsafe {

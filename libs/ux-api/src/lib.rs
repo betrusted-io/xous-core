@@ -80,6 +80,9 @@ pub(crate) fn forwarding_thread(addr: usize, size: usize, offset: usize) {
         }
     }
     log::trace!("modal forwarding server exiting");
-    xous::destroy_server(xous::SID::from_array(forwarding_config.public_sid))
-        .expect("can't destroy my server on exit!");
+    // safety: server must have no pending blocking messages or lent pages
+    unsafe {
+        xous::destroy_server(xous::SID::from_array(forwarding_config.public_sid))
+            .expect("can't destroy my server on exit!");
+    }
 }
