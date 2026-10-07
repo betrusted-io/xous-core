@@ -54,8 +54,7 @@ impl Aes256KeyWrap {
 
     #[allow(dead_code)]
     pub fn encapsulate(&self, input: &[u8]) -> Result<Vec<u8>, KeywrapError> {
-        if input.len() > std::u32::MAX as usize || input.len() as u64 >= std::u64::MAX / FEISTEL_ROUNDS as u64
-        {
+        if input.len() > u32::MAX as usize || input.len() as u64 >= u64::MAX / FEISTEL_ROUNDS as u64 {
             return Err(KeywrapError::InvalidDataSize);
         }
         let mut aiv: [u8; 8] = [0xa6u8, 0x59, 0x59, 0xa6, 0, 0, 0, 0];
@@ -95,7 +94,7 @@ impl Aes256KeyWrap {
             return Err(KeywrapError::InvalidDataSize);
         }
         let output_len = input.len().checked_sub(Self::MAC_BYTES).ok_or(KeywrapError::InvalidOutputSize)?;
-        if output_len > std::u32::MAX as usize || output_len as u64 >= std::u64::MAX / FEISTEL_ROUNDS as u64 {
+        if output_len > u32::MAX as usize || output_len as u64 >= u64::MAX / FEISTEL_ROUNDS as u64 {
             return Err(KeywrapError::InvalidDataSize);
         }
         if expected_len > output_len || (expected_len & !7) > output_len {
