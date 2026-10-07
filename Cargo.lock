@@ -151,7 +151,7 @@ dependencies = [
  "xous-api-log",
  "xous-api-names",
  "xous-api-ticktimer",
- "xous-ipc 0.10.10",
+ "xous-ipc 0.10.11",
 ]
 
 [[package]]
@@ -359,7 +359,7 @@ dependencies = [
  "xous-api-log",
  "xous-api-names",
  "xous-api-ticktimer",
- "xous-ipc 0.10.10",
+ "xous-ipc 0.10.11",
 ]
 
 [[package]]
@@ -427,7 +427,7 @@ dependencies = [
  "xous-api-names",
  "xous-api-susres",
  "xous-api-ticktimer",
- "xous-ipc 0.10.10",
+ "xous-ipc 0.10.11",
 ]
 
 [[package]]
@@ -443,7 +443,7 @@ dependencies = [
  "rkyv 0.8.8",
  "xous",
  "xous-api-names",
- "xous-ipc 0.10.10",
+ "xous-ipc 0.10.11",
 ]
 
 [[package]]
@@ -522,7 +522,7 @@ dependencies = [
  "xous-api-log",
  "xous-api-names",
  "xous-api-susres",
- "xous-ipc 0.10.10",
+ "xous-ipc 0.10.11",
 ]
 
 [[package]]
@@ -553,7 +553,7 @@ dependencies = [
  "xous",
  "xous-api-names",
  "xous-api-ticktimer",
- "xous-ipc 0.10.10",
+ "xous-ipc 0.10.11",
  "xous-riscv",
 ]
 
@@ -584,7 +584,7 @@ dependencies = [
  "xous-api-names",
  "xous-api-susres",
  "xous-api-ticktimer",
- "xous-ipc 0.10.10",
+ "xous-ipc 0.10.11",
 ]
 
 [[package]]
@@ -773,7 +773,7 @@ dependencies = [
  "xous-api-log",
  "xous-api-names",
  "xous-api-ticktimer",
- "xous-ipc 0.10.10",
+ "xous-ipc 0.10.11",
 ]
 
 [[package]]
@@ -889,7 +889,7 @@ dependencies = [
  "num-traits",
  "rkyv 0.8.8",
  "xous",
- "xous-ipc 0.10.10",
+ "xous-ipc 0.10.11",
 ]
 
 [[package]]
@@ -1111,7 +1111,7 @@ dependencies = [
  "xous-api-log",
  "xous-api-names",
  "xous-api-ticktimer",
- "xous-ipc 0.10.10",
+ "xous-ipc 0.10.11",
 ]
 
 [[package]]
@@ -1145,7 +1145,7 @@ dependencies = [
  "xous-api-log",
  "xous-api-names",
  "xous-api-ticktimer",
- "xous-ipc 0.10.10",
+ "xous-ipc 0.10.11",
 ]
 
 [[package]]
@@ -1317,7 +1317,7 @@ dependencies = [
  "xous-api-names",
  "xous-api-susres",
  "xous-api-ticktimer",
- "xous-ipc 0.10.10",
+ "xous-ipc 0.10.11",
 ]
 
 [[package]]
@@ -1348,7 +1348,7 @@ dependencies = [
  "xous-api-names",
  "xous-api-susres",
  "xous-api-ticktimer",
- "xous-ipc 0.10.10",
+ "xous-ipc 0.10.11",
  "xous-semver",
 ]
 
@@ -1475,7 +1475,7 @@ dependencies = [
  "xous-api-log",
  "xous-api-names",
  "xous-api-ticktimer",
- "xous-ipc 0.10.10",
+ "xous-ipc 0.10.11",
  "xous-swapper",
 ]
 
@@ -2044,7 +2044,7 @@ dependencies = [
  "rand_core 0.6.4",
  "rkyv 0.8.8",
  "xous",
- "xous-ipc 0.10.10",
+ "xous-ipc 0.10.11",
 ]
 
 [[package]]
@@ -2140,7 +2140,7 @@ dependencies = [
  "xous-api-names",
  "xous-api-susres",
  "xous-api-ticktimer",
- "xous-ipc 0.10.10",
+ "xous-ipc 0.10.11",
  "xous-usb-hid",
 ]
 
@@ -2374,7 +2374,7 @@ dependencies = [
  "xous-api-names",
  "xous-api-susres",
  "xous-api-ticktimer",
- "xous-ipc 0.10.10",
+ "xous-ipc 0.10.11",
 ]
 
 [[package]]
@@ -2400,7 +2400,7 @@ dependencies = [
  "xous-api-names",
  "xous-api-susres",
  "xous-api-ticktimer",
- "xous-ipc 0.10.10",
+ "xous-ipc 0.10.11",
 ]
 
 [[package]]
@@ -3102,7 +3102,7 @@ dependencies = [
  "xous-api-names",
  "xous-api-susres",
  "xous-api-ticktimer",
- "xous-ipc 0.10.10",
+ "xous-ipc 0.10.11",
 ]
 
 [[package]]
@@ -3237,7 +3237,7 @@ dependencies = [
  "xous-api-names",
  "xous-api-susres",
  "xous-api-ticktimer",
- "xous-ipc 0.10.10",
+ "xous-ipc 0.10.11",
 ]
 
 [[package]]
@@ -3363,7 +3363,7 @@ dependencies = [
  "xous",
  "xous-api-log",
  "xous-api-names",
- "xous-ipc 0.10.10",
+ "xous-ipc 0.10.11",
 ]
 
 [[package]]
@@ -3377,7 +3377,7 @@ dependencies = [
  "xous",
  "xous-api-log",
  "xous-api-names",
- "xous-ipc 0.10.10",
+ "xous-ipc 0.10.11",
 ]
 
 [[package]]
@@ -3456,7 +3456,7 @@ dependencies = [
  "xous",
  "xous-api-log",
  "xous-api-names",
- "xous-ipc 0.10.10",
+ "xous-ipc 0.10.11",
 ]
 
 [[package]]
@@ -3629,7 +3629,7 @@ dependencies = [
  "xous-api-log",
  "xous-api-names",
  "xous-api-ticktimer",
- "xous-ipc 0.10.10",
+ "xous-ipc 0.10.11",
 ]
 
 [[package]]
@@ -3643,7 +3643,7 @@ dependencies = [
  "ux-api",
  "xous",
  "xous-api-names",
- "xous-ipc 0.10.10",
+ "xous-ipc 0.10.11",
 ]
 
 [[package]]
@@ -3660,7 +3660,7 @@ dependencies = [
  "xous-api-log",
  "xous-api-names",
  "xous-api-ticktimer",
- "xous-ipc 0.10.10",
+ "xous-ipc 0.10.11",
 ]
 
 [[package]]
@@ -3679,7 +3679,7 @@ dependencies = [
  "xous-api-log",
  "xous-api-names",
  "xous-api-ticktimer",
- "xous-ipc 0.10.10",
+ "xous-ipc 0.10.11",
 ]
 
 [[package]]
@@ -3812,7 +3812,7 @@ dependencies = [
  "xous-api-names",
  "xous-api-susres",
  "xous-api-ticktimer",
- "xous-ipc 0.10.10",
+ "xous-ipc 0.10.11",
 ]
 
 [[package]]
@@ -3862,7 +3862,7 @@ dependencies = [
  "xous-api-names",
  "xous-api-susres",
  "xous-api-ticktimer",
- "xous-ipc 0.10.10",
+ "xous-ipc 0.10.11",
 ]
 
 [[package]]
@@ -3899,7 +3899,7 @@ dependencies = [
  "xous-api-log",
  "xous-api-names",
  "xous-api-ticktimer",
- "xous-ipc 0.10.10",
+ "xous-ipc 0.10.11",
  "xous-swapper",
  "zeroize",
 ]
@@ -3917,7 +3917,7 @@ dependencies = [
  "rkyv 0.8.8",
  "xous",
  "xous-api-names",
- "xous-ipc 0.10.10",
+ "xous-ipc 0.10.11",
  "zeroize",
 ]
 
@@ -4060,7 +4060,7 @@ dependencies = [
  "xous-api-names",
  "xous-api-susres",
  "xous-api-ticktimer",
- "xous-ipc 0.10.10",
+ "xous-ipc 0.10.11",
  "xous-semver",
 ]
 
@@ -4287,7 +4287,7 @@ dependencies = [
  "xous-api-log",
  "xous-api-names",
  "xous-api-ticktimer",
- "xous-ipc 0.10.10",
+ "xous-ipc 0.10.11",
 ]
 
 [[package]]
@@ -4323,7 +4323,7 @@ dependencies = [
  "xous-api-log",
  "xous-api-names",
  "xous-api-ticktimer",
- "xous-ipc 0.10.10",
+ "xous-ipc 0.10.11",
 ]
 
 [[package]]
@@ -4354,7 +4354,7 @@ dependencies = [
  "xous-api-log",
  "xous-api-names",
  "xous-api-ticktimer",
- "xous-ipc 0.10.10",
+ "xous-ipc 0.10.11",
 ]
 
 [[package]]
@@ -4430,7 +4430,7 @@ dependencies = [
  "xous-api-names",
  "xous-api-susres",
  "xous-api-ticktimer",
- "xous-ipc 0.10.10",
+ "xous-ipc 0.10.11",
  "xous-semver",
 ]
 
@@ -4906,7 +4906,7 @@ dependencies = [
  "xous-api-names",
  "xous-api-susres",
  "xous-api-ticktimer",
- "xous-ipc 0.10.10",
+ "xous-ipc 0.10.11",
  "xous-swapper",
  "zeroize",
  "zeroize_derive",
@@ -5694,7 +5694,7 @@ dependencies = [
  "xous-api-log",
  "xous-api-names",
  "xous-api-ticktimer",
- "xous-ipc 0.10.10",
+ "xous-ipc 0.10.11",
 ]
 
 [[package]]
@@ -5861,7 +5861,7 @@ dependencies = [
  "xous-api-names",
  "xous-api-susres",
  "xous-api-ticktimer",
- "xous-ipc 0.10.10",
+ "xous-ipc 0.10.11",
  "xous-semver",
  "zeroize",
 ]
@@ -6212,7 +6212,7 @@ dependencies = [
  "xous-api-log",
  "xous-api-names",
  "xous-api-susres",
- "xous-ipc 0.10.10",
+ "xous-ipc 0.10.11",
 ]
 
 [[package]]
@@ -6350,7 +6350,7 @@ dependencies = [
  "xous-api-names",
  "xous-api-susres",
  "xous-api-ticktimer",
- "xous-ipc 0.10.10",
+ "xous-ipc 0.10.11",
 ]
 
 [[package]]
@@ -6536,7 +6536,7 @@ dependencies = [
  "xous-api-names",
  "xous-api-susres",
  "xous-api-ticktimer",
- "xous-ipc 0.10.10",
+ "xous-ipc 0.10.11",
 ]
 
 [[package]]
@@ -6636,7 +6636,7 @@ dependencies = [
  "xous-api-names",
  "xous-api-susres",
  "xous-api-ticktimer",
- "xous-ipc 0.10.10",
+ "xous-ipc 0.10.11",
  "xous-semver",
 ]
 
@@ -6706,7 +6706,7 @@ dependencies = [
  "xous-api-log",
  "xous-api-names",
  "xous-api-ticktimer",
- "xous-ipc 0.10.10",
+ "xous-ipc 0.10.11",
 ]
 
 [[package]]
@@ -6719,7 +6719,7 @@ dependencies = [
  "xous-api-log",
  "xous-api-names",
  "xous-api-ticktimer",
- "xous-ipc 0.10.10",
+ "xous-ipc 0.10.11",
 ]
 
 [[package]]
@@ -6814,7 +6814,7 @@ dependencies = [
  "xous-api-log",
  "xous-api-names",
  "xous-api-susres",
- "xous-ipc 0.10.10",
+ "xous-ipc 0.10.11",
  "xous-swapper",
 ]
 
@@ -6972,7 +6972,7 @@ dependencies = [
  "xous-api-log",
  "xous-api-names",
  "xous-api-ticktimer",
- "xous-ipc 0.10.10",
+ "xous-ipc 0.10.11",
 ]
 
 [[package]]
@@ -7105,7 +7105,7 @@ dependencies = [
  "xous",
  "xous-api-log",
  "xous-api-names",
- "xous-ipc 0.10.10",
+ "xous-ipc 0.10.11",
 ]
 
 [[package]]
@@ -7127,7 +7127,7 @@ dependencies = [
  "xous-api-names",
  "xous-api-susres",
  "xous-api-ticktimer",
- "xous-ipc 0.10.10",
+ "xous-ipc 0.10.11",
 ]
 
 [[package]]
@@ -7144,7 +7144,7 @@ dependencies = [
  "xous-api-log",
  "xous-api-names",
  "xous-api-ticktimer",
- "xous-ipc 0.10.10",
+ "xous-ipc 0.10.11",
  "xous-tts-backend",
 ]
 
@@ -7297,7 +7297,7 @@ dependencies = [
  "xous-api-log",
  "xous-api-names",
  "xous-api-ticktimer",
- "xous-ipc 0.10.10",
+ "xous-ipc 0.10.11",
  "xous-riscv",
  "xous-usb-hid",
 ]
@@ -7345,7 +7345,7 @@ dependencies = [
  "xous-api-names",
  "xous-api-susres",
  "xous-api-ticktimer",
- "xous-ipc 0.10.10",
+ "xous-ipc 0.10.11",
  "xous-semver",
  "xous-usb-hid",
 ]
@@ -7539,7 +7539,7 @@ dependencies = [
  "sha2 0.10.8",
  "xous",
  "xous-api-names",
- "xous-ipc 0.10.10",
+ "xous-ipc 0.10.11",
  "zeroize",
 ]
 
@@ -7599,7 +7599,7 @@ dependencies = [
  "xous-api-names",
  "xous-api-susres",
  "xous-api-ticktimer",
- "xous-ipc 0.10.10",
+ "xous-ipc 0.10.11",
  "xous-usb-hid",
 ]
 
@@ -7649,7 +7649,7 @@ dependencies = [
  "xous-api-log",
  "xous-api-names",
  "xous-api-ticktimer",
- "xous-ipc 0.10.10",
+ "xous-ipc 0.10.11",
  "xous-usb-hid",
 ]
 
@@ -8221,7 +8221,7 @@ checksum = "0fcb9cbac069e033553e8bb871be2fbdffcab578eb25bd0f7c508cedc6dcd75a"
 
 [[package]]
 name = "xous"
-version = "0.9.70"
+version = "0.9.71"
 dependencies = [
  "compiler_builtins",
  "lazy_static",
@@ -8230,18 +8230,18 @@ dependencies = [
 
 [[package]]
 name = "xous-api-log"
-version = "0.1.69"
+version = "0.1.70"
 dependencies = [
  "log",
  "num-derive 0.4.2",
  "num-traits",
  "xous",
- "xous-ipc 0.10.10",
+ "xous-ipc 0.10.11",
 ]
 
 [[package]]
 name = "xous-api-names"
-version = "0.9.71"
+version = "0.9.72"
 dependencies = [
  "log",
  "num-derive 0.4.2",
@@ -8249,12 +8249,12 @@ dependencies = [
  "rkyv 0.8.8",
  "xous",
  "xous-api-log",
- "xous-ipc 0.10.10",
+ "xous-ipc 0.10.11",
 ]
 
 [[package]]
 name = "xous-api-susres"
-version = "0.9.68"
+version = "0.9.69"
 dependencies = [
  "log",
  "num-derive 0.4.2",
@@ -8264,12 +8264,12 @@ dependencies = [
  "xous",
  "xous-api-log",
  "xous-api-names",
- "xous-ipc 0.10.10",
+ "xous-ipc 0.10.11",
 ]
 
 [[package]]
 name = "xous-api-ticktimer"
-version = "0.9.70"
+version = "0.9.71"
 dependencies = [
  "log",
  "num-derive 0.4.2",
@@ -8278,7 +8278,7 @@ dependencies = [
  "xous",
  "xous-api-log",
  "xous-api-names",
- "xous-ipc 0.10.10",
+ "xous-ipc 0.10.11",
  "xous-semver",
 ]
 
@@ -8315,7 +8315,7 @@ dependencies = [
 
 [[package]]
 name = "xous-ipc"
-version = "0.10.10"
+version = "0.10.11"
 dependencies = [
  "bitflags 1.3.2",
  "rkyv 0.8.8",
@@ -8357,7 +8357,7 @@ dependencies = [
  "utralib 0.1.27",
  "xous",
  "xous-api-log",
- "xous-ipc 0.10.10",
+ "xous-ipc 0.10.11",
 ]
 
 [[package]]
@@ -8372,7 +8372,7 @@ dependencies = [
  "xous",
  "xous-api-log",
  "xous-api-names",
- "xous-ipc 0.10.10",
+ "xous-ipc 0.10.11",
 ]
 
 [[package]]
@@ -8419,7 +8419,7 @@ dependencies = [
  "xous-api-log",
  "xous-api-names",
  "xous-api-susres",
- "xous-ipc 0.10.10",
+ "xous-ipc 0.10.11",
 ]
 
 [[package]]
@@ -8439,7 +8439,7 @@ dependencies = [
  "xous",
  "xous-api-log",
  "xous-api-names",
- "xous-ipc 0.10.10",
+ "xous-ipc 0.10.11",
 ]
 
 [[package]]
@@ -8459,7 +8459,7 @@ dependencies = [
  "xous-api-names",
  "xous-api-susres",
  "xous-api-ticktimer",
- "xous-ipc 0.10.10",
+ "xous-ipc 0.10.11",
  "xous-semver",
 ]
 
@@ -8502,7 +8502,7 @@ dependencies = [
  "rkyv 0.8.8",
  "xous",
  "xous-api-names",
- "xous-ipc 0.10.10",
+ "xous-ipc 0.10.11",
 ]
 
 [[package]]
