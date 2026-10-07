@@ -1,3 +1,4 @@
+#![cfg_attr(rustfmt, rustfmt_skip)]
 use core::sync::atomic::{AtomicUsize, Ordering::Relaxed};
 
 // This structure represents a lazily initialized static usize value. Useful
@@ -26,7 +27,7 @@ impl LazyUsize {
     }
 
     // The initialization is not completed.
-    pub const UNINIT: usize = usize::max_value();
+    pub const UNINIT: usize = usize::MAX;
 
     // Runs the init() function at least once, returning the value of some run
     // of init(). Multiple callers can run their init() functions in parallel.
