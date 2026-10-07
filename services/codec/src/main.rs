@@ -276,6 +276,7 @@ fn do_hook(hookdata: ScalarHook, cb_conns: &mut [Option<ScalarCallback>; 32]) {
         log::error!("ran out of space registering callback");
     }
 }
+#[allow(dead_code)]
 fn unhook(cb_conns: &mut [Option<ScalarCallback>; 32]) {
     for entry in cb_conns.iter_mut() {
         if let Some(scb) = entry {
