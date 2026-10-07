@@ -1024,12 +1024,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Some("arm-tiny") => {
             builder
                 .target_arm()
-                .add_services([
-                    "xous-log",
-                    "xous-ticktimer",
-                    "xous-names",
-                    "ticktimer-test-client",
-                ])
+                .add_services(["xous-log", "xous-ticktimer", "xous-names", "ticktimer-test-client"])
                 .add_kernel_feature("v2p") // required to use LCD DMA with lcd-console
                 .add_feature("atsama5d27")
                 .add_feature("lcd-console")
