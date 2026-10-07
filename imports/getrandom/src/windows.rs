@@ -1,3 +1,4 @@
+#![cfg_attr(rustfmt, rustfmt_skip)]
 //! Implementation for Windows
 use crate::Error;
 use core::{ffi::c_void, mem::MaybeUninit, num::NonZeroU32, ptr};
@@ -24,7 +25,7 @@ extern "system" {
 
 pub fn getrandom_inner(dest: &mut [MaybeUninit<u8>]) -> Result<(), Error> {
     // Prevent overflow of u32
-    for chunk in dest.chunks_mut(u32::max_value() as usize) {
+    for chunk in dest.chunks_mut(u32::MAX as usize) {
         // BCryptGenRandom was introduced in Windows Vista
         let ret = unsafe {
             BCryptGenRandom(

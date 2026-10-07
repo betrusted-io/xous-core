@@ -2568,7 +2568,8 @@ impl PddbOs {
             .expect("Internal consistency error: Basis exists, but its root map was not allocated!");
         assert!(pp.valid(), "v2p returned an invalid page");
         let journal_bytes = (self.trng_u32() % JOURNAL_RAND_RANGE).to_le_bytes();
-        let slice_iter = journal_bytes.iter() // journal rev
+        let slice_iter = journal_bytes
+            .iter() // journal rev
             .chain(basis_root.as_ref().iter());
         let mut block = [0 as u8; KCOM_CT_LEN];
         for (&src, dst) in slice_iter.zip(block.iter_mut()) {
@@ -3513,7 +3514,8 @@ impl PddbOs {
                             }
                             basis_root.version = PDDB_VERSION; // update the version to our current one
                             log::info!("Basis root: {:?}", basis_root);
-                            let slice_iter = (&vpage[..size_of::<JournalType>()]).iter() // just copy the journal rev
+                            let slice_iter = (&vpage[..size_of::<JournalType>()])
+                                .iter() // just copy the journal rev
                                 .chain(basis_root.as_ref().iter());
                             let mut block = [0 as u8; KCOM_CT_LEN];
                             for (&src, dst) in slice_iter.zip(block.iter_mut()) {

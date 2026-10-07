@@ -104,7 +104,7 @@ pub fn enable_irq(irq_no: usize) {
         sim_write(sim_read() | (1 << irq_no));
     } else {
         SIM_BACKING
-            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |existing| Some(existing | (1 << irq_no)))
+            .try_update(Ordering::Relaxed, Ordering::Relaxed, |existing| Some(existing | (1 << irq_no)))
             .ok();
     }
 }
@@ -116,7 +116,7 @@ pub fn disable_irq(irq_no: usize) {
         sim_write(sim_read() & !(1 << irq_no));
     } else {
         SIM_BACKING
-            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |existing| Some(existing & !(1 << irq_no)))
+            .try_update(Ordering::Relaxed, Ordering::Relaxed, |existing| Some(existing & !(1 << irq_no)))
             .ok();
     }
 }

@@ -1230,10 +1230,11 @@ impl<'a> RootKeys {
             [0; ed25519_dalek::SECRET_KEY_LENGTH];
         // I don't think this loop should make any extra copies of the secret key, but might be good to check
         // in godbolt!
-        for (dst, (plain, key)) in
-            private_key_enc.iter_mut().zip(root_sk.iter() // we encrypt the root sk, not the derived sk
-        .zip(pcache.hashed_update_pw.iter()))
-        {
+        for (dst, (plain, key)) in private_key_enc.iter_mut().zip(
+            root_sk
+                .iter() // we encrypt the root sk, not the derived sk
+                .zip(pcache.hashed_update_pw.iter()),
+        ) {
             *dst = plain ^ key;
         }
 

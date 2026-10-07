@@ -233,6 +233,7 @@ mod implementation {
         }
 
         spinor.cur_op = None;
+        core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
         SPINOR_RESULT.store(result, Ordering::SeqCst);
         spinor.softirq.wfo(utra::spinor_soft_int::EV_PENDING_SPINOR_INT, 1);
         SPINOR_RUNNING.store(false, Ordering::SeqCst);
@@ -519,6 +520,7 @@ mod implementation {
         /// we name it with _blocking suffix to remind ourselves that this op should full-block Xous, no
         /// exceptions, until the flash op is done.
         fn call_spinor_context_blocking(&mut self) -> u32 {
+            // log::info!("into: {:?}", self.cur_op);
             if self.cur_op.is_none() {
                 log::error!("called with no spinor op set. This is an internal error...panicing!");
                 panic!("called with no spinor op set.");
@@ -708,7 +710,8 @@ mod implementation {
             }
             for block in (be.start..be.start + be.len).step_by(SPINOR_BULK_ERASE_SIZE as usize) {
                 self.cur_op = Some(FlashOp::EraseBlock(block));
-                log::trace!("bulk erase: {:x?}", block);
+                core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
+                log::info!("bulk erase: {:x?} / {:?}", block, self.cur_op);
                 let erase_result = self.call_spinor_context_blocking();
                 if erase_result & 0x40 != 0 {
                     log::error!(
@@ -866,7 +869,9 @@ fn main() -> ! {
 
     loop {
         let mut msg = xous::receive_message(spinor_sid).unwrap();
-        match FromPrimitive::from_usize(msg.body.id()) {
+        let op = FromPrimitive::from_usize(msg.body.id());
+        log::debug!("{:?}", op);
+        match op {
             Some(Opcode::SuspendInner) => msg_blocking_scalar_unpack!(msg, _, _, _, _, {
                 spinor.suspend();
                 xous::return_scalar(msg.sender, 1).unwrap();

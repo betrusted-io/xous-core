@@ -1186,7 +1186,7 @@ pub(super) fn extract_unsigned(cbor_value: cbor::Value) -> Result<u64, Ctap2Stat
 pub(super) fn extract_integer(cbor_value: cbor::Value) -> Result<i64, Ctap2StatusCode> {
     match cbor_value {
         cbor::Value::Unsigned(unsigned) => {
-            if unsigned <= core::i64::MAX as u64 {
+            if unsigned <= i64::MAX as u64 {
                 Ok(unsigned as i64)
             } else {
                 Err(Ctap2StatusCode::CTAP2_ERR_CBOR_UNEXPECTED_TYPE)

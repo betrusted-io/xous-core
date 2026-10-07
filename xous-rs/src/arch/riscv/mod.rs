@@ -262,19 +262,12 @@ where
     T: Send + 'static,
     U: Send + 'static,
 {
-    create_thread_n_post(
-        f as usize,
-        unsafe { core::mem::transmute(&arg) },
-        0,
-        0,
-        0,
-        thread_id,
-    )
-    // If we succeeded, the variable will be moved into the caller. Drop it from here.
-    .map(|f| {
-        core::mem::forget(arg);
-        f
-    })
+    create_thread_n_post(f as usize, unsafe { core::mem::transmute(&arg) }, 0, 0, 0, thread_id)
+        // If we succeeded, the variable will be moved into the caller. Drop it from here.
+        .map(|f| {
+            core::mem::forget(arg);
+            f
+        })
 }
 
 pub fn create_thread_n_pre(

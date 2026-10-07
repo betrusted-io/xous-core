@@ -502,10 +502,7 @@ impl Spinor {
     }
 }
 
-use core::{
-    sync::atomic::{AtomicU32, Ordering},
-    u8,
-};
+use core::sync::atomic::{AtomicU32, Ordering};
 static REFCOUNT: AtomicU32 = AtomicU32::new(0);
 #[cfg(not(test))]
 impl Drop for Spinor {

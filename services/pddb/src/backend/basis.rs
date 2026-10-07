@@ -1126,7 +1126,8 @@ impl BasisCache {
         let pp = basis_v2p_map.get(&VirtAddr::new(1 * VPAGE_SIZE as u64).unwrap()).unwrap();
         assert!(pp.valid(), "v2p returned an invalid page");
         let journal_bytes = (hw.trng_u32() % JOURNAL_RAND_RANGE).to_le_bytes();
-        let slice_iter = journal_bytes.iter() // journal rev
+        let slice_iter = journal_bytes
+            .iter() // journal rev
             .chain(basis_root.as_ref().iter());
         let mut block = [0 as u8; KCOM_CT_LEN];
         for (&src, dst) in slice_iter.zip(block.iter_mut()) {
@@ -2010,7 +2011,8 @@ impl BasisCacheEntry {
             assert!(pp.valid(), "basis page was invalid");
             log::debug!("{} before-sync journal: {}", self.name, self.journal);
             let journal_bytes = self.journal.to_le_bytes(); // journal gets bumped by the patching function now
-            let slice_iter = journal_bytes.iter() // journal rev
+            let slice_iter = journal_bytes
+                .iter() // journal rev
                 .chain(basis_root.as_ref().iter());
             let mut block = [0 as u8; KCOM_CT_LEN];
             for (&src, dst) in slice_iter.zip(block.iter_mut()) {

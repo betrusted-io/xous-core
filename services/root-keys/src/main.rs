@@ -952,6 +952,9 @@ fn main() -> ! {
                     Ok(_) => {
                         log::info!("going to into reboot arc");
                         keys.pddb_recycle(); // we have brand new root keys from e.g. a factory reset -- recycle the PDDB, as it is no longer mountable.
+                        log::info!("pddb_recycle done");
+                        ticktimer.sleep_ms(500).ok();
+                        log::info!("Initiating UI reboot");
                         send_message(
                             main_cid,
                             xous::Message::new_scalar(Opcode::UxTryReboot.to_usize().unwrap(), 0, 0, 0, 0),

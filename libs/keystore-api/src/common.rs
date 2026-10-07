@@ -68,7 +68,7 @@ pub enum KeyWrapOp {
 use std::error::Error;
 impl Error for KeywrapError {}
 
-use std::{fmt, u64};
+use std::fmt;
 
 impl fmt::Display for KeywrapError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
