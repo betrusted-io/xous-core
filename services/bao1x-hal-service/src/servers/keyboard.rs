@@ -636,13 +636,9 @@ fn keyboard_service() {
             }),
             None => {
                 log::error!("couldn't convert KeyboardOpcode");
-                break;
             }
         }
     }
-    xns.unregister_server(kbd_sid).unwrap();
-    xous::destroy_server(kbd_sid).unwrap();
-    xous::terminate_process(0)
 }
 
 #[cfg(not(feature = "rawserial"))]

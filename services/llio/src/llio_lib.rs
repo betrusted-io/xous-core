@@ -515,7 +515,10 @@ fn usb_cb_server(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
             None => (),
         }
     }
-    xous::destroy_server(sid).unwrap();
+    // safety: server must have no pending blocking messages or lent pages
+    unsafe {
+        xous::destroy_server(sid).unwrap();
+    }
 }
 
 /// handles callback messages that indicate a COM interrupt has happened, in the library user's process space.
@@ -534,7 +537,10 @@ fn com_cb_server(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
             None => (),
         }
     }
-    xous::destroy_server(sid).unwrap();
+    // safety: server must have no pending blocking messages or lent pages
+    unsafe {
+        xous::destroy_server(sid).unwrap();
+    }
 }
 
 /// handles callback messages that indicate a GPIO interrupt has happened, in the library user's process
@@ -554,5 +560,8 @@ fn gpio_cb_server(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
             None => (),
         }
     }
-    xous::destroy_server(sid).unwrap();
+    // safety: server must have no pending blocking messages or lent pages
+    unsafe {
+        xous::destroy_server(sid).unwrap();
+    }
 }

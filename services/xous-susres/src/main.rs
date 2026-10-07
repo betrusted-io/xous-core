@@ -581,7 +581,10 @@ pub fn timeout_thread(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
     }
     unsafe { xous::disconnect(TIMEOUT_CONN.load(Ordering::Relaxed)).unwrap() };
     TIMEOUT_CONN.store(0, Ordering::Relaxed);
-    xous::destroy_server(sid).unwrap();
+    // safety: server must have no pending blocking messages or lent pages
+    unsafe {
+        xous::destroy_server(sid).unwrap();
+    }
 }
 
 static SHOULD_RESUME: AtomicBool = AtomicBool::new(false);
@@ -910,7 +913,10 @@ fn main() -> ! {
     unhook(&mut suspend_subscribers);
     log::trace!("main loop exit, destroying servers");
     xns.unregister_server(susres_sid).unwrap();
-    xous::destroy_server(susres_sid).unwrap();
+    // safety: server must have no pending blocking messages or lent pages
+    unsafe {
+        xous::destroy_server(susres_sid).unwrap();
+    }
     log::trace!("quitting");
     xous::terminate_process(0)
 }

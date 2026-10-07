@@ -239,7 +239,10 @@ pub(crate) fn ball_pump_thread(cid_to_main: xous::CID, pump_sid: xous::SID) {
                     _ => log::error!("Got unrecognized message: {:?}", msg),
                 }
             }
-            xous::destroy_server(sid).ok();
+            // safety: server has no pending blocking messages or lent pages
+            unsafe {
+                xous::destroy_server(sid).ok();
+            }
         }
     });
 }

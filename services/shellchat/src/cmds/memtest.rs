@@ -1,5 +1,5 @@
-use num_traits::*;
 use String;
+use num_traits::*;
 
 use crate::{CommonEnv, ShellCmdApi};
 
@@ -156,7 +156,9 @@ pub fn test_thread(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
             }
         }
     }
-    xous::destroy_server(sid).unwrap();
+    unsafe {
+        xous::destroy_server(sid).unwrap();
+    }
 }
 
 impl<'a> ShellCmdApi<'a> for Memtest {

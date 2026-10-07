@@ -45,7 +45,7 @@ impl HwTrng {
     }
 
     fn reseed(&mut self) {
-        let reseed_ctr = match RESEED.fetch_update(Ordering::SeqCst, Ordering::SeqCst, |x| Some(x + 1)) {
+        let reseed_ctr = match RESEED.try_update(Ordering::SeqCst, Ordering::SeqCst, |x| Some(x + 1)) {
             Ok(x) => x,
             Err(x) => x,
         };

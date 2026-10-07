@@ -2378,18 +2378,11 @@ fn main() -> ! {
                 panic!("Password modal for rootkeys quit unexpectedly")
             }
             Some(Opcode::Quit) => {
-                log::warn!("password thread received quit, exiting.");
-                break;
+                log::warn!("password thread received quit: ignoring. This process should never exit.");
             }
             None => {
                 log::error!("couldn't convert opcode");
             }
         }
     }
-    // clean up our program
-    log::trace!("main loop exit, destroying servers");
-    xns.unregister_server(keys_sid).unwrap();
-    xous::destroy_server(keys_sid).unwrap();
-    log::trace!("quitting");
-    xous::terminate_process(0)
 }

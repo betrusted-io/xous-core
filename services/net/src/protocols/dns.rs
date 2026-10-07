@@ -196,6 +196,9 @@ impl Drop for DnsServerManager {
             handle.join().unwrap();
         }
         // now we can detroy the server id of the responder thread
-        xous::destroy_server(self.cb_sid).unwrap();
+        // safety: server must have no pending blocking messages or lent pages
+        unsafe {
+            xous::destroy_server(self.cb_sid).unwrap();
+        }
     }
 }

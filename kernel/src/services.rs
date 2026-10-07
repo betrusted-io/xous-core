@@ -1906,7 +1906,10 @@ impl SystemServices {
 
     /// Destroy the provided server ID and disconnect any processes that are
     /// connected.
-    pub fn destroy_server(&mut self, pid: PID, sid: SID) -> Result<(), xous_kernel::Error> {
+    ///
+    /// Safety: it is the caller's responsibility to make sure there are no blocking
+    /// messages or lent pages pending
+    pub unsafe fn destroy_server(&mut self, pid: PID, sid: SID) -> Result<(), xous_kernel::Error> {
         let mut idx_to_destroy = None;
         // Look through the server list for a server that matches this SID
         for (idx, entry) in self.servers.iter().enumerate() {

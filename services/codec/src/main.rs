@@ -250,17 +250,9 @@ fn wrapped_main() -> ! {
             }),
             None => {
                 log::error!("couldn't convert opcode");
-                break;
             }
         }
     }
-    // clean up our program
-    log::trace!("main loop exit, destroying servers");
-    unhook(&mut audio_cb_conns);
-    xns.unregister_server(codec_sid).unwrap();
-    xous::destroy_server(codec_sid).unwrap();
-    log::trace!("quitting");
-    xous::terminate_process(0)
 }
 
 fn do_hook(hookdata: ScalarHook, cb_conns: &mut [Option<ScalarCallback>; 32]) {

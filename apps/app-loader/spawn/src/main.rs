@@ -64,7 +64,10 @@ pub extern "C" fn init(server1: u32, server2: u32, server3: u32, server4: u32) -
                     let entry_point = read_elf(envelope.body.memory_message_mut());
                     drop(envelope); // we have to get rid of all messages to destroy the server
                     // destroy the server
-                    xous::destroy_server(server).expect("Couldn't destroy spawn server");
+                    // safety: server has no pending blocking messages or lent pages
+                    unsafe {
+                        xous::destroy_server(server).expect("Couldn't destroy spawn server");
+                    }
                     jump(entry_point);
                 }
                 StartupCommand::PingResponse => ping_response(envelope),

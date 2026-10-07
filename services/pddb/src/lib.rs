@@ -152,7 +152,10 @@ impl Pddb {
                             _ => log::warn!("Got unknown opcode: {:?}", msg),
                         }
                     }
-                    xous::destroy_server(sid).unwrap();
+                    // safety: server must have no pending blocking messages or lent pages
+                    unsafe {
+                        xous::destroy_server(sid).unwrap();
+                    }
                 }
             });
             self.cb.replace(Some(sid));

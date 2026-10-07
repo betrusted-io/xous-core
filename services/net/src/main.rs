@@ -2089,7 +2089,10 @@ fn main() -> ! {
     .expect("couldn't quit connection manager server");
     unsafe { xous::disconnect(cm_cid).ok() };
     xns.unregister_server(net_sid).unwrap();
-    xous::destroy_server(net_sid).unwrap();
+    // safety: server must have no pending blocking messages or lent pages
+    unsafe {
+        xous::destroy_server(net_sid).unwrap();
+    }
     log::trace!("quitting");
     xous::terminate_process(0)
 }

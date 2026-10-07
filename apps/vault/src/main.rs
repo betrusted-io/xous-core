@@ -223,7 +223,10 @@ fn main() -> ! {
                     }
                 }
             }
-            xous::destroy_server(sid).ok();
+            // safety: server must have no pending blocking messages or lent pages
+            unsafe {
+                xous::destroy_server(sid).ok();
+            }
         }
     });
 
@@ -847,7 +850,10 @@ fn main() -> ! {
     // clean up our program
     log::error!("main loop exit, destroying servers");
     xns.unregister_server(sid).unwrap();
-    xous::destroy_server(sid).unwrap();
+    // safety: server must have no pending blocking messages or lent pages
+    unsafe {
+        xous::destroy_server(sid).unwrap();
+    }
     log::trace!("quitting");
     xous::terminate_process(0)
 }

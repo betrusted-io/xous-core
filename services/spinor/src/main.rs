@@ -819,7 +819,10 @@ fn susres_thread(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
         }
     }
     xns.unregister_server(susres_sid).unwrap();
-    xous::destroy_server(susres_sid).unwrap();
+    // safety: server must have no pending blocking messages or lent pages
+    unsafe {
+        xous::destroy_server(susres_sid).unwrap();
+    }
 }
 
 fn main() -> ! {
@@ -1077,24 +1080,7 @@ fn main() -> ! {
             }
             None => {
                 log::error!("couldn't convert opcode");
-                break;
             }
         }
     }
-    // clean up our program
-    log::trace!("main loop exit, destroying servers");
-    let quitconn = xous::connect(susres_mgr_sid).unwrap();
-    xous::send_message(
-        quitconn,
-        xous::Message::new_scalar(api::SusResOps::Quit.to_usize().unwrap(), 0, 0, 0, 0),
-    )
-    .unwrap();
-    unsafe {
-        xous::disconnect(quitconn).unwrap();
-    }
-
-    xns.unregister_server(spinor_sid).unwrap();
-    xous::destroy_server(spinor_sid).unwrap();
-    log::trace!("quitting");
-    xous::terminate_process(0)
 }

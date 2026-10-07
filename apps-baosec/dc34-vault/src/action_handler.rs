@@ -110,7 +110,10 @@ pub(crate) fn action_handler(
                     }
                 }
             }
-            xous::destroy_server(sid).ok();
+            // safety: server must have no pending blocking messages or lent pages
+            unsafe {
+                xous::destroy_server(sid).ok();
+            }
         }
     });
 }

@@ -220,7 +220,10 @@ fn wrapped_main() -> ! {
         }
         _ => {}
     }
-    xous::destroy_server(status_gam_getter).unwrap();
+    // safety: server must have no pending blocking messages or lent pages
+    unsafe {
+        xous::destroy_server(status_gam_getter).unwrap();
+    }
 
     // ------------------ lay out our public API infrastructure
     // ok, now that we have a GID, we can continue on with our merry way
@@ -1689,7 +1692,10 @@ fn wrapped_main() -> ! {
         xous::disconnect(pump_conn).unwrap();
     }
     xns.unregister_server(status_sid).unwrap();
-    xous::destroy_server(status_sid).unwrap();
+    // safety: server must have no pending blocking messages or lent pages
+    unsafe {
+        xous::destroy_server(status_sid).unwrap();
+    }
     log::trace!("status thread quitting");
     xous::terminate_process(0)
 }

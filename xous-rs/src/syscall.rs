@@ -1777,7 +1777,10 @@ pub fn current_tid() -> core::result::Result<TID, Error> {
     })
 }
 
-pub fn destroy_server(sid: SID) -> core::result::Result<(), Error> {
+/// Safety: caller must ensure that there are no outstanding blocking messages or lent
+/// pages pending for the server prior to calling this. Otherwise, any clients waiting
+/// on the server will hang forever once this server exits.
+pub unsafe fn destroy_server(sid: SID) -> core::result::Result<(), Error> {
     rsyscall(SysCall::DestroyServer(sid))
         .and_then(|result| if let Result::Ok = result { Ok(()) } else { Err(Error::InternalError) })
 }
