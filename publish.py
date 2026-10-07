@@ -24,7 +24,7 @@ CRATES = [
     ["xous-api-names", "api/xous-api-names"],
     ["xous-api-ticktimer", "api/xous-api-ticktimer"],
 
-    ["xous-api-susres", "api/xous-api-susres"],
+    # ["xous-api-susres", "api/xous-api-susres"],
     # ["xous-kernel", "kernel"], # this is no longer published, as it is an implementation
     # ["xous-log", "services/xous-log"],  # implementations, no longer published
     # ["xous-names", "services/xous-names"],
