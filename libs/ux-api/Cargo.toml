@@ -58,7 +58,9 @@ board-dabao = []
 loader-baosec = []
 board-baosor = []
 loader-baosor = []
-hosted-baosec = ["blitstr2/hosted-baosec"]
+hosted-bao = ["blitstr2/hosted-bao"]
+hosted-baosec = ["hosted-bao"]
+hosted-dabao = ["hosted-bao"]
 
 # Used by font codegen routine
 hosted = ["blitstr2/hosted"]

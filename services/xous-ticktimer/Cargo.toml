@@ -51,7 +51,9 @@ bao1x = [
     "rand_chacha",
     "susres/bao1x",
 ]
-hosted-baosec = []
+hosted-bao = []
+hosted-baosec = ["hosted-bao"]
+hosted-dabao = ["hosted-bao"]
 
 susres = []
 debug-print = []
