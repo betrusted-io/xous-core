@@ -23,9 +23,9 @@ pub static mut UART_DMA_TX_BUF_VIRT: *mut u8 = 0x0000_0000 as *mut u8;
 #[cfg(all(feature = "bao1x", not(feature = "hwsim"), not(feature = "gdb-stub")))]
 pub static KBD_CONN: AtomicU32 = AtomicU32::new(0);
 #[cfg(all(feature = "usb", not(feature = "hazardous-usb-ci")))]
-pub static KBD_ENA: AtomicBool = AtomicBool::new(false);
+pub static KBD_ENA: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 #[cfg(all(feature = "usb", feature = "hazardous-usb-ci"))]
-pub static KBD_ENA: AtomicBool = AtomicBool::new(true);
+pub static KBD_ENA: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
 
 pub fn init() -> Output {
     // dabao builds require the console to work - override the static build default
