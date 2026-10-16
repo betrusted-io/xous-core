@@ -11,17 +11,17 @@ use std::cmp::max;
 #[cfg(feature = "ditherpunk")]
 use std::convert::TryInto;
 
-#[cfg(feature = "hosted-baosec")]
+#[cfg(feature = "hosted-bao")]
 use bao1x_emu::trng::Trng;
 #[cfg(feature = "bao1x")]
 use bao1x_hal_service::trng::Trng;
 use bit_field::BitField;
-#[cfg(not(any(feature = "hosted-baosec", feature = "board-baosec")))]
+#[cfg(not(any(feature = "hosted-bao", feature = "board-baosec")))]
 use gam::*;
 use num_traits::*;
-#[cfg(all(not(feature = "bao1x"), not(feature = "doc-deps"), not(feature = "hosted-baosec")))]
+#[cfg(all(not(feature = "bao1x"), not(feature = "doc-deps"), not(feature = "hosted-bao")))]
 use trng::Trng;
-#[cfg(any(feature = "hosted-baosec", feature = "board-baosec"))]
+#[cfg(any(feature = "hosted-bao", feature = "board-baosec"))]
 use ux_api::widgets::*;
 use xous::{CID, Message, send_message};
 use xous_ipc::Buffer;

@@ -122,7 +122,7 @@ macro_rules! en_audio_rules {
 }
 
 #[macro_export]
-#[cfg(not(any(feature = "board-baosec", feature = "hosted-baosec")))]
+#[cfg(not(any(feature = "board-baosec", feature = "hosted-bao")))]
 macro_rules! english_rules {
     ($base_style:expr, $emoji_style:expr, $ch:ident) => {
         match $base_style($ch) {
@@ -149,7 +149,7 @@ macro_rules! english_rules {
 
 #[macro_export]
 // Reflect reduced font space on small-memory footprint devices
-#[cfg(any(feature = "board-baosec", feature = "hosted-baosec"))]
+#[cfg(any(feature = "board-baosec", feature = "hosted-bao"))]
 macro_rules! english_rules {
     ($base_style:expr, $emoji_style:expr, $ch:ident) => {{
         // Always-present: base, emoji

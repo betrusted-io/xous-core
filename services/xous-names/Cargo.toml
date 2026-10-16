@@ -28,7 +28,9 @@ utralib = { version = "0.1.27", optional = true, default-features = false }
 
 [features]
 bao1x = ["utralib/bao1x"]
-hosted-baosec = []
+hosted-bao = []
+hosted-baosec = ["hosted-bao"]
+hosted-dabao = ["hosted-bao"]
 
 precursor = ["utralib/precursor"]
 hosted = ["utralib/hosted"]
