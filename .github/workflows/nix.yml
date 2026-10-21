@@ -1,0 +1,98 @@
+name: Nix Build baochip firmware
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  # TODO: re-enable if cachix is setup
+  #warmup-cache:
+  #  name: Build and cache shared dependencies
+  #  runs-on: ubuntu-latest
+  #  steps:
+  #    - name: Checkout sources
+  #      uses: actions/checkout@v4
+
+  #    - name: Install Nix
+  #      uses: DeterminateSystems/determinate-nix-action@v3
+
+  #    - name: Setup cache
+  #      uses: cachix/cachix-action@v15
+  #      with:
+  #        name: xous-core
+  #        authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
+
+  #    - name: Build shared dependencies
+  #      run: nix build .#ci-deps --print-build-logs
+
+  build:
+    name: Nix build ${{ matrix.package }}
+    runs-on: ubuntu-latest
+    # TODO: re-enable if cachix is setup
+    #needs: warmup-cache
+    strategy:
+      fail-fast: false
+      matrix:
+        package:
+          - bao1x-boot0
+          - bao1x-boot1
+          - bao1x-alt-boot1
+          - bao1x-baremetal-dabao
+          - dabao-helloworld
+          - baosec
+
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v4
+
+      - name: Install Nix
+        uses: DeterminateSystems/determinate-nix-action@v3
+
+      - name: Setup cache
+        uses: cachix/cachix-action@v15
+        with:
+          name: xous-core
+          # TODO: re-enable if cachix is setup
+          #authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
+
+      - name: Build ${{ matrix.package }}
+        run: nix build .#${{ matrix.package }} --print-build-logs --out-link result-first
+
+      - name: Is Build Deterministic?
+        id: determistic-build-check
+        continue-on-error: true
+        run: nix build --rebuild --keep-failed .#${{ matrix.package }} --print-build-logs
+
+      - name: Debug non-reproducibility
+        if: failure() && steps.determistic-build-check.outcome == 'failure'
+        run: |
+          nix run nixpkgs#diffoscope -- \
+            /nix/store/*-${{ matrix.package }}* \
+            /nix/store/*-${{ matrix.package }}*.check || true
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.package }}
+          path: result/
+          if-no-files-found: error
+
+  flake-check:
+    name: Flake check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v4
+
+      - name: Install Nix
+        uses: DeterminateSystems/determinate-nix-action@v3
+
+      - name: Run flake check
+        run: nix flake check
+
+      - name: Show flake outputs
+        run: nix flake show
