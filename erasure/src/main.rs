@@ -112,15 +112,33 @@ pub unsafe extern "C" fn rust_entry() -> ! {
     #[cfg(not(feature = "bao1x-usb"))]
     // do the main loop through only the serial port
     loop {
-        // fetch characters from the rx buffer
-        critical_section::with(|cs| {
-            let mut queue = UART_RX.borrow(cs).borrow_mut();
-            while let Some(byte) = queue.pop_front() {
-                handler.rx_char(byte);
-            }
-        });
+        let uart = crate::debug::Uart {};
 
-        // process received data
+        // XOFF: signal host to stop sending
+        uart.putc(0x13);
+
+        // give the host a moment to receive the signal
+        crate::delay(1);
+
+        // fetch characters from the rx buffer
+        let mut done = false;
+        while !done {
+            critical_section::with(|cs| {
+                let mut queue = UART_RX.borrow(cs).borrow_mut();
+                if let Some(byte) = queue.pop_front() {
+                    handler.rx_char(byte);
+                } else {
+                    done = true;
+                }
+            });
+        }
+
+        // process received characters
         handler.process();
+
+        uart.putc(0x11); // XON: signal host to send again
+
+        // wait so we have time to receive more characters
+        crate::delay(1);
     }
 }

@@ -97,7 +97,7 @@ impl Repl {
                 if args.len() >= 1 {
                     match args[0].as_str() {
                         "len" => {
-                            crate::println!("{:?} bytes remaining", self.erasure.len());
+                            crate::println!("{:?}", self.erasure.len());
                         }
                         "restart" => {
                             if args.len() == 1 {
@@ -172,7 +172,15 @@ impl Repl {
                                 .erasure
                                 .recover_key(seed.as_slice(), key_block.as_slice())
                                 .map_err(|_| Error::help("Problem recovering key!"))?;
-                            crate::println!("key = {:02x?}", key);
+
+                            let mut key_hex = [0u8; 32];
+                            hex::encode_to_slice(key, &mut key_hex).unwrap();
+                            let uart = crate::debug::Uart {};
+                            for b in key_hex {
+                                uart.putc(b);
+                            }
+                            uart.putc(b'\r');
+                            uart.putc(b'\n');
                         }
                         _ => {
                             return Err(Error::help("Help: erase {len, restart, write-bin, write, key}"));
@@ -211,17 +219,16 @@ impl SerialInteract for Repl {
         if self.rx_bin > 0 {
             self.bin_data.push(c);
             self.rx_bin -= 1;
-            if self.bin_data.len() >= BIN_DATA_WRITE_INTERVAL {
+            if self.rx_bin == 0 {
+                self.erasure.write_slice(&self.bin_data);
+                self.bin_write_count += self.bin_data.len();
+                crate::println!("wrote {:?} bytes", self.bin_write_count);
+                self.bin_data.clear();
+                self.bin_write_count = 0;
+            } else if self.bin_data.len() >= BIN_DATA_WRITE_INTERVAL {
                 self.erasure.write_slice(&self.bin_data);
                 self.bin_write_count += self.bin_data.len();
                 self.bin_data.clear();
-            }
-            if self.rx_bin == 0 {
-                self.erasure.write_slice(self.bin_data.as_slice());
-                self.bin_write_count += self.bin_data.len();
-                crate::println!("wrote {:?} bytes ending at {:x}", self.bin_write_count, self.erasure.peek());
-                self.bin_data.clear();
-                self.bin_write_count = 0;
             }
             return;
         }
