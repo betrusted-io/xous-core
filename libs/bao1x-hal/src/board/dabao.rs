@@ -26,7 +26,7 @@ pub const CRG_UDC_MEMBASE: usize =
 // MANUALLY SYNCED TO ALLOCATIONS ABOVE
 // inclusive numbering - we allocate pages from the top-down, so the last number should generally be 31
 pub const IFRAM0_RESERVED_PAGE_RANGE: [usize; 2] = [31 - 4, 31];
-pub const IFRAM1_RESERVED_PAGE_RANGE: [usize; 2] = [31 - 0, 31];
+pub const IFRAM1_RESERVED_PAGE_RANGE: [usize; 2] = [31 - 23, 31];
 
 // Re-export all of the offsets exposed in the API
 pub use bao1x_api::offsets::dabao::*;
