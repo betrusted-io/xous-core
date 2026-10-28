@@ -1,0 +1,39 @@
+[package]
+name = "primordial"
+version = "0.1.0"
+authors = ["bunnie <bunnie@kosagi.com>"]
+edition = "2024"
+description = "Primordial target - for chip level simulations"
+
+[dependencies]
+xous = "0.9.71"
+utralib = { version = "0.1.27", optional = true, default-features = false }
+bao1x-hal = { path = "../libs/bao1x-hal", optional = true, default-features = false }
+bao1x-api = { path = "../libs/bao1x-api", optional = true, default-features = false }
+vexriscv = { version = "0.5.6", package = "xous-riscv" }
+riscv = { version = "0.14.0", features = ["critical-section-single-hart"] }
+linked_list_allocator = { version = "0.10.5", optional = true }
+xous-bio-bdma = { path = "../libs/xous-bio-bdma", optional = true, default-features = false }
+critical-section = "1.2.0"
+sha2 = { version = "0.10.8", optional = true, default-features = false }
+digest = { version = "0.10.7", optional = true }
+sha2-bao1x = { path = "../bao1x-boot/sha2-bao1x", optional = true, default-features = false }
+hex-literal = "1.0.0"
+hex = { version = "0.4.3", default-features = false }
+
+[features]
+# Baochip feature tree below
+bao1x = [
+    "utralib/bao1x",
+    "linked_list_allocator",
+    "bao1x-hal/debug-print-uart",
+    "bao1x-hal/security",
+    "bao1x-api",
+    "digest",
+    "sha2-bao1x",
+]
+
+# placeholder - no actual "board" but this pulls in defaults needed for the build system
+board-dabao = ["bao1x-hal/board-dabao"]
+
+default = []
