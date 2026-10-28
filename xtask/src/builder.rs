@@ -1106,7 +1106,7 @@ impl Builder {
                     // bao1x bootloader targets. Figure out if it's boot0 or boot1
                     let function_code = match self.loader {
                         CrateSpec::Local(ref name, _) => {
-                            if name == "bao1x-boot0" {
+                            if name == "bao1x-boot0" || name == "primordial" {
                                 "boot0"
                             } else if name == "bao1x-boot1" {
                                 "boot1"
