@@ -36,4 +36,7 @@ bao1x = [
 # placeholder - no actual "board" but this pulls in defaults needed for the build system
 board-dabao = ["bao1x-hal/board-dabao"]
 
-default = []
+# enable test code for sce-hash
+sce-hash = []
+
+default = ["sce-hash"]

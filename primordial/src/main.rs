@@ -7,6 +7,8 @@ mod sim;
 use sim::*;
 pub mod debug;
 pub use debug::*;
+#[cfg(feature = "sce-hash")]
+mod sce_hash;
 use utralib::*;
 
 // NOTE: the heap needs initialization before use. In this minimal example, it is declared, but not
@@ -23,6 +25,10 @@ static ALLOCATOR: linked_list_allocator::LockedHeap = linked_list_allocator::Loc
 pub unsafe extern "C" fn rust_entry() -> ! {
     // this does nothing but print an "up" message, and then quit the simulation
     crate::println!("\n~~Primordial up!~~\n");
+
+    #[cfg(feature = "sce-hash")]
+    sce_hash::sce_hash();
+
     exit_sim()
 }
 
