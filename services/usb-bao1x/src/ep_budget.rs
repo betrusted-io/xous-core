@@ -35,16 +35,32 @@ pub struct EpBudgetLedger {
 }
 
 impl EpBudgetLedger {
-    pub fn new(label: &'static str) -> Self { Self { label, total: 0, len: 0, parts: [("", 0); MAX_PARTS] } }
+    pub fn new(label: &'static str) -> Self {
+        Self {
+            label,
+            total: 0,
+            len: 0,
+            parts: [("", 0); MAX_PARTS],
+        }
+    }
 
-    pub fn total(&self) -> usize { self.total }
+    pub fn total(&self) -> usize {
+        self.total
+    }
 
-    pub fn parts_snapshot(&self) -> [(&'static str, usize); MAX_PARTS] { self.parts }
+    pub fn parts_snapshot(&self) -> [(&'static str, usize); MAX_PARTS] {
+        self.parts
+    }
 
-    pub fn parts_len(&self) -> usize { self.len }
+    pub fn parts_len(&self) -> usize {
+        self.len
+    }
 
     fn push_part(&mut self, class: &'static str, n: usize) {
-        assert!(self.len < MAX_PARTS, "EpBudgetLedger overflow: too many class parts");
+        assert!(
+            self.len < MAX_PARTS,
+            "EpBudgetLedger overflow: too many class parts"
+        );
         self.parts[self.len] = (class, n);
         self.len += 1;
         self.total = self.total.saturating_add(n);
@@ -71,7 +87,9 @@ impl EpBudgetLedger {
 
     /// Final check after every class for this image has been reserved (and ideally
     /// constructed). Names all classes and the total vs `CRG_EP_NUM`.
-    pub fn finalize(&self) { self.assert_within_budget(); }
+    pub fn finalize(&self) {
+        self.assert_within_budget();
+    }
 
     /// Compare planned cumulative total to a live occupancy count (e.g.
     /// `CorigineWrapper::allocated_non_ep0_count()` after constructions).
@@ -92,7 +110,9 @@ impl EpBudgetLedger {
 /// Old (broken-for-gap) semantics: each subtotal checked independently.
 /// Used only in tests to prove the cumulative gap.
 #[cfg(test)]
-pub fn old_independent_subtotal_ok(subtotals: &[usize]) -> bool { subtotals.iter().all(|&n| n <= CRG_EP_NUM) }
+pub fn old_independent_subtotal_ok(subtotals: &[usize]) -> bool {
+    subtotals.iter().all(|&n| n <= CRG_EP_NUM)
+}
 
 #[cfg(test)]
 mod tests {

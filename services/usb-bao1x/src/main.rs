@@ -592,16 +592,21 @@ pub(crate) fn main_hw() -> ! {
             Opcode::CcidRxDeferred => {
                 if ccid_listener_pid.is_none() {
                     ccid_listener_pid = msg.sender.pid();
-                    // Stop IRQ-path stub replies; this process owns deferred frames.
-                    cu.ccid.claim_deferred_handler();
                 }
                 if ccid_listener_pid == msg.sender.pid() {
+                    // Always re-claim: CcidTransportClass::reset() clears
+                    // deferred_handler_claimed on USB reset; without this, post-hangup
+                    // XfrBlocks stay on the IRQ stub path while PID is still set.
+                    cu.ccid.claim_deferred_handler();
                     // Pop in its own statement so the RefMut is dropped before the else
                     // branch. Edition 2021 keeps `if let` scrutinee temporaries alive for
                     // the whole if-else; a second borrow_mut() there panics ("RefCell
                     // already borrowed") the first time the queue is empty — which is the
                     // normal CcidRxDeferred wait at startup.
+                    // Mask: `ccid_rx` is the same RefCell as IRQ `complete_rx`.
+                    let irq_prev = cu.device.bus().disable_interrupts();
                     let queued = cu.ccid_rx.borrow_mut().pop_front();
+                    cu.device.bus().restore_interrupts(irq_prev);
                     if let Some(frame) = queued {
                         let mut response = unsafe {
                             Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap())
@@ -620,7 +625,10 @@ pub(crate) fn main_hw() -> ! {
                         cu.ccid.prime_bulk_out();
                         // Re-check after park: a frame may have landed between the empty
                         // check and msg_opt.take() (lost IrqCcidRx would otherwise hang).
-                        if let Some(frame) = cu.ccid_rx.borrow_mut().pop_front() {
+                        let irq_prev = cu.device.bus().disable_interrupts();
+                        let frame = cu.ccid_rx.borrow_mut().pop_front();
+                        cu.device.bus().restore_interrupts(irq_prev);
+                        if let Some(frame) = frame {
                             if let Some(mut listener) = ccid_listener.take() {
                                 let mut response = unsafe {
                                     Buffer::from_memory_message_mut(
@@ -697,6 +705,7 @@ pub(crate) fn main_hw() -> ! {
                 {
                     if reset_hangup || cu.ccid.take_session_hangup() {
                         if let Some(mut listener) = ccid_listener.take() {
+                            log::debug!("CcidRxDeferred waiter dropped on hangup");
                             let mut response = unsafe {
                                 Buffer::from_memory_message_mut(listener.body.memory_message_mut().unwrap())
                             };
@@ -704,8 +713,12 @@ pub(crate) fn main_hw() -> ! {
                             deferred_buf.code = CcidCode::Hangup;
                             response.replace(deferred_buf).unwrap();
                         }
-                        ccid_listener_pid = None;
-                        cu.ccid.release_deferred_handler();
+                        // Drop stale frames from the prior session. Keep listener PID /
+                        // deferred_handler_claimed so post-reset XfrBlocks re-queue instead
+                        // of the no-handler stub (6A82) while openpgp-apdu waits Configured.
+                        let irq_prev = cu.device.bus().disable_interrupts();
+                        cu.ccid_rx.borrow_mut().clear();
+                        cu.device.bus().restore_interrupts(irq_prev);
                         continue;
                     }
                 }
@@ -717,7 +730,10 @@ pub(crate) fn main_hw() -> ! {
                 }
                 // Same edition-2021 if-let temporary rule as CcidRxDeferred: drop the
                 // RefMut before any later borrow_mut (push_front when no listener).
+                // Mask: shared with IRQ `complete_rx`.
+                let irq_prev = cu.device.bus().disable_interrupts();
                 let queued = cu.ccid_rx.borrow_mut().pop_front();
+                cu.device.bus().restore_interrupts(irq_prev);
                 if let Some(frame) = queued {
                     #[cfg(feature = "ccid-echo")]
                     {
@@ -742,23 +758,32 @@ pub(crate) fn main_hw() -> ! {
                             // it is momentarily between receive and re-park.
                             let mut pending = frame;
                             loop {
-                                let resp =
-                                    usb_bao1x::ccid_framing::deferred_unhandled_response(&pending);
+                                let resp = usb_bao1x::ccid_framing::deferred_unhandled_response(&pending);
                                 cu.ccid.enqueue_response(resp);
-                                cu.sw_irq(UsbIrqReq::CcidTx);
-                                while !cu.irq_serviced.load(Ordering::SeqCst) {
-                                    xous::yield_slice();
+                                for _ in 0..8 {
+                                    cu.irq_serviced.store(false, Ordering::SeqCst);
+                                    cu.sw_irq(UsbIrqReq::CcidTx);
+                                    while !cu.irq_serviced.load(Ordering::SeqCst) {
+                                        xous::yield_slice();
+                                    }
+                                    cu.irq_serviced.store(false, Ordering::SeqCst);
+                                    if !cu.ccid.has_tx_pending() {
+                                        break;
+                                    }
                                 }
-                                cu.irq_serviced.store(false, Ordering::SeqCst);
-                                // Same post-CcidTx OUT re-arm as Opcode::CcidTx.
                                 cu.ccid.force_prime_bulk_out(cu.device.bus());
-                                match cu.ccid_rx.borrow_mut().pop_front() {
+                                let irq_prev = cu.device.bus().disable_interrupts();
+                                let next = cu.ccid_rx.borrow_mut().pop_front();
+                                cu.device.bus().restore_interrupts(irq_prev);
+                                match next {
                                     Some(next) => pending = next,
                                     None => break,
                                 }
                             }
                         } else {
+                            let irq_prev = cu.device.bus().disable_interrupts();
                             cu.ccid_rx.borrow_mut().push_front(frame);
+                            cu.device.bus().restore_interrupts(irq_prev);
                         }
                     }
                 } else {
@@ -777,11 +802,24 @@ pub(crate) fn main_hw() -> ! {
             }
             #[cfg(feature = "ccid-openpgp")]
             Opcode::CcidTx => {
+                // Same ownership rule as U2fTx (#875): only the deferred-handler PID may TX.
+                if ccid_listener_pid.is_none() {
+                    ccid_listener_pid = msg.sender.pid();
+                    cu.ccid.claim_deferred_handler();
+                }
                 let mut buffer =
                     unsafe { Buffer::from_memory_message_mut(msg.body.memory_message_mut().unwrap()) };
                 let mut ipc = buffer.to_original::<CcidMsgIpc, _>().unwrap();
                 if cu.device.state() != usb_device::device::UsbDeviceState::Configured {
                     ipc.code = CcidCode::Hangup;
+                    buffer.replace(ipc).unwrap();
+                    continue;
+                }
+                let owner = ccid_listener_pid.map(|p| p.get());
+                let sender = msg.sender.pid().map(|p| p.get());
+                if !ccid_tx_sender_allowed(owner, sender) {
+                    log::warn!("CcidTx Denied: sender PID {:?} != owner {:?}", sender, owner);
+                    ipc.code = CcidCode::Denied;
                     buffer.replace(ipc).unwrap();
                     continue;
                 }
@@ -792,16 +830,30 @@ pub(crate) fn main_hw() -> ! {
                 }
                 let data = core::mem::take(&mut ipc.data);
                 cu.ccid.enqueue_response(data);
-                // Kick soft IRQ so poll_bulk_in runs and queues the EP1 IN TRB.
-                // Without this, tx_pending sits until some later USB IRQ and the
-                // host ReadUSB times out (U2F uses the same FidoTx pattern).
-                cu.sw_irq(UsbIrqReq::CcidTx);
-                while !cu.irq_serviced.load(Ordering::SeqCst) {
-                    xous::yield_slice();
+                // Soft-IRQ: composite_handler runs SW before CORIGINE and must not
+                // `return` early on try_lock FAIL (that skipped CcidTx and wedged main).
+                // Retry while `tx_pending`: `poll_bulk_in` may WouldBlock on write
+                // try_lock / full IN ring — bytes stay queued, so re-pend SW rather
+                // than TxAck with data stranded until the next OUT.
+                const CCID_TX_SOFT_IRQ_ATTEMPTS: usize = 8;
+                for attempt in 0..CCID_TX_SOFT_IRQ_ATTEMPTS {
+                    cu.irq_serviced.store(false, Ordering::SeqCst);
+                    cu.sw_irq(UsbIrqReq::CcidTx);
+                    while !cu.irq_serviced.load(Ordering::SeqCst) {
+                        xous::yield_slice();
+                    }
+                    cu.irq_serviced.store(false, Ordering::SeqCst);
+                    if !cu.ccid.has_tx_pending() {
+                        break;
+                    }
+                    if attempt + 1 == CCID_TX_SOFT_IRQ_ATTEMPTS {
+                        log::warn!(
+                            "CcidTx: tx_pending after {} soft-IRQ attempts",
+                            CCID_TX_SOFT_IRQ_ATTEMPTS
+                        );
+                    }
                 }
-                cu.irq_serviced.store(false, Ordering::SeqCst);
-                // Bulk IN can drop the Corigine bulk-OUT TRB; re-arm so the host's
-                // next WriteUSB (e.g. after IccPowerOff SlotStatus) has a buffer.
+                // Bulk IN can drop the Corigine bulk-OUT TRB; re-arm for next WriteUSB.
                 cu.ccid.force_prime_bulk_out(cu.device.bus());
                 ipc.code = CcidCode::TxAck;
                 buffer.replace(ipc).unwrap();
@@ -1204,8 +1256,10 @@ pub(crate) fn main_hw() -> ! {
             }
             Opcode::LinkStatus => {
                 if let Some(scalar) = msg.body.scalar_message_mut() {
-                    // to get the raw device state:
-                    // cu.device.bus().core().get_device_state()
+                    // `UsbDevice::state(&self)` reads a Copy enum field — not a RefCell.
+                    // IRQ `device.borrow_mut()` is std::borrow identity (`hw.rs`); no
+                    // RefCell overlap with this path (single-hart: IRQ preempts, does not
+                    // interleave a live RefMut with main).
                     let state = cu.device.state();
                     scalar.arg1 = state as usize;
                     // Re-arm bulk OUT whenever LinkStatus reports Configured (main
@@ -1217,6 +1271,7 @@ pub(crate) fn main_hw() -> ! {
                     {
                         use usb_device::device::UsbDeviceState;
                         if state == UsbDeviceState::Configured {
+                            // prime_bulk_out masks irqarray around shared RefCell borrows.
                             cu.ccid.prime_bulk_out();
                         }
                     }

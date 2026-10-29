@@ -284,3 +284,36 @@ impl TryFrom<usize> for LogLevel {
         }
     }
 }
+
+/// Whether a `CcidTx` sender may transmit (#875; same ownership rule as `U2fTx`).
+///
+/// `owner_pid` is the deferred-handler PID once claimed (`None` = first claim allowed).
+/// Returns false when a non-owner tries to TX (caller should respond `CcidCode::Denied`).
+pub fn ccid_tx_sender_allowed(owner_pid: Option<u8>, sender_pid: Option<u8>) -> bool {
+    match owner_pid {
+        None => true,
+        Some(owner) => sender_pid == Some(owner),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ccid_tx_sender_allowed;
+
+    #[test]
+    fn ccid_tx_first_sender_may_claim() {
+        assert!(ccid_tx_sender_allowed(None, Some(7)));
+        assert!(ccid_tx_sender_allowed(None, None));
+    }
+
+    #[test]
+    fn ccid_tx_owner_allowed() {
+        assert!(ccid_tx_sender_allowed(Some(7), Some(7)));
+    }
+
+    #[test]
+    fn ccid_tx_non_owner_denied() {
+        assert!(!ccid_tx_sender_allowed(Some(7), Some(9)));
+        assert!(!ccid_tx_sender_allowed(Some(7), None));
+    }
+}

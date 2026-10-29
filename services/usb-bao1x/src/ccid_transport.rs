@@ -10,8 +10,8 @@ use std::sync::atomic::{AtomicBool, AtomicPtr, Ordering};
 use num_traits::ToPrimitive;
 use usb_bao1x::ccid_framing::{
     CCID_BULK_MAX_PACKET as CCID_BULK_MAX_PACKET_BYTES, CCID_HEADER_LEN, append_bulk_out, consume_tx_chunk,
-    deferred_unhandled_response, drain_complete_frames, frame_total_len, is_get_slot_status, is_icc_power_on,
-    next_tx_chunk, rdr_to_pc_data_block_atr, rdr_to_pc_slot_status_ok,
+    deferred_unhandled_response, drain_complete_frames, frame_total_len, is_get_slot_status,
+    is_icc_power_off, is_icc_power_on, next_tx_chunk, rdr_to_pc_data_block_atr, rdr_to_pc_slot_status_ok,
 };
 use usb_device::Result as UsbResult;
 use usb_device::UsbError;
@@ -195,18 +195,12 @@ impl<'a, B: UsbBus> CcidTransportClass<'a, B> {
     }
 
     /// Mark that an external process owns deferred CCID frames (`CcidRxDeferred`).
-    pub fn claim_deferred_handler(&self) {
-        self.deferred_handler_claimed.store(true, Ordering::SeqCst);
-    }
+    pub fn claim_deferred_handler(&self) { self.deferred_handler_claimed.store(true, Ordering::SeqCst); }
 
     /// Clear deferred ownership (USB reset / unplug / hangup).
-    pub fn release_deferred_handler(&self) {
-        self.deferred_handler_claimed.store(false, Ordering::SeqCst);
-    }
+    pub fn release_deferred_handler(&self) { self.deferred_handler_claimed.store(false, Ordering::SeqCst); }
 
-    pub fn deferred_handler_claimed(&self) -> bool {
-        self.deferred_handler_claimed.load(Ordering::SeqCst)
-    }
+    pub fn deferred_handler_claimed(&self) -> bool { self.deferred_handler_claimed.load(Ordering::SeqCst) }
 
     /// Wire the main-thread flag CcidTx waits on. Must outlive this transport.
     pub fn attach_irq_serviced(&self, flag: &AtomicBool) {
@@ -230,11 +224,35 @@ impl<'a, B: UsbBus> CcidTransportClass<'a, B> {
     /// Returns true once after a USB reset/unplug cleared transport state.
     pub fn take_session_hangup(&self) -> bool { self.session_hangup.swap(false, Ordering::SeqCst) }
 
+    /// Run `f` with irqarray1 masked when `force_bus` is attached (main context).
+    ///
+    /// `inner` and `complete_rx` (aliased as main's `ccid_rx`) are also touched from
+    /// `composite_handler`; without a mask, a RefCell borrow on main can overlap an IRQ
+    /// borrow and panic. Nesting with [`bao1x_hal::usb::driver::CoreGuard`]: each layer
+    /// save/restores `EV_ENABLE` via [`bao1x_hal::usb::driver::UsbIrqMaskGuard`] (never
+    /// unconditional re-enable on drop).
+    fn with_usb_irq_masked<R>(&self, f: impl FnOnce() -> R) -> R {
+        match self.force_bus.as_ref() {
+            Some(bus) => {
+                let _mask = bus.mask_interrupts();
+                f()
+            }
+            None => f(),
+        }
+    }
+
     /// Queue raw RDR_to_PC bytes from an external handler. They are chunked on bulk IN.
     pub fn enqueue_response(&self, data: Vec<u8>) {
-        let mut g = self.inner.borrow_mut();
-        g.tx_buf = data;
-        g.tx_pending = !g.tx_buf.is_empty();
+        self.with_usb_irq_masked(|| {
+            let mut g = self.inner.borrow_mut();
+            g.tx_buf = data;
+            g.tx_pending = !g.tx_buf.is_empty();
+        });
+    }
+
+    /// True while bulk-IN bytes remain after a WouldBlock / incomplete write.
+    pub(crate) fn has_tx_pending(&self) -> bool {
+        self.with_usb_irq_masked(|| self.inner.borrow().tx_pending)
     }
 
     /// USB endpoint index for CCID bulk OUT (for Corigine `ep_out_ready` force-rearm).
@@ -260,40 +278,44 @@ impl<'a, B: UsbBus> CcidTransportClass<'a, B> {
     /// after receiving data). Do not call from `poll()` — that runs in the USB IRQ
     /// path and a register-touching `read()` there breaks SET_ADDRESS timing (-71).
     pub(crate) fn prime_bulk_out(&self) {
-        let mut tmp = [0u8; CCID_BULK_MAX_PACKET as usize];
-        match self.bulk_out.read(&mut tmp) {
-            Ok(0) | Err(UsbError::WouldBlock) => {
-                // No payload (or already armed). WouldBlock still arms when needed
-                // once `address_is_set` is true; before that it is a no-op.
-            }
-            Ok(n) => {
-                // Rare: data arrived during prime — fold into the normal RX path.
-                {
-                    let mut g = self.inner.borrow_mut();
-                    if append_bulk_out(&mut g.rx_assembly, &tmp[..n]).is_err() {
-                        return;
-                    }
+        // Mask for the whole prime: `inner` / `complete_rx` borrows below share cells
+        // with the IRQ `endpoint_out` / `drain_complete_messages` path.
+        self.with_usb_irq_masked(|| {
+            let mut tmp = [0u8; CCID_BULK_MAX_PACKET as usize];
+            match self.bulk_out.read(&mut tmp) {
+                Ok(0) | Err(UsbError::WouldBlock) => {
+                    // No payload (or already armed). WouldBlock still arms when needed
+                    // once `address_is_set` is true; before that it is a no-op.
                 }
-                let answered_inline = self.drain_complete_messages();
-                if answered_inline {
-                    if let Some(ref bus) = self.force_bus {
-                        self.force_prime_bulk_out(bus);
-                    }
-                    self.poll_bulk_in();
-                    // Non-recursive re-arm: bulk IN can drop the OUT TRB.
-                    let mut arm = [0u8; CCID_BULK_MAX_PACKET as usize];
-                    match self.bulk_out.read(&mut arm) {
-                        Ok(0) | Err(UsbError::WouldBlock) => {}
-                        Ok(n2) => {
-                            let mut g = self.inner.borrow_mut();
-                            let _ = append_bulk_out(&mut g.rx_assembly, &arm[..n2]);
+                Ok(n) => {
+                    // Rare: data arrived during prime — fold into the normal RX path.
+                    {
+                        let mut g = self.inner.borrow_mut();
+                        if append_bulk_out(&mut g.rx_assembly, &tmp[..n]).is_err() {
+                            return;
                         }
-                        Err(_) => {}
+                    }
+                    let answered_inline = self.drain_complete_messages();
+                    if answered_inline {
+                        if let Some(ref bus) = self.force_bus {
+                            self.force_prime_bulk_out(bus);
+                        }
+                        self.poll_bulk_in();
+                        // Non-recursive re-arm: bulk IN can drop the OUT TRB.
+                        let mut arm = [0u8; CCID_BULK_MAX_PACKET as usize];
+                        match self.bulk_out.read(&mut arm) {
+                            Ok(0) | Err(UsbError::WouldBlock) => {}
+                            Ok(n2) => {
+                                let mut g = self.inner.borrow_mut();
+                                let _ = append_bulk_out(&mut g.rx_assembly, &arm[..n2]);
+                            }
+                            Err(_) => {}
+                        }
                     }
                 }
+                Err(_) => {}
             }
-            Err(_) => {}
-        }
+        });
     }
 
     fn drain_complete_messages(&self) -> bool {
@@ -336,6 +358,15 @@ impl<'a, B: UsbBus> CcidTransportClass<'a, B> {
                             let slot = frame[5];
                             let seq = frame[6];
                             let resp = rdr_to_pc_data_block_atr(slot, seq);
+                            g.tx_buf.clear();
+                            g.tx_buf.extend_from_slice(&resp);
+                            g.tx_pending = true;
+                            Step::Inline
+                        } else if is_icc_power_off(&frame) {
+                            // Answer SlotStatus inline like GetSlotStatus (no deferred round-trip).
+                            let slot = frame[5];
+                            let seq = frame[6];
+                            let resp = rdr_to_pc_slot_status_ok(slot, seq);
                             g.tx_buf.clear();
                             g.tx_buf.extend_from_slice(&resp);
                             g.tx_pending = true;

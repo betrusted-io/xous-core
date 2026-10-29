@@ -28,12 +28,8 @@ pub fn frame_total_len(rx_assembly: &[u8]) -> Option<usize> {
     if rx_assembly.len() < CCID_HEADER_LEN {
         return None;
     }
-    let dw_len = u32::from_le_bytes([
-        rx_assembly[1],
-        rx_assembly[2],
-        rx_assembly[3],
-        rx_assembly[4],
-    ]) as usize;
+    let dw_len =
+        u32::from_le_bytes([rx_assembly[1], rx_assembly[2], rx_assembly[3], rx_assembly[4]]) as usize;
     let total = CCID_HEADER_LEN.saturating_add(dw_len);
     if total > CCID_WIRE_MAX {
         return None;
@@ -151,6 +147,15 @@ pub fn is_icc_power_on(frame: &[u8]) -> bool {
     dw == 0
 }
 
+/// True if `frame` is a well-formed IccPowerOff (header only, dwLength 0).
+pub fn is_icc_power_off(frame: &[u8]) -> bool {
+    if frame.len() != CCID_HEADER_LEN || frame[0] != PC_TO_RDR_ICC_POWER_OFF {
+        return false;
+    }
+    let dw = u32::from_le_bytes([frame[1], frame[2], frame[3], frame[4]]);
+    dw == 0
+}
+
 /// Fixed RDR_to_PC_SlotStatus: command OK, ICC present/active (bStatus/bError/bClock = 0).
 ///
 /// Built without heapless/usb-personality so the IRQ path can answer libccid's
@@ -223,12 +228,8 @@ pub fn deferred_unhandled_response(pc_to_rdr: &[u8]) -> Vec<u8> {
     let slot = pc_to_rdr.get(5).copied().unwrap_or(0);
     let seq = pc_to_rdr.get(6).copied().unwrap_or(0);
     match pc_to_rdr.first().copied() {
-        Some(PC_TO_RDR_XFR_BLOCK) => {
-            rdr_to_pc_data_block_apdu_sw(slot, seq, APDU_SW_FILE_NOT_FOUND).to_vec()
-        }
-        Some(PC_TO_RDR_ICC_POWER_OFF) | Some(PC_TO_RDR_ABORT) => {
-            rdr_to_pc_slot_status_ok(slot, seq).to_vec()
-        }
+        Some(PC_TO_RDR_XFR_BLOCK) => rdr_to_pc_data_block_apdu_sw(slot, seq, APDU_SW_FILE_NOT_FOUND).to_vec(),
+        Some(PC_TO_RDR_ICC_POWER_OFF) | Some(PC_TO_RDR_ABORT) => rdr_to_pc_slot_status_ok(slot, seq).to_vec(),
         _ => rdr_to_pc_slot_status_cmd_not_supported(slot, seq).to_vec(),
     }
 }

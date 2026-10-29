@@ -1,3 +1,6 @@
+// Identity `BorrowMut` only — `device` / `class` / `serial_port` are plain fields, not
+// `RefCell`s. `.borrow_mut()` here is `&mut T` via the blanket `BorrowMut<T> for T`, so
+// main-thread `UsbDevice::state(&self)` cannot RefCell-panic against IRQ `poll(&mut)`.
 use std::borrow::BorrowMut;
 use std::cell::RefCell;
 use std::collections::VecDeque;
@@ -238,9 +241,9 @@ impl<'a> Bao1xUsb<'a> {
         self.irq_csr.wo(utra::irqarray1::EV_EDGE_TRIGGERED, 0);
         self.irq_csr.wo(utra::irqarray1::EV_POLARITY, 0);
 
-        self.wrapper.core().init(None);
-        self.wrapper.core().start();
-        self.wrapper.core().update_current_speed();
+        self.wrapper.core("init").expect("init").init(None);
+        self.wrapper.core("init").expect("init").start();
+        self.wrapper.core("init").expect("init").update_current_speed();
 
         // irq must me enabled without dependency on the hw lock
         self.irq_csr.wo(utra::irqarray1::EV_PENDING, 0xFFFF_FFFF);
@@ -259,10 +262,10 @@ impl<'a> Bao1xUsb<'a> {
         // disable all interrupts so we can safely go through initialization routines
         self.irq_csr.wo(utra::irqarray1::EV_ENABLE, 0);
 
-        self.wrapper.core().reset();
-        self.wrapper.core().init(None);
-        self.wrapper.core().start();
-        self.wrapper.core().update_current_speed();
+        self.wrapper.core("unplug").expect("unplug").reset();
+        self.wrapper.core("unplug").expect("unplug").init(None);
+        self.wrapper.core("unplug").expect("unplug").start();
+        self.wrapper.core("unplug").expect("unplug").update_current_speed();
 
         // reset all shared data structures
         self.device.force_reset().ok();
@@ -358,32 +361,31 @@ pub enum UsbIrqReq {
 pub const CORIGINE_IRQ_MASK: u32 = 0x1;
 pub const SW_IRQ_MASK: u32 = 0x2;
 
-/// Drop guard: increments `composite_handler` exit counter on every return path
-/// (including the early `return` after `try_lock` failure). Panic unwind would
-/// also fire if unwinding is enabled; with abort-on-panic, a hang still shows as
-/// entries≫exits because `drop` never runs. Also snapshots raw `EV_PENDING` /
-/// `EV_ENABLE` into the flight ring before the exit marker.
-#[cfg(feature = "irq-pending-trace")]
+/// Drop guard: clear `USB_IN_IRQ` on every return path; with `irq-pending-trace`
+/// also snapshots EV regs and bumps the exit counter.
 struct CompositeHandlerExitGuard {
     irq_csr: AtomicCsr<u32>,
 }
-#[cfg(feature = "irq-pending-trace")]
 impl Drop for CompositeHandlerExitGuard {
     fn drop(&mut self) {
-        let pending = self.irq_csr.r(utra::irqarray1::EV_PENDING);
-        let enable = self.irq_csr.r(utra::irqarray1::EV_ENABLE);
-        bao1x_hal::usb::driver::usb_flight_record_ev_regs(pending, enable);
-        bao1x_hal::usb::driver::composite_handler_trace_note_exit();
+        bao1x_hal::usb::driver::usb_in_irq_exit();
+        #[cfg(feature = "irq-pending-trace")]
+        {
+            let pending = self.irq_csr.r(utra::irqarray1::EV_PENDING);
+            let enable = self.irq_csr.r(utra::irqarray1::EV_ENABLE);
+            bao1x_hal::usb::driver::usb_flight_record_ev_regs(pending, enable);
+            bao1x_hal::usb::driver::composite_handler_trace_note_exit();
+        }
     }
 }
 
 pub(crate) fn composite_handler(_irq_no: usize, arg: *mut usize) {
     #[cfg(feature = "irq-pending-trace")]
     bao1x_hal::usb::driver::composite_handler_trace_note_entry();
+    bao1x_hal::usb::driver::usb_in_irq_enter();
 
     let usb = unsafe { &mut *(arg as *mut Bao1xUsb) };
 
-    #[cfg(feature = "irq-pending-trace")]
     let _exit_guard = CompositeHandlerExitGuard { irq_csr: usb.irq_csr.clone() };
 
     // immediately clear the interrupt and re-enable it so we can catch an interrupt
@@ -401,6 +403,37 @@ pub(crate) fn composite_handler(_irq_no: usize, arg: *mut usize) {
     usb.irq_csr.wo(utra::irqarray1::EV_PENDING, 0xffff_ffff);
     // re-enable interrupts
     usb.irq_csr.wo(utra::irqarray1::EV_ENABLE, CORIGINE_IRQ_MASK | SW_IRQ_MASK);
+
+    // Soft-IRQ TX first. CORIGINE try_lock FAIL used to `return` before this block,
+    // so CcidTx never ran and main spun forever on irq_serviced (heartbeats stopped).
+    if (pending & SW_IRQ_MASK) != 0 {
+        let composite = usb.class.borrow_mut();
+        match usb.irq_req.take() {
+            Some(UsbIrqReq::FidoTx) => {
+                let u2f = composite.device::<RawFido<'_, _>, _>();
+                while let Some(u2f_msg) = usb.fido_tx_queue.borrow_mut().pop_front() {
+                    u2f.write_report(&u2f_msg).ok();
+                }
+                usb.irq_serviced.store(true, Ordering::SeqCst);
+            }
+            Some(UsbIrqReq::KbdTx) => {
+                let keyboard = composite.device::<NKROBootKeyboard<'_, _>, _>();
+                usb.kbd_tx_queue.borrow_mut().make_contiguous();
+                let kbd_events = usb.kbd_tx_queue.borrow().as_slices().0.to_vec();
+                keyboard.write_report(kbd_events).ok();
+                usb.kbd_tx_queue.borrow_mut().clear();
+                keyboard.tick().ok();
+            }
+            #[cfg(feature = "ccid-openpgp")]
+            Some(UsbIrqReq::CcidTx) => {
+                // Bulk IN via poll_bulk_in (same role as FidoTx write_report).
+                usb.ccid.poll();
+                // Always unblock main (same contract as FidoTx), even if poll early-returned.
+                usb.irq_serviced.store(true, Ordering::SeqCst);
+            }
+            None => (),
+        }
+    }
 
     if (pending & CORIGINE_IRQ_MASK) != 0 {
         let status = usb.csr.r(USBSTS);
@@ -429,10 +462,10 @@ pub(crate) fn composite_handler(_irq_no: usize, arg: *mut usize) {
                         _ => {
                             #[cfg(feature = "irq-pending-trace")]
                             bao1x_hal::usb::driver::composite_handler_trace_note_lock_contended();
-                            // No spin/retry — single try_lock fail returns immediately.
-                            crate::println!("double lock - this case is actually broken, stack will crash");
+                            // Skip CORIGINE work this pass — do not `return` (SW_IRQ already
+                            // handled above). Returning here was the CcidTx soft-IRQ wedge.
                             usb.double_lock.store(true, Ordering::SeqCst);
-                            return;
+                            break;
                         }
                     };
                     let mut event = {
@@ -520,70 +553,62 @@ pub(crate) fn composite_handler(_irq_no: usize, arg: *mut usize) {
                     }
                 }
                 {
-                    // scoping on the hardware lock to manipulate pointer states
-                    // NOTE: this is a *blocking* `core()` lock (not try_lock). If main
-                    // holds the mutex, the IRQ path can hang here — entry/exit divergence
-                    // is the signal; locking behavior is intentionally unchanged this pass.
-                    let mut hw_lock = usb.wrapper.core();
-                    if hw_lock.udc_event.evt_dq_pt.load(Ordering::SeqCst)
-                        == hw_lock.udc_event.evt_seg0_last_trb.load(Ordering::SeqCst)
-                    {
-                        hw_lock.udc_event.ccs = !hw_lock.udc_event.ccs;
-                        // does this...go to null to end the transfer??
-                        hw_lock.udc_event.evt_dq_pt = AtomicPtr::new(
-                            hw_lock.udc_event.event_ring.vaddr.load(Ordering::SeqCst) as *mut EventTrbS,
-                        );
-                    } else {
-                        hw_lock.udc_event.evt_dq_pt = AtomicPtr::new(unsafe {
-                            hw_lock.udc_event.evt_dq_pt.load(Ordering::SeqCst).add(1)
-                        });
+                    // try_lock only — never blocking `core()` in IRQ. Main-context
+                    // `UsbBus::write` / `force_prime_bulk_out` mask IRQs then take `hw`;
+                    // a blocking lock here deadlocks when that mutex is held.
+                    match usb.wrapper.hw.try_lock() {
+                        Ok(mut hw_lock) => {
+                            if hw_lock.udc_event.evt_dq_pt.load(Ordering::SeqCst)
+                                == hw_lock.udc_event.evt_seg0_last_trb.load(Ordering::SeqCst)
+                            {
+                                hw_lock.udc_event.ccs = !hw_lock.udc_event.ccs;
+                                // does this...go to null to end the transfer??
+                                hw_lock.udc_event.evt_dq_pt =
+                                    AtomicPtr::new(hw_lock.udc_event.event_ring.vaddr.load(Ordering::SeqCst)
+                                        as *mut EventTrbS);
+                            } else {
+                                hw_lock.udc_event.evt_dq_pt = AtomicPtr::new(unsafe {
+                                    hw_lock.udc_event.evt_dq_pt.load(Ordering::SeqCst).add(1)
+                                });
+                            }
+                        }
+                        Err(_) => {
+                            #[cfg(feature = "irq-pending-trace")]
+                            {
+                                bao1x_hal::usb::driver::composite_handler_trace_note_lock_contended();
+                                crate::println!("evt_dq advance try_lock FAIL");
+                            }
+                            // Do not re-enter the event loop with an unadvanced dq_pt
+                            // (would re-handle the same TRB). Fall through to ERDPLO EHB
+                            // so the level-triggered CORIGINE line can re-fire once the
+                            // main-context lock holder releases.
+                            break;
+                        }
                     }
                 }
             }
-            // update dequeue pointer
+            // update dequeue pointer — EHB even on try_lock miss so hardware re-asserts
+            // if the event ring still has work (irqarray1 is level-triggered; see
+            // `CorigineUsb::start` — EV_EDGE_TRIGGERED left unset).
             usb.csr.wo(ERDPHI, 0);
-            usb.csr.wo(
-                ERDPLO,
-                (usb.wrapper.core().udc_event.evt_dq_pt.load(Ordering::SeqCst) as u32 & 0xFFFF_FFF0)
-                    | CRG_UDC_ERDPLO_EHB,
-            );
+            let erdp_lo = match usb.wrapper.hw.try_lock() {
+                Ok(hw) => {
+                    (hw.udc_event.evt_dq_pt.load(Ordering::SeqCst) as u32 & 0xFFFF_FFF0) | CRG_UDC_ERDPLO_EHB
+                }
+                Err(_) => {
+                    #[cfg(feature = "irq-pending-trace")]
+                    {
+                        bao1x_hal::usb::driver::composite_handler_trace_note_lock_contended();
+                        crate::println!("ERDPLO try_lock FAIL");
+                    }
+                    CRG_UDC_ERDPLO_EHB
+                }
+            };
+            usb.csr.wo(ERDPLO, erdp_lo);
             compiler_fence(Ordering::SeqCst);
         }
         if usb.csr.rf(IMAN_IE) != 0 {
             usb.csr.wo(IMAN, usb.csr.ms(IMAN_IE, 1) | usb.csr.ms(IMAN_IP, 1));
-        }
-    }
-    if (pending & SW_IRQ_MASK) != 0 {
-        let composite = usb.class.borrow_mut();
-        match usb.irq_req.take() {
-            Some(UsbIrqReq::FidoTx) => {
-                let u2f = composite.device::<RawFido<'_, _>, _>();
-                // you know, I'm not 100% sure we *can* write multiple reports without taking
-                // another interrupt. But, in practice, we /should/ only ever get one event
-                // and the VecDequeue structure lays the ground work to extend this to something
-                // more flexible if we decide we need to handle multiple Tx queued events in a single
-                // IRQ trigger.
-                while let Some(u2f_msg) = usb.fido_tx_queue.borrow_mut().pop_front() {
-                    u2f.write_report(&u2f_msg).ok();
-                }
-                usb.irq_serviced.store(true, Ordering::SeqCst);
-            }
-            Some(UsbIrqReq::KbdTx) => {
-                let keyboard = composite.device::<NKROBootKeyboard<'_, _>, _>();
-                usb.kbd_tx_queue.borrow_mut().make_contiguous();
-                let kbd_events = usb.kbd_tx_queue.borrow().as_slices().0.to_vec();
-                keyboard.write_report(kbd_events).ok();
-                usb.kbd_tx_queue.borrow_mut().clear();
-                keyboard.tick().ok();
-            }
-            #[cfg(feature = "ccid-openpgp")]
-            Some(UsbIrqReq::CcidTx) => {
-                // Main-context CcidTx only queues bytes; bulk IN is written from IRQ
-                // via UsbClass::poll → poll_bulk_in (same role as FidoTx write_report).
-                // irq_serviced is set inside poll_bulk_in after bulk_in.write() is attempted.
-                usb.ccid.poll();
-            }
-            None => (),
         }
     }
 }
