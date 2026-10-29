@@ -69,10 +69,21 @@ pub fn get_do_data(tag: u16, fixture: &CardFixture) -> Option<Vec<u8>> {
         0x007A => Some(build_do_7a(fixture)),
         0x0093 => Some(signature_counter_bytes(fixture)),
         0x00C0 => Some(fixture.extended_capabilities.to_vec()),
+        // Algorithm attributes: SIG / DEC / AUT.
+        0x00C1 => Some(fixture.algo_attr_sig.to_vec()),
+        0x00C2 => Some(fixture.algo_attr_dec.to_vec()),
+        0x00C3 => Some(fixture.algo_attr_aut.to_vec()),
         0x00C4 => Some(fixture.pw_status.to_vec()),
-        0x00C5 | 0x00CD => None,
-        0x00C1 | 0x00C2 | 0x00C3 => None,
-        0x00D6 => Some(vec![0x00, 0x00, 0x00]),
+        // Fingerprints: 3 × 20 bytes; empty card = all zeros.
+        0x00C5 => Some(vec![0u8; 60]),
+        // CA fingerprints: 3 × 20 bytes; empty card = all zeros.
+        0x00C6 => Some(vec![0u8; 60]),
+        // Generation dates: 3 × 4-byte big-endian timestamps; empty = zeros.
+        0x00CD => Some(vec![0u8; 12]),
+        // Key Information: one status byte per key slot (00 = not present).
+        0x00D3 => Some(vec![0x00, 0x00, 0x00]),
+        // User Interaction Flags (PSO:CDS / DEC / AUT); empty card = disabled.
+        0x00D6 | 0x00D7 | 0x00D8 => Some(vec![0x00, 0x00, 0x00]),
         0x007F74 => Some(vec![0x00]),
         0x0101 | 0x0102 | 0x0103 | 0x0104 => Some(Vec::new()),
         0x7F21 => None,
@@ -83,11 +94,39 @@ pub fn get_do_data(tag: u16, fixture: &CardFixture) -> Option<Vec<u8>> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::openpgp::fixtures::FIXTURE_V1_TEST;
+    use crate::openpgp::fixtures::{ALGO_ATTR_RSA2048, FIXTURE_V1_TEST, HISTORICAL_BYTES_V1};
 
     #[test]
     fn do_6e_contains_aid() {
         let data = get_do_data(0x006E, &FIXTURE_V1_TEST).unwrap();
         assert!(data.windows(5).any(|w| w == [0xD2, 0x76, 0x00, 0x01, 0x24]));
+    }
+
+    #[test]
+    fn do_5f52_is_historical_not_atr() {
+        let data = get_do_data(0x005F52, &FIXTURE_V1_TEST).unwrap();
+        assert_eq!(data, HISTORICAL_BYTES_V1);
+        assert_eq!(data[0], 0x00, "category indicator");
+        assert_ne!(data.len(), 21, "must not be full ATR");
+    }
+
+    #[test]
+    fn do_c1_c2_c3_rsa2048() {
+        for tag in [0x00C1u16, 0x00C2, 0x00C3] {
+            assert_eq!(get_do_data(tag, &FIXTURE_V1_TEST).unwrap(), ALGO_ATTR_RSA2048);
+        }
+    }
+
+    #[test]
+    fn do_c5_c6_empty_fingerprints() {
+        assert_eq!(get_do_data(0x00C5, &FIXTURE_V1_TEST).unwrap().len(), 60);
+        assert!(get_do_data(0x00C5, &FIXTURE_V1_TEST).unwrap().iter().all(|&b| b == 0));
+        assert_eq!(get_do_data(0x00C6, &FIXTURE_V1_TEST).unwrap().len(), 60);
+    }
+
+    #[test]
+    fn do_cd_d3_empty_card() {
+        assert_eq!(get_do_data(0x00CD, &FIXTURE_V1_TEST).unwrap(), vec![0u8; 12]);
+        assert_eq!(get_do_data(0x00D3, &FIXTURE_V1_TEST).unwrap(), vec![0u8; 3]);
     }
 }
