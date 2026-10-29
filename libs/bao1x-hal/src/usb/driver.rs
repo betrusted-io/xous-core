@@ -1,12 +1,14 @@
 use core::convert::TryFrom;
 use core::mem::size_of;
+#[cfg(feature = "std")]
+use core::ops::{Deref, DerefMut};
 #[cfg(feature = "irq-pending-trace")]
 use core::sync::atomic::AtomicU32;
 #[cfg(feature = "std")]
 use core::sync::atomic::{AtomicBool, AtomicUsize};
 use core::sync::atomic::{AtomicPtr, Ordering, compiler_fence};
 #[cfg(feature = "std")]
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, MutexGuard};
 
 use bitfield::bitfield;
 #[cfg(feature = "std")]
@@ -1191,6 +1193,23 @@ impl CorigineUsb {
         }
     }
 
+    /// Drop software app-buffer bookkeeping after a controller soft-reset.
+    ///
+    /// `init()` zeroes IFRAM / rings but does not touch these indices. Leaving a
+    /// prior OUT enqueue outstanding (`enq != deq`) makes the next
+    /// `get_app_buf_ptr` return `None` (ring full for a single 512-byte slot).
+    /// `UsbBus::read` used to `.expect()` that case and panic PID usb-bao1x
+    /// during host re-enumeration of the 8-process openpgp-apdu image.
+    pub fn clear_app_buf_rings(&mut self) {
+        self.app_enq_index = [0; CRG_EP_NUM * 2 + 2];
+        self.app_deq_index = [0; CRG_EP_NUM * 2 + 2];
+        self.app_ptr = [None; CRG_EP_NUM];
+        self.setup = None;
+        for slot in self.readout.iter_mut() {
+            *slot = None;
+        }
+    }
+
     pub fn reset(&mut self) {
         #[cfg(not(feature = "std"))]
         {
@@ -2312,6 +2331,84 @@ impl CorigineUsb {
     pub fn xous_resume2(&self) {}
 }
 
+/// True while `usb-bao1x` `composite_handler` is running.
+#[cfg(feature = "std")]
+static USB_IN_IRQ: AtomicBool = AtomicBool::new(false);
+
+/// Enter `composite_handler` (pair with [`usb_in_irq_exit`]).
+pub fn usb_in_irq_enter() {
+    #[cfg(feature = "std")]
+    USB_IN_IRQ.store(true, Ordering::SeqCst);
+}
+
+/// Leave `composite_handler`.
+pub fn usb_in_irq_exit() {
+    #[cfg(feature = "std")]
+    USB_IN_IRQ.store(false, Ordering::SeqCst);
+}
+
+#[cfg(feature = "std")]
+fn usb_in_irq() -> bool { USB_IN_IRQ.load(Ordering::SeqCst) }
+#[cfg(not(feature = "std"))]
+fn usb_in_irq() -> bool { false }
+
+/// Counts `core()` try_lock misses inside `composite_handler` (never blocks there).
+#[cfg(feature = "std")]
+static CORE_IRQ_LOCK_FAIL: AtomicUsize = AtomicUsize::new(0);
+
+/// RAII lock on `CorigineUsb`: main path masks irqarray until drop; IRQ path is try_lock-only.
+///
+/// Nesting with [`UsbIrqMaskGuard`] / [`CorigineWrapper::disable_interrupts`]:
+/// each layer saves the `EV_ENABLE` it observed and restores that value on drop
+/// (outermost restore brings enables back). Never writes a hard-coded enable mask
+/// on the lock/mask drop path — see [`CorigineWrapper::enable_interrupts_clear_pending`]
+/// for the reset-only unconditional `ENABLE=3` path.
+#[cfg(feature = "std")]
+pub struct CoreGuard<'a> {
+    guard: Option<MutexGuard<'a, CorigineUsb>>,
+    irq_csr: AtomicCsr<u32>,
+    /// `Some(prev)` when this guard masked `EV_ENABLE` (main / non-IRQ acquire).
+    previous_enable: Option<u32>,
+}
+
+#[cfg(feature = "std")]
+impl Drop for CoreGuard<'_> {
+    fn drop(&mut self) {
+        // Unlock first, then restore enables so a pending IRQ can run after release.
+        self.guard.take();
+        if let Some(prev) = self.previous_enable.take() {
+            self.irq_csr.wo(utralib::utra::irqarray1::EV_ENABLE, prev);
+        }
+    }
+}
+
+/// RAII irqarray1 mask: save `EV_ENABLE`, write 0, restore `prev` on drop.
+///
+/// Stack-nests with [`CoreGuard`] and with other [`UsbIrqMaskGuard`]s: each level
+/// restores exactly what its matching disable observed (including nested `0→0`).
+#[cfg(feature = "std")]
+pub struct UsbIrqMaskGuard<'a> {
+    bus: &'a CorigineWrapper,
+    prev: u32,
+}
+
+#[cfg(feature = "std")]
+impl Drop for UsbIrqMaskGuard<'_> {
+    fn drop(&mut self) { self.bus.restore_interrupts(self.prev); }
+}
+
+#[cfg(feature = "std")]
+impl Deref for CoreGuard<'_> {
+    type Target = CorigineUsb;
+
+    fn deref(&self) -> &CorigineUsb { self.guard.as_ref().expect("CoreGuard dropped") }
+}
+
+#[cfg(feature = "std")]
+impl DerefMut for CoreGuard<'_> {
+    fn deref_mut(&mut self) -> &mut CorigineUsb { self.guard.as_mut().expect("CoreGuard dropped") }
+}
+
 #[cfg(feature = "std")]
 pub struct CorigineWrapper {
     pub hw: Arc<Mutex<CorigineUsb>>,
@@ -2518,6 +2615,9 @@ static COMPOSITE_HANDLER_LOCK_ACQUIRED: AtomicU32 = AtomicU32::new(0);
 static COMPOSITE_HANDLER_LOCK_CONTENDED: AtomicU32 = AtomicU32::new(0);
 #[cfg(feature = "irq-pending-trace")]
 static COMPOSITE_HANDLER_SEQ: AtomicU32 = AtomicU32::new(0);
+/// Count of EventTransfer completion codes outside `CompletionCode::try_from`.
+#[cfg(feature = "irq-pending-trace")]
+static UNKNOWN_COMPL_CODE_COUNT: AtomicU32 = AtomicU32::new(0);
 
 /// EP0 vendor control-IN `bRequest` for composite_handler / IRQ lock telemetry.
 ///
@@ -2660,6 +2760,9 @@ pub const USB_FLIGHT_SRC_OUT_ARMED: u8 = 11;
 pub const USB_FLIGHT_SRC_IN_ARMED: u8 = 12;
 /// `force_prime_bulk_out` skipped re-arm because `enq != deq` (no synthetic retire).
 pub const USB_FLIGHT_SRC_FORCE_PRIME_SYNTHETIC_RETIRE: u8 = 13;
+/// Hardware reported a completion code outside `CompletionCode::try_from` (IRQ path).
+/// `value` packing: `raw_code` in bits `[7:0]`, `pei` in bits `[15:8]`.
+pub const USB_FLIGHT_SRC_UNKNOWN_COMPL_CODE: u8 = 14;
 
 /// EP0 vendor control-IN `bRequest` for flight-recorder ring dump.
 ///
@@ -2835,20 +2938,52 @@ impl CorigineWrapper {
     /// Authoritative non-EP0 allocation count shared across wrapper clones.
     pub fn allocated_non_ep0_count(&self) -> usize { self.allocated_non_ep0.load(Ordering::SeqCst) }
 
-    pub fn core(&self) -> std::sync::MutexGuard<'_, CorigineUsb> {
-        /*
-        #[cfg(feature = "verbose-debug")]
-        crate::println!("lock status: {}", if self.hw.try_lock().is_err() { "locked " } else { "unlocked" });
-        */
-        self.hw.lock().unwrap()
+    /// Acquire `hw` with IRQ-safe nesting.
+    ///
+    /// - **Main** (`!usb_in_irq`): save `EV_ENABLE`, write 0, take the mutex; on drop unlock then restore the
+    ///   saved enable (nested guards each restore their own).
+    /// - **IRQ** (`usb_in_irq`): `try_lock` only — never block. On miss, bump [`CORE_IRQ_LOCK_FAIL`] /
+    ///   lock_contended and return `Err(())`.
+    pub fn core(&self, caller: &'static str) -> core::result::Result<CoreGuard<'_>, ()> {
+        if usb_in_irq() {
+            match self.hw.try_lock() {
+                Ok(g) => {
+                    Ok(CoreGuard { guard: Some(g), irq_csr: self.irq_csr.clone(), previous_enable: None })
+                }
+                Err(_) => {
+                    CORE_IRQ_LOCK_FAIL.fetch_add(1, Ordering::Relaxed);
+                    #[cfg(feature = "irq-pending-trace")]
+                    {
+                        composite_handler_trace_note_lock_contended();
+                        crate::println!("CORE-IRQ-BUSY caller={}", caller);
+                    }
+                    Err(())
+                }
+            }
+        } else {
+            // Mask before lock so composite_handler cannot run while we hold `hw`.
+            let previous_enable = self.disable_interrupts();
+            let g = self.hw.lock().unwrap();
+            Ok(CoreGuard {
+                guard: Some(g),
+                irq_csr: self.irq_csr.clone(),
+                previous_enable: Some(previous_enable),
+            })
+        }
+    }
+
+    /// Mask irqarray1 and return an RAII guard that restores the prior `EV_ENABLE` on drop.
+    pub fn mask_interrupts(&self) -> UsbIrqMaskGuard<'_> {
+        UsbIrqMaskGuard { prev: self.disable_interrupts(), bus: self }
     }
 
     /// Mask all IRQARRAY1 enables for a short critical section; return the previous `EV_ENABLE`.
     ///
-    /// Pair with [`Self::restore_interrupts`]. Does **not** touch `EV_PENDING` — an IRQ that
-    /// latches while masked must remain pending and run after restore (same contract as
-    /// `serial_write_irq_safe` in usb-bao1x). irqarray1 is left at default level-triggered
-    /// (EV_EDGE_TRIGGERED not programmed in `start()`), so a pending bit + enable re-asserts.
+    /// Pair with [`Self::restore_interrupts`] (or prefer [`Self::mask_interrupts`] RAII).
+    /// Does **not** touch `EV_PENDING` — an IRQ that latches while masked must remain pending
+    /// and run after restore (same contract as `serial_write_irq_safe` in usb-bao1x).
+    /// irqarray1 is left at default level-triggered (EV_EDGE_TRIGGERED not programmed in
+    /// `start()`), so a pending bit + enable re-asserts.
     ///
     /// With `irq-pending-trace`: if `EV_PENDING` is already nonzero at mask time, increments
     /// `disable_with_pending` (read-only; does not clear).
@@ -2938,7 +3073,18 @@ impl CorigineWrapper {
         self.ep_out_ready[ep].store(false, Ordering::SeqCst);
 
         let len = CRG_UDC_APP_BUF_LEN.min(max_packet_size);
-        let mut hw = self.core();
+        // Mask irqarray1 before taking `hw` — same contract as `UsbBus::write`.
+        // A blocking `core()` here with IRQs live deadlocks when the IRQ path hits
+        // its own blocking `core()` (main holds mutex, IRQ waits; or the reverse).
+        let irq_prev = self.disable_interrupts();
+        let mut hw = match self.hw.try_lock() {
+            Ok(g) => g,
+            Err(_) => {
+                self.restore_interrupts(irq_prev);
+                // Leave ready false so a later read / force can retry.
+                return;
+            }
+        };
         let pei = CorigineUsb::pei(ep as u8, CRG_OUT);
         // Do NOT call retire_app_buf_ptr here. A prior force-prime path retired any
         // outstanding OUT slot on `enq != deq` with no hardware-completion check,
@@ -2958,6 +3104,7 @@ impl CorigineWrapper {
                 usb_flight_record(USB_FLIGHT_SRC_FORCE_PRIME_SYNTHETIC_RETIRE, enq | (deq << 16));
             }
             drop(hw);
+            self.restore_interrupts(irq_prev);
             // Keep ready false so a later genuine read / idle prime can proceed.
             return;
         }
@@ -2966,11 +3113,13 @@ impl CorigineWrapper {
                 udc_pointer_check!(addr, len);
                 hw.bulk_xfer(ep as u8, CRG_OUT, addr, len, CRG_INT_TARGET, 0);
                 drop(hw);
+                self.restore_interrupts(irq_prev);
                 self.ep_out_ready[ep].store(true, Ordering::SeqCst);
             }
             None => {
                 // Leave ready false so a later `read` / force can retry.
                 drop(hw);
+                self.restore_interrupts(irq_prev);
             }
         }
     }
@@ -3098,7 +3247,7 @@ impl UsbBus for CorigineWrapper {
             }
         };
 
-        self.core().max_packet_size[pei] = Some(max_packet_size as usize);
+        self.core("alloc_ep").expect("alloc_ep").max_packet_size[pei] = Some(max_packet_size as usize);
         if allocated_ep != 0 {
             // also record metadata for non-0 EPs
             self.ep_meta[pei - 2] = Some((hw_ep_type, max_packet_size as usize));
@@ -3125,13 +3274,16 @@ impl UsbBus for CorigineWrapper {
         self.address_is_set.store(false, Ordering::SeqCst);
         crate::println!(" ******** reset");
         {
-            let mut hw = self.core();
+            let mut hw = self.core("reset").expect("reset");
             // disable IRQs
             hw.irq_csr.wo(utralib::utra::irqarray1::EV_ENABLE, 0);
             hw.reset();
             hw.init(None); // default to high speed
             hw.start();
             hw.update_current_speed();
+            // Software ring state survives hw.reset()/init(); clear it or the next
+            // bulk OUT arm after re-enumeration can see a full ring and panic.
+            hw.clear_app_buf_rings();
         }
         // reset the ready state
         for ready in self.ep_out_ready.iter() {
@@ -3149,7 +3301,7 @@ impl UsbBus for CorigineWrapper {
         crate::println!("set address {}", addr);
         #[cfg(feature = "verbose-debug")]
         crate::println!(" ******** set address");
-        self.core().set_addr(addr, CRG_INT_TARGET);
+        self.core("set_device_address").expect("set_device_address").set_addr(addr, CRG_INT_TARGET);
         self.address_is_set.store(true, Ordering::SeqCst);
 
         // this core has a quirk that you can't actually enable the endpoints until *after* the address
@@ -3159,17 +3311,30 @@ impl UsbBus for CorigineWrapper {
                 let pei = index + 2;
                 let dir = CorigineUsb::pei_to_dir(pei);
                 crate::println!("enabling pei {}, dir {:?}", pei, dir);
-                self.core().ep_enable(CorigineUsb::pei_to_ep(pei), dir, max_packet_size as u16, hw_ep_type);
+                self.core("set_device_address").expect("set_device_address").ep_enable(
+                    CorigineUsb::pei_to_ep(pei),
+                    dir,
+                    max_packet_size as u16,
+                    hw_ep_type,
+                );
             } else {
                 let pei = index + 2;
                 let dir = CorigineUsb::pei_to_dir(pei);
                 crate::println!("disabling unused pei {} dir {:?}", pei, dir);
-                self.core().ep_disable(CorigineUsb::pei_to_ep(pei), dir);
+                self.core("set_device_address")
+                    .expect("set_device_address")
+                    .ep_disable(CorigineUsb::pei_to_ep(pei), dir);
             }
             crate::println!("done with index {}", index);
         }
-        crate::println!("enabled EPs: {:b}", self.core().csr.r(EPENABLE));
-        crate::println!("running EPs: {:b}", self.core().csr.r(EPRUNNING));
+        crate::println!(
+            "enabled EPs: {:b}",
+            self.core("set_device_address").expect("set_device_address").csr.r(EPENABLE)
+        );
+        crate::println!(
+            "running EPs: {:b}",
+            self.core("set_device_address").expect("set_device_address").csr.r(EPRUNNING)
+        );
 
         // Queue the first receive TRB for each bulk OUT now that enq_pt is valid.
         // Boot1 does the same after enable (bulk_xfer on USB_RECV). UsbBus::read
@@ -3188,7 +3353,7 @@ impl UsbBus for CorigineWrapper {
                 continue;
             }
             let len = CRG_UDC_APP_BUF_LEN.min(max_packet_size);
-            let mut hw = self.core();
+            let mut hw = self.core("set_device_address").expect("set_device_address");
             match hw.get_app_buf_ptr(ep_num, CRG_OUT) {
                 Some(addr) => {
                     udc_pointer_check!(addr, len);
@@ -3230,17 +3395,21 @@ impl UsbBus for CorigineWrapper {
         if ep_addr.index() == 0 {
             #[cfg(feature = "verbose-debug")]
             crate::println!(" ******* EP0 WRITE ({}): {:x?}", buf.len(), &buf[..8.min(buf.len())]);
-            let ep0_buf_addr = self.core().ep0_buf.load(Ordering::SeqCst) as usize;
+            let mut hw = match self.core("write_ep0") {
+                Ok(g) => g,
+                Err(()) => return Err(UsbError::WouldBlock),
+            };
+            let ep0_buf_addr = hw.ep0_buf.load(Ordering::SeqCst) as usize;
             let ep0_buf =
                 unsafe { core::slice::from_raw_parts_mut(ep0_buf_addr as *mut u8, CRG_UDC_EP0_REQBUFSIZE) };
             ep0_buf[..buf.len()].copy_from_slice(buf);
             if buf.len() != 64 {
-                self.core().ep0_send(ep0_buf_addr, buf.len(), 0);
+                hw.ep0_send(ep0_buf_addr, buf.len(), 0);
             } else {
                 // a 64-length packet cannot be the last packet sent, there must be a short packet afterwards.
                 // so, enqueue() the packet (which differs from send() in that it leaves the pointers in a
                 // state expecting a "next" packet).
-                self.core().ep0_enqueue(ep0_buf_addr, buf.len(), 0);
+                hw.ep0_enqueue(ep0_buf_addr, buf.len(), 0);
             }
             Ok(buf.len())
         } else {
@@ -3254,8 +3423,23 @@ impl UsbBus for CorigineWrapper {
                 buf.len(),
                 &buf[..8.min(buf.len())]
             );
+            // Mask irqarray1 then try_lock — never blocking `core()` here.
+            // Blocking lock with a live IRQ path that also takes `hw` deadlocks
+            // (main holds mutex, IRQ waits; heartbeats stop; EP0 times out).
             let irq_prev = self.disable_interrupts();
-            let addr = match self.core().get_app_buf_ptr(ep_addr.index() as u8, CRG_IN) {
+            let mut hw = match self.hw.try_lock() {
+                Ok(g) => g,
+                Err(_) => {
+                    #[cfg(feature = "irq-pending-trace")]
+                    {
+                        composite_handler_trace_note_lock_contended();
+                        irq_trace_note_write_context(ep_addr.index() as u8, true);
+                    }
+                    self.restore_interrupts(irq_prev);
+                    return Err(UsbError::WouldBlock);
+                }
+            };
+            let addr = match hw.get_app_buf_ptr(ep_addr.index() as u8, CRG_IN) {
                 Some(addr) => addr,
                 None => {
                     #[cfg(feature = "verbose-debug")]
@@ -3263,6 +3447,7 @@ impl UsbBus for CorigineWrapper {
 
                     // `disable_interrupts()` was called above, so every return
                     // path after that point must restore the USB interrupts.
+                    drop(hw);
                     #[cfg(feature = "irq-pending-trace")]
                     irq_trace_note_write_context(ep_addr.index() as u8, true);
                     self.restore_interrupts(irq_prev);
@@ -3274,14 +3459,14 @@ impl UsbBus for CorigineWrapper {
             assert!(buf.len() <= CRG_UDC_APP_BUF_LEN, "write buffer size exceeded");
             hw_buf[..buf.len()].copy_from_slice(&buf);
             let pei = CorigineUsb::pei(ep_addr.index() as u8, CRG_IN);
-            let _ = self.core().app_ptr[pei - 2].take(); // remove the app ptr if it's queued - for now we do nothing with it
+            let _ = hw.app_ptr[pei - 2].take(); // remove the app ptr if it's queued - for now we do nothing with it
             if let Some((hw_ep_type, _max_packet_size)) = self.ep_meta[pei - 2] {
                 match hw_ep_type {
                     EpType::BulkInbound => {
-                        self.core().bulk_xfer(ep_addr.index() as u8, CRG_IN, addr, buf.len(), 0, 0);
+                        hw.bulk_xfer(ep_addr.index() as u8, CRG_IN, addr, buf.len(), 0, 0);
                     }
                     EpType::IntrInbound => {
-                        self.core().ep_xfer(
+                        hw.ep_xfer(
                             ep_addr.index() as u8,
                             CRG_IN,
                             addr,
@@ -3293,12 +3478,17 @@ impl UsbBus for CorigineWrapper {
                         );
                     }
                     _ => {
+                        drop(hw);
+                        self.restore_interrupts(irq_prev);
                         todo!("EP type not handled yet {:?}", hw_ep_type);
                     }
                 }
             } else {
+                drop(hw);
+                self.restore_interrupts(irq_prev);
                 panic!("attempt to access EP{} with no meta[{}] mapping", ep_addr.index(), pei - 2)
             }
+            drop(hw);
             #[cfg(feature = "verbose-debug")]
             crate::println!("ep{} initiated {}", ep_addr.index(), buf.len());
             #[cfg(feature = "irq-pending-trace")]
@@ -3331,7 +3521,11 @@ impl UsbBus for CorigineWrapper {
             #[cfg(feature = "verbose-debug")]
             crate::println!(" ******** EP0 READ");
             // setup packet
-            if let Some(setup) = self.core().setup.take() {
+            let mut hw0 = match self.core("read_ep0") {
+                Ok(g) => g,
+                Err(()) => return Err(UsbError::WouldBlock),
+            };
+            if let Some(setup) = hw0.setup.take() {
                 buf[..setup.len()].copy_from_slice(&setup);
                 #[cfg(feature = "verbose-debug")]
                 crate::println!("   {:x?}", &buf[..setup.len()]);
@@ -3342,7 +3536,11 @@ impl UsbBus for CorigineWrapper {
             }
         } else {
             if self.address_is_set.load(Ordering::SeqCst) {
-                let pending_ep = self.core().pending_ep(ep_addr.index(), CRG_OUT);
+                let mut hw = match self.core("read") {
+                    Ok(g) => g,
+                    Err(()) => return Err(UsbError::WouldBlock),
+                };
+                let pending_ep = hw.pending_ep(ep_addr.index(), CRG_OUT);
                 #[cfg(feature = "verbose-debug")]
                 crate::println!(" ******** READ {} pending {:?}", ep_addr.index(), pending_ep);
                 #[cfg(feature = "verbose-debug")]
@@ -3357,15 +3555,14 @@ impl UsbBus for CorigineWrapper {
                 }
                 let ret = if let Some(pending_ep) = pending_ep {
                     if pending_ep as usize == ep_addr.index() {
-                        let app_ptr =
-                            self.core().app_ptr[pei_offset].take().expect("inconistent app_ptr state");
+                        let app_ptr = hw.app_ptr[pei_offset].take().expect("inconistent app_ptr state");
                         let ptr = app_ptr.addr;
                         let len = app_ptr.len;
                         udc_pointer_check!(ptr, len);
                         self.ep_out_ready[ep_addr.index()].store(false, Ordering::SeqCst);
                         let app_buf = unsafe { core::slice::from_raw_parts(ptr as *const u8, len) };
                         // DMA for this OUT is finished; reclaim the PEI ring slot before re-arm.
-                        self.core().retire_app_buf_ptr(ep_addr.index() as u8, CRG_OUT);
+                        hw.retire_app_buf_ptr(ep_addr.index() as u8, CRG_OUT);
                         #[cfg(feature = "irq-pending-trace")]
                         bulk_trb_trace_bump(&BULK_TRB_OUT_CONSUMED, Some(USB_FLIGHT_SRC_OUT_CONSUMED));
                         if buf.len() < app_buf.len() {
@@ -3393,68 +3590,86 @@ impl UsbBus for CorigineWrapper {
 
                 if self.ep_out_ready[ep_addr.index()].swap(true, Ordering::SeqCst) == false {
                     // crate::println!("get address");
-                    // release lock on core after getting the address
-                    let addr = {
-                        self.core()
-                            .get_app_buf_ptr(ep_addr.index() as u8, CRG_OUT)
-                            .expect("should always be a buffer available at set_address")
+                    // Match set_device_address / force_prime_bulk_out: a full app ring
+                    // (enq != deq after a host reset that never retired the prior OUT)
+                    // must not panic. Roll ready back so a later prime can retry.
+                    drop(hw);
+                    let mut hw = match self.core("read") {
+                        Ok(g) => g,
+                        Err(()) => {
+                            self.ep_out_ready[ep_addr.index()].store(false, Ordering::SeqCst);
+                            return Err(UsbError::WouldBlock);
+                        }
                     };
-                    // crate::println!("address {:x}", addr);
-                    if let Some((hw_ep_type, max_packet_size)) = self.ep_meta[pei_offset] {
-                        match hw_ep_type {
-                            // NOTE: we kind of need to know how big of a transfer we expect for this
-                            // to work, otherwise, the transfer may not complete. But we won't know
-                            // this until "read" is called by the USB stack implementation, so...how to
-                            // break this dependency??
-                            //
-                            // For now the code just sets the size to the whole buffer size but this should
-                            // cause the stack to not respond to packets that fail to meet the total expected
-                            // length.
-                            EpType::BulkOutbound => {
-                                #[cfg(feature = "verbose-debug")]
-                                crate::println!(
-                                    "::::::: setting up bulk outbound ep{} @ {:x} :::::::",
-                                    ep_addr.index(),
-                                    addr
-                                );
-                                let len = CRG_UDC_APP_BUF_LEN.min(buf.len()).min(max_packet_size);
-                                udc_pointer_check!(addr, len);
-                                self.core().bulk_xfer(
-                                    ep_addr.index() as u8,
-                                    CRG_OUT,
-                                    addr,
-                                    len,
-                                    CRG_INT_TARGET,
-                                    0, // CRG_XFER_SET_CHAIN,
-                                );
-                            }
-                            EpType::IntrOutbound => {
-                                #[cfg(feature = "verbose-debug")]
-                                crate::println!(
-                                    "::::::: setting up interrupt outbound ep{} @ {:x} :::::::",
-                                    ep_addr.index(),
-                                    addr
-                                );
-                                // crate::println!("ep_type {:?}", hw_ep_type);
-                                let len = CRG_UDC_APP_BUF_LEN.min(buf.len()).min(max_packet_size);
-                                udc_pointer_check!(addr, len);
-                                self.core().ep_xfer(
-                                    ep_addr.index() as u8,
-                                    CRG_OUT,
-                                    addr,
-                                    len,
-                                    CRG_INT_TARGET,
-                                    false,
-                                    false,
-                                    false,
-                                );
-                            }
-                            _ => {
-                                todo!("EP type not handled yet {:?}", hw_ep_type);
+                    match hw.get_app_buf_ptr(ep_addr.index() as u8, CRG_OUT) {
+                        Some(addr) => {
+                            // crate::println!("address {:x}", addr);
+                            if let Some((hw_ep_type, max_packet_size)) = self.ep_meta[pei_offset] {
+                                match hw_ep_type {
+                                    // NOTE: we kind of need to know how big of a transfer we expect for this
+                                    // to work, otherwise, the transfer may not complete. But we won't know
+                                    // this until "read" is called by the USB stack implementation, so...how
+                                    // to break this dependency??
+                                    //
+                                    // For now the code just sets the size to the whole buffer size but this
+                                    // should cause the stack to not
+                                    // respond to packets that fail to meet the total expected
+                                    // length.
+                                    EpType::BulkOutbound => {
+                                        #[cfg(feature = "verbose-debug")]
+                                        crate::println!(
+                                            "::::::: setting up bulk outbound ep{} @ {:x} :::::::",
+                                            ep_addr.index(),
+                                            addr
+                                        );
+                                        let len = CRG_UDC_APP_BUF_LEN.min(buf.len()).min(max_packet_size);
+                                        udc_pointer_check!(addr, len);
+                                        hw.bulk_xfer(
+                                            ep_addr.index() as u8,
+                                            CRG_OUT,
+                                            addr,
+                                            len,
+                                            CRG_INT_TARGET,
+                                            0, // CRG_XFER_SET_CHAIN,
+                                        );
+                                    }
+                                    EpType::IntrOutbound => {
+                                        #[cfg(feature = "verbose-debug")]
+                                        crate::println!(
+                                            "::::::: setting up interrupt outbound ep{} @ {:x} :::::::",
+                                            ep_addr.index(),
+                                            addr
+                                        );
+                                        // crate::println!("ep_type {:?}", hw_ep_type);
+                                        let len = CRG_UDC_APP_BUF_LEN.min(buf.len()).min(max_packet_size);
+                                        udc_pointer_check!(addr, len);
+                                        hw.ep_xfer(
+                                            ep_addr.index() as u8,
+                                            CRG_OUT,
+                                            addr,
+                                            len,
+                                            CRG_INT_TARGET,
+                                            false,
+                                            false,
+                                            false,
+                                        );
+                                    }
+                                    _ => {
+                                        todo!("EP type not handled yet {:?}", hw_ep_type);
+                                    }
+                                }
+                            } else {
+                                crate::println!("EP{} has no metadata!", ep_addr.index());
                             }
                         }
-                    } else {
-                        crate::println!("EP{} has no metadata!", ep_addr.index());
+                        None => {
+                            drop(hw);
+                            self.ep_out_ready[ep_addr.index()].store(false, Ordering::SeqCst);
+                            crate::println!(
+                                "read ep{}: no app buf to re-arm (ring full); ready cleared",
+                                ep_addr.index()
+                            );
+                        }
                     }
                 }
                 ret
@@ -3475,7 +3690,9 @@ impl UsbBus for CorigineWrapper {
             stalled,
             if ep_addr.is_in() { "OUT" } else { "IN" }
         );
-        self.core().handle_set_stalled(ep_addr.index() as u8, ep_addr.is_in(), stalled);
+        if let Ok(hw) = self.core("set_stalled") {
+            hw.handle_set_stalled(ep_addr.index() as u8, ep_addr.is_in(), stalled);
+        }
         */
     }
 
@@ -3483,7 +3700,10 @@ impl UsbBus for CorigineWrapper {
     fn is_stalled(&self, ep_addr: EndpointAddress) -> bool {
         crate::println!(" ******* is_stalled");
         let pei = CorigineUsb::pei(ep_addr.index() as u8, ep_addr.is_in());
-        self.core().udc_ep[pei].ep_state == EpState::Halted
+        match self.core("is_stalled") {
+            Ok(hw) => hw.udc_ep[pei].ep_state == EpState::Halted,
+            Err(()) => false,
+        }
     }
 
     /// Instruct EP0 to configure itself with an OUT descriptor, so that it may receive a STATUS
@@ -3508,7 +3728,11 @@ impl UsbBus for CorigineWrapper {
     /// Gets information about events and incoming data. Usually called in a loop or from an
     /// interrupt handler. See the [`PollResult`] struct for more information.
     fn poll(&self) -> PollResult {
-        match self.core().event_inner.take() {
+        let mut hw = match self.core("poll") {
+            Ok(g) => g,
+            Err(()) => return PollResult::None,
+        };
+        match hw.event_inner.take() {
             Some(e) => match e {
                 CrgEvent::None => PollResult::None,
                 CrgEvent::Connect => PollResult::Reset,
@@ -3542,13 +3766,14 @@ impl UsbBus for CorigineWrapper {
         }
         crate::println!(" ******** reset");
         {
-            let mut hw = self.core();
+            let mut hw = self.core("force_reset").expect("force_reset");
             // disable IRQs
             hw.irq_csr.wo(utralib::utra::irqarray1::EV_ENABLE, 0);
             hw.reset();
             hw.init(None);
             hw.start();
             hw.update_current_speed();
+            hw.clear_app_buf_rings();
         }
         // reset the ready state
         for ready in self.ep_out_ready.iter() {
@@ -3592,8 +3817,23 @@ pub fn handle_event_inner(this: &mut CorigineUsb, event_trb: &mut EventTrbS) -> 
             this.csr.rmwf(EVENTCONFIG_SETUP_ENABLE, 1);
         }
         TrbType::EventTransfer => {
-            let comp_code =
-                CompletionCode::try_from(event_trb.dw2.compl_code()).expect("Invalid completion code");
+            // Unknown hardware codes must not panic in IRQ context — the EP0/pei
+            // else arms below already treat non-Success/ShortPacket/etc. as no-ops.
+            let raw_compl = event_trb.dw2.compl_code();
+            let comp_code = match CompletionCode::try_from(raw_compl) {
+                Ok(code) => code,
+                Err(_) => {
+                    #[cfg(feature = "irq-pending-trace")]
+                    {
+                        UNKNOWN_COMPL_CODE_COUNT.fetch_add(1, Ordering::Relaxed);
+                        usb_flight_record(
+                            USB_FLIGHT_SRC_UNKNOWN_COMPL_CODE,
+                            (raw_compl & 0xff) | ((pei as u32) << 8),
+                        );
+                    }
+                    CompletionCode::Invalid
+                }
+            };
             let residual_length = event_trb.dw2.trb_tran_len() as u16;
 
             // update the dequeue pointer
