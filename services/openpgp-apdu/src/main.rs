@@ -73,9 +73,38 @@ fn ccid_main() -> ! {
         let frame = match link.receive_rx() {
             Ok(f) => f,
             Err(xous::Error::ProcessTerminated) => {
-                log::warn!("CcidRxDeferred hangup (USB reset); continuing");
+                log::info!("CcidRxDeferred hangup (USB reset); re-park when Configured");
                 card.applet_selected = false;
                 card.clear_chunk_state();
+                // Brief settle for usb-bao1x reset bookkeeping.
+                if let Some(ref tt) = tt {
+                    tt.sleep_ms(50).ok();
+                } else {
+                    xous::yield_slice();
+                }
+                // pcsc bus resets often keep LinkStatus at Configured — re-park
+                // immediately then. Only spin when status actually dropped.
+                let mut waits: u32 = 0;
+                loop {
+                    let st = link.link_status();
+                    if st != last_link {
+                        log::info!("USB link status: {st:?}");
+                        last_link = st;
+                    }
+                    if st == UsbDeviceState::Configured {
+                        break;
+                    }
+                    waits = waits.saturating_add(1);
+                    if waits > 250 {
+                        log::warn!("Configured wait timeout after hangup (st={st:?}); re-parking");
+                        break;
+                    }
+                    if let Some(ref tt) = tt {
+                        tt.sleep_ms(20).ok();
+                    } else {
+                        xous::yield_slice();
+                    }
+                }
                 continue;
             }
             Err(e) => {
@@ -90,20 +119,15 @@ fn ccid_main() -> ! {
             }
         };
 
-        log::debug!(
-            "CcidRxDeferred frame opcode=0x{:02x} len={}",
-            frame.first().copied().unwrap_or(0),
-            frame.len()
-        );
-
         let tx_frame = match parse_pc_to_rdr(&frame) {
-            Ok(PcToRdr::IccPowerOn { slot, seq, .. }) | Ok(PcToRdr::GetSlotStatus { slot, seq }) => {
+            Ok(PcToRdr::IccPowerOn { slot, seq, .. })
+            | Ok(PcToRdr::GetSlotStatus { slot, seq })
+            | Ok(PcToRdr::IccPowerOff { slot, seq }) => {
+                // Answered inline in usb-bao1x; skip CcidTx.
                 log::debug!("inline CCID slot={slot} seq={seq}: usb-bao1x answers; skip CcidTx");
                 continue;
             }
-            Ok(PcToRdr::IccPowerOff { slot, seq }) | Ok(PcToRdr::Abort { slot, seq }) => {
-                rdr_to_pc_slot_status(slot, seq, CcidStatus::ok_active())
-            }
+            Ok(PcToRdr::Abort { slot, seq }) => rdr_to_pc_slot_status(slot, seq, CcidStatus::ok_active()),
             Ok(PcToRdr::XfrBlock { slot, seq, apdu }) => {
                 log::debug!("XfrBlock slot={slot} seq={seq} apdu_len={}", apdu.len());
                 let resp = match CommandApdu::parse(&apdu) {
@@ -113,7 +137,7 @@ fn ccid_main() -> ! {
                     }
                 };
                 let apdu_bytes = resp.to_bytes();
-                log::debug!("APDU response len={} sw={:02x}{:02x}", apdu_bytes.len(), resp.sw1, resp.sw2);
+                log::info!("APDU response len={} sw={:02x}{:02x}", apdu_bytes.len(), resp.sw1, resp.sw2);
                 rdr_to_pc_data_block(slot, seq, CcidStatus::ok_active(), &apdu_bytes)
             }
             Err(
