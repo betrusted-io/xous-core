@@ -6,8 +6,8 @@ mod utils;
 use utils::*;
 mod builder;
 use builder::*;
-mod verifier;
 mod dis;
+mod verifier;
 use std::{env, fs, path::Path, path::PathBuf};
 
 use verifier::*;
