@@ -1,7 +1,8 @@
-use crate::boot::setup;
 use digest::Digest;
 use sha2_bao1x::Sha512;
 use utralib::*;
+
+use crate::boot::setup;
 
 /// This function loads all the round constants into the combohasher's local memory.
 pub fn init_hash() {
