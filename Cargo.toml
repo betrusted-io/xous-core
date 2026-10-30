@@ -137,6 +137,7 @@ members = [
   "services/swaptest2",
   "apps-dabao/bio-stream",
   "bao1x-boot/slh-dsa-bao1x",
+  "primordial",
 ]
 resolver = "2"
 

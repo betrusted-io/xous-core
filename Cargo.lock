@@ -2716,6 +2716,7 @@ dependencies = [
  "bao1x-hal",
  "critical-section",
  "digest 0.10.7",
+ "hex 0.4.3",
  "linked_list_allocator",
  "riscv",
  "sha2 0.10.8",
@@ -5201,6 +5202,26 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 1.0.109",
+]
+
+[[package]]
+name = "primordial"
+version = "0.1.0"
+dependencies = [
+ "bao1x-api 0.1.4",
+ "bao1x-hal",
+ "critical-section",
+ "digest 0.10.7",
+ "hex 0.4.3",
+ "hex-literal 1.0.0",
+ "linked_list_allocator",
+ "riscv",
+ "sha2 0.10.8",
+ "sha2-bao1x",
+ "utralib 0.1.27",
+ "xous 0.9.71 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xous-bio-bdma",
+ "xous-riscv",
 ]
 
 [[package]]
