@@ -6,6 +6,7 @@ mod utils;
 use utils::*;
 mod builder;
 use builder::*;
+mod dis;
 mod verifier;
 use std::{env, fs, path::Path, path::PathBuf};
 
@@ -1072,6 +1073,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let third_party_test = builder.thirdparty_test();
 
     builder.build()?;
+
+    // optional convenience: disassemble the primordial ELF if a RISC-V objdump
+    // happens to be installed. Never fails the build; see dis.rs.
+    if let Some("bao1x-primordial") = task.as_deref() {
+        let mut elf = project_root();
+        elf.push("target");
+        elf.push(crate::TARGET_TRIPLE_RISCV32_KERNEL);
+        elf.push("release");
+        elf.push("primordial");
+        let _ = dis::try_disassemble(&elf);
+    }
 
     // the intent of this call is to check that crates we are sourcing from crates.io
     // match the crates in our local source. The usual cause of an inconsistency is
