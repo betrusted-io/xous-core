@@ -39,4 +39,7 @@ board-dabao = ["bao1x-hal/board-dabao"]
 # enable test code for sce-hash
 sce-hash = []
 
-default = ["sce-hash"]
+# enable test code for sce-rsa
+sce-rsa = []
+
+default = []

@@ -7,8 +7,12 @@ mod sim;
 use sim::*;
 pub mod debug;
 pub use debug::*;
+#[cfg(any(feature = "sce-hash", feature = "sce-rsa"))]
+mod boot;
 #[cfg(feature = "sce-hash")]
 mod sce_hash;
+#[cfg(feature = "sce-rsa")]
+mod sce_rsa;
 use utralib::*;
 
 // NOTE: the heap needs initialization before use. In this minimal example, it is declared, but not
@@ -28,6 +32,9 @@ pub unsafe extern "C" fn rust_entry() -> ! {
 
     #[cfg(feature = "sce-hash")]
     sce_hash::sce_hash();
+
+    #[cfg(feature = "sce-rsa")]
+    sce_rsa::sce_rsa();
 
     exit_sim()
 }
