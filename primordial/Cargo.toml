@@ -33,6 +33,11 @@ bao1x = [
     "sha2-bao1x",
 ]
 
+# A compilation gate for code required to get the code to run on a full hardware model
+# but some elements are missing in the sim model and so these should not be included in
+# the generated code because it will hang the simulation otherwise.
+full-hw = []
+
 # placeholder - no actual "board" but this pulls in defaults needed for the build system
 board-dabao = ["bao1x-hal/board-dabao"]
 
