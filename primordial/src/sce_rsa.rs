@@ -35,6 +35,7 @@ const SEG_POB: usize = 0x1400;
 
 // C: PIR_RSAINIT = 0x11, PIR_RSAMM = 0x12, PIR_RSAME = 0x13 (auth.h enum)
 const IR_RSAINIT: u32 = 0x11;
+const IR_RSAMM: u32 = 0x12;
 const IR_RSAME: u32 = 0x13;
 
 // C: PKE_MIMMCR_CONFIG = 0x103 (4 modular multipliers)
@@ -116,26 +117,51 @@ d8754e287963f849e981d57310c9137a1f96833f04abf0c88ee79a9ada61f6988dc819a3e91c5599
     }
 };
 
-fn pke_wait_done(pke: &mut CSR<u32>) {
-    // C: SCE_PKE_DONE(): while (!(FR & 0x01)); then write-1-to-clear.
-    // Bounded for sim bring-up: on timeout dump the raw flags and return.
-    let mut spins: u32 = 0;
-    loop {
-        if pke.rf(pkereg::SFR_FR_MFSM_DONE) != 0 {
-            break;
-        }
-        spins = spins.wrapping_add(1);
-        if spins == 0 {
+const PKE_WAIT_SPIN_WARN: u64 = 1 << 20;
+const PKE_WAIT_SPIN_LIMIT: u64 = 1 << 22;
+
+fn pke_wait_done(pke: &mut CSR<u32>, tag: &str) -> bool {
+    let mut spins: u64 = 0;
+    let mut warned = false;
+    while pke.rf(pkereg::SFR_FR_MFSM_DONE) == 0 {
+        spins += 1;
+        // PKE has no error SFR of its own; PkeCore ram/parity errors pulse
+        // glb_err[3:2] (sce.sv `glb_err = {ramerr, hash_err, pke_err, ...}`).
+        if !warned && spins == PKE_WAIT_SPIN_WARN {
+            warned = true;
+            let glb = CSR::<u32>::new(glbreg::HW_SCE_GLBSFR_BASE as *mut u32);
+            // On silicon this means the core is ~seconds overdue (measured healthy
+            // completion in sim is ~1e4 spins). Print the state once; keep waiting.
             crate::println!(
-                "  pke_wait_done TIMEOUT: FR={:08x} CRFUNC={:08x} BUSY={:08x}",
+                "  [{}] still waiting at {} spins: FR={:08x} CRFUNC={:08x} SRMFSM={:08x} GLBFRERR={:08x}",
+                tag,
+                spins,
                 pke.r(pkereg::SFR_FR),
                 pke.r(pkereg::SFR_CRFUNC),
-                pke.r(pkereg::SFR_SRMFSM)
+                pke.r(pkereg::SFR_SRMFSM),
+                glb.r(glbreg::SFR_FRERR),
             );
-            return;
+        }
+        if spins >= PKE_WAIT_SPIN_LIMIT {
+            let glb = CSR::<u32>::new(glbreg::HW_SCE_GLBSFR_BASE as *mut u32);
+            crate::println!(
+                "  [{}] TIMEOUT after {} spins: FR={:08x} CRFUNC={:08x} SRMFSM={:08x} GLBFRERR={:08x}",
+                tag,
+                spins,
+                pke.r(pkereg::SFR_FR),
+                pke.r(pkereg::SFR_CRFUNC),
+                pke.r(pkereg::SFR_SRMFSM),
+                glb.r(glbreg::SFR_FRERR),
+            );
+            return false;
+        }
+        if spins % 2048 == 0 {
+            crate::println!("  wait spins: {}", spins);
         }
     }
+    crate::println!("  [{}] done after {} spins", tag, spins);
     pke.rmwf(pkereg::SFR_FR_MFSM_DONE, 1);
+    true
 }
 
 /// C: sce_Sysinit_Pke() - clocks on, core reset strobe, reconfigure, RAM zero-fill.
@@ -160,7 +186,15 @@ fn glb_wait_idle(glb: &mut CSR<u32>, tag: &str) {
     crate::println!("  [{}] idle after {} spins", tag, spins);
 }
 
+/// C: SET_SECMODE_NORMAL() - `sce_glbsfr` omits SCEMODE (reg 0), so poke it raw. On a cold
+/// POR it is already 0; on a warm start behind a bootloader that entered secure/exclusive
+/// mode, `mode_sec` locks the PKE AHB window (`pkeahbslock`, `sce.sv:138`) and gate-loads
+/// AC rules, which would zero operand RAM reads and starve the core. It resets on the 0x5a
+/// strobe, so (per the C sequence) we write 0 before and after it.
+fn set_secmode_normal(glb: &mut CSR<u32>) { glb.wo(utralib::Register::new(0, 0x3), 0); }
+
 fn sce_sysinit_pke(glb: &mut CSR<u32>) {
+    set_secmode_normal(glb);
     glb.wfo(glbreg::SFR_SUBEN_CR_SUBEN, SUBEN_SDMA | SUBEN_PKE);
     crate::println!("  suben = {:08x}", glb.r(glbreg::SFR_SUBEN));
     // C: SCE_CLR_RESET_RAM() = RESETRAM 0x5A: pulse-resets the algorithm cores and clears
@@ -168,10 +202,35 @@ fn sce_sysinit_pke(glb: &mut CSR<u32>) {
     glb.wo(glbreg::SFR_ARCLR, 0x5a);
     glb_wait_idle(glb, "reset-ram 5a");
     // reconfigure after the reset strobe
+    set_secmode_normal(glb);
     glb.wfo(glbreg::SFR_SUBEN_CR_SUBEN, SUBEN_SDMA | SUBEN_PKE);
     // C: SCE_CLR_RAM() = RESETRAM 0xA5: hardware zero-fill of the whole SCE RAM.
     glb.wo(glbreg::SFR_ARCLR, 0xa5);
     glb_wait_idle(glb, "clr-ram a5");
+}
+
+/// C: `bn_mult_mod_EX()` - the dummy 6144-bit mod-multiply Crossbar labels
+/// "Used for accelerator bugs, clearing cache" (`pke_rsa.c:341`). Runs one RSAMM at
+/// 6144-bit modulus length with a zeroed PIB under the single-multiplier config,
+/// flushing MIMM internal state that the `a5` SCE-RAM clear demonstrably does not cover
+/// (vendor issues it on every `bn_init`/`bn_mult_mod`, and calls the MIMM cache
+/// "accelerator bugs" territory). Verilator passes without it - in the model the cache
+/// starts empty - but on silicon skipping it produced a plausible-looking wrong `m^d
+/// mod n` (full-entropy bits, value >= n), i.e. arithmetic run against stale internal
+/// state.
+fn pke_cache_flush(pke: &mut CSR<u32>) -> bool {
+    pke.wfo(pkereg::SFR_OPTNW_SFR_OPTNW, 6144); // C: SCE_PKE_OPTNW(6144)
+    // C: memset(ADDR_PKE_SEG_PIB, 0, 6144/8) — 192 words
+    let pib = unsafe { core::slice::from_raw_parts_mut((SCE_RAM + SEG_PIB) as *mut u32, 192) };
+    pib.fill(0);
+    pke.wo(pkereg::SFR_SEGPTR_PTRID_PIB0, 0); // C: REG_SCE_PKE_PIB0 = 0
+    pke.wo(pkereg::SFR_SEGPTR_PTRID_PIB1, 6144 / 32); // C: REG_SCE_PKE_PIB1 = 192
+    pke.wo(pkereg::SFR_MIMMCR, 0x100); // C: 1 modular multiplier for the flush op
+    pke.wo(pkereg::SFR_SEGPTR_PTRID_POB, 0); // C: REG_SCE_PKE_POB = 0 ("result in POB")
+    pke.wo(pkereg::SFR_CRFUNC, IR_RSAMM);
+    pke.wo(pkereg::SFR_FR, 0xf);
+    pke.wo(pkereg::SFR_AR2, 0x5a);
+    pke_wait_done(pke, "flush-rsamm")
 }
 
 /// C: bn_init(ctx, n, 32, advance_mode=true) for a 1024-bit odd n.
@@ -179,7 +238,11 @@ fn sce_sysinit_pke(glb: &mut CSR<u32>) {
 /// segment, then runs RSAINIT (latches N, N', H into PKE-internal storage). The
 /// `bn_mult_mod_EX()` + MIMMCR=0x100 cache flush is skipped (cold MIMM, single modulus -
 /// see module doc); MIMMCR=0x103 (4 multipliers) matches the C final state.
-fn pke_rsa_init(pke: &mut CSR<u32>, n: &[u32; NLEN_WORDS]) {
+fn pke_rsa_init(pke: &mut CSR<u32>, n: &[u32; NLEN_WORDS]) -> bool {
+    if !pke_cache_flush(pke) {
+        return false;
+    }
+
     pke.wo(pkereg::SFR_MIMMCR, MIMMCR_4MUL);
 
     pke.wfo(pkereg::SFR_OPTNW_SFR_OPTNW, MODULO_LEN);
@@ -210,13 +273,18 @@ fn pke_rsa_init(pke: &mut CSR<u32>, n: &[u32; NLEN_WORDS]) {
     pke.wo(pkereg::SFR_CRFUNC, IR_RSAINIT);
     pke.wo(pkereg::SFR_FR, 0xf); // write-1-to-clear stale completion flags
     pke.wo(pkereg::SFR_AR2, 0x5a);
-    pke_wait_done(pke);
+    pke_wait_done(pke, "rsainit")
 }
 
 /// C: bn_expo_mod_sn(ctx, m, d, 32, 32, result): result = m^d mod n (LE word buffers).
 /// The 1024-bit modulus keeps `pack_len == 0` (modulo_len % 256 == 0), so the C repack
 /// tail is not reached and the output is a plain 32-word LE copy from POB.
-fn pke_modexp(pke: &mut CSR<u32>, m: &[u32; NLEN_WORDS], d: &[u32; NLEN_WORDS], out: &mut [u32; NLEN_WORDS]) {
+fn pke_modexp(
+    pke: &mut CSR<u32>,
+    m: &[u32; NLEN_WORDS],
+    d: &[u32; NLEN_WORDS],
+    out: &mut [u32; NLEN_WORDS],
+) -> bool {
     // C: expo_len = bnu_get_msb_le(d, ylen) + 1 (d is 1021 bits here)
     let expo_len = {
         let mut top = NLEN_WORDS - 1;
@@ -247,15 +315,28 @@ fn pke_modexp(pke: &mut CSR<u32>, m: &[u32; NLEN_WORDS], d: &[u32; NLEN_WORDS], 
     pke.wo(pkereg::SFR_CRFUNC, IR_RSAME);
     pke.wo(pkereg::SFR_FR, 0xf);
     pke.wo(pkereg::SFR_AR2, 0x5a);
-    pke_wait_done(pke);
+    crate::println!("going into wait_done");
+    let done = pke_wait_done(pke, "rsame");
 
     let pob = unsafe { core::slice::from_raw_parts((SCE_RAM + SEG_POB) as *const u32, NLEN_WORDS) };
     out.copy_from_slice(pob);
+    done
 }
 
 pub fn sce_rsa() {
     crate::println!("sce_rsa(): init");
     setup();
+
+    #[cfg(feature = "full-hw")]
+    {
+        let mut cgu = CSR::new(utra::sysctrl::HW_SYSCTRL_BASE as *mut u32);
+        // ensures clock dithering is off, this can cause some stability problems
+        cgu.wo(utra::sysctrl::SFR_CGUSEC, cgu.r(utra::sysctrl::SFR_CGUSEC) & !(1 << 12));
+        // this is important on real hardware - the PKE divider needs to be set correctly. The exact value
+        // must be adjusted based on the clock settings, this assumes a 700MHz core clock.
+        cgu.wo(utra::sysctrl::SFR_CGUFDPKE, 0x0f);
+        cgu.wo(utra::sysctrl::SFR_CGUSET, 0x32);
+    }
 
     let mut glb = CSR::new(glbreg::HW_SCE_GLBSFR_BASE as *mut u32);
     let mut pke = CSR::new(pkereg::HW_PKE_BASE as *mut u32);
