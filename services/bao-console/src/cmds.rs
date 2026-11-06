@@ -2,7 +2,7 @@ use core::fmt::Write;
 use std::collections::HashMap;
 
 use String;
-#[cfg(feature = "hosted-baosec")]
+#[cfg(feature = "hosted-bao")]
 use bao1x_emu::trng;
 #[cfg(feature = "bao1x")]
 use bao1x_hal_service::trng;
@@ -95,9 +95,9 @@ use pddb::*;
 mod aes_cmd;
 #[cfg(feature = "aestests")]
 use aes_cmd::*;
-#[cfg(not(feature = "hosted-baosec"))]
+#[cfg(not(feature = "hosted-bao"))]
 mod i2cdetect;
-#[cfg(not(feature = "hosted-baosec"))]
+#[cfg(not(feature = "hosted-bao"))]
 use i2cdetect::*;
 mod cute;
 use cute::*;
@@ -164,7 +164,7 @@ impl CmdEnv {
         let mut echo_cmd = Echo {}; // this command has no persistent storage, so we can "create" it every time we call dispatch (but it's a zero-cost absraction so this doesn't actually create any instructions)
         let mut ver_cmd = Ver {};
         let mut console_cmd = Test {};
-        #[cfg(not(feature = "hosted-baosec"))]
+        #[cfg(not(feature = "hosted-bao"))]
         let mut i2cdetect_cmd = I2cDetect {};
         let mut cute_cmd = Cute {};
 
@@ -173,7 +173,7 @@ impl CmdEnv {
             &mut echo_cmd,
             &mut ver_cmd,
             &mut self.trng_cmd,
-            #[cfg(not(feature = "hosted-baosec"))]
+            #[cfg(not(feature = "hosted-bao"))]
             &mut i2cdetect_cmd,
             &mut cute_cmd,
             &mut console_cmd,

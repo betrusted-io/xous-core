@@ -4,7 +4,7 @@ mod baosec;
 #[cfg(any(feature = "board-baosec", feature = "board-dabao"))]
 pub use baosec::*;
 
-#[cfg(feature = "hosted-baosec")]
+#[cfg(feature = "hosted-bao")]
 mod hosted;
-#[cfg(feature = "hosted-baosec")]
+#[cfg(feature = "hosted-bao")]
 pub use hosted::*;

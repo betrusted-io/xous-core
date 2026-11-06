@@ -160,7 +160,7 @@ impl ComposedType {
                     let cr =
                         ClipRect::new(clip_rect.tl().x, clip_rect.tl().y, clip_rect.br().x, clip_rect.br().y);
                     let rawbuf = unsafe { frbuf.raw_mut() };
-                    let char_invert = if cfg!(feature = "hosted-baosec") || cfg!(feature = "board-baosec") {
+                    let char_invert = if cfg!(feature = "hosted-bao") || cfg!(feature = "board-baosec") {
                         // OLED display background is black for power savings, so all polarities of drawing
                         // need to be allowed
                         true
@@ -177,9 +177,9 @@ impl ComposedType {
                     }
                     // Platform-dependent cursor inversion because the color scheme for sh1107 doesn't comply
                     // to precursor norms
-                    #[cfg(any(feature = "board-baosec", feature = "hosted-baosec"))]
+                    #[cfg(any(feature = "board-baosec", feature = "hosted-bao"))]
                     let curse_invert = true;
-                    #[cfg(not(any(feature = "board-baosec", feature = "hosted-baosec")))]
+                    #[cfg(not(any(feature = "board-baosec", feature = "hosted-bao")))]
                     let curse_invert = invert;
                     if glyph.insert {
                         // log::info!("insert at {},{}", glyph.ch, strpos - 1);

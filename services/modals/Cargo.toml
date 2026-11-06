@@ -38,7 +38,9 @@ hosted = ["trng", "gam", "tts-frontend"]
 renode = ["trng", "gam", "tts-frontend"]
 
 bao1x = ["bao1x-hal-service", "no-gam"]
-hosted-baosec = ["ux-api/hosted-baosec", "bao1x-emu", "bao1x-api", "no-gam"]
+hosted-bao = ["ux-api/hosted-bao", "bao1x-emu", "bao1x-api", "no-gam"]
+hosted-baosec = ["hosted-bao"]
+hosted-dabao = ["hosted-bao"]
 board-baosec = [
     "ux-api/board-baosec",
     "bao1x-api",
