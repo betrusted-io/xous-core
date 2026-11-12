@@ -101,3 +101,7 @@ tools-bao/.venv/
 # Zig artifacts
 .zig-cache/
 zig-out/
+
+# Nix-generated vendor config (developer-specific nix store paths)
+.cargo/vendor-config.toml
+locales/.cargo/vendor-config.toml
