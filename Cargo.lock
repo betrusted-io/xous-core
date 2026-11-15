@@ -1310,7 +1310,6 @@ dependencies = [
  "num-derive 0.4.2",
  "num-traits",
  "rkyv 0.8.8",
- "trng",
  "utralib 0.1.27",
  "xous 0.9.71 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",
@@ -1341,7 +1340,6 @@ dependencies = [
  "num-traits",
  "rkyv 0.8.8",
  "trng",
- "typenum",
  "utralib 0.1.27",
  "xous 0.9.71 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",
@@ -2390,7 +2388,6 @@ dependencies = [
  "log",
  "num-derive 0.4.2",
  "num-traits",
- "once_cell",
  "precursor-hal",
  "rkyv 0.8.8",
  "spinor",
@@ -3077,13 +3074,11 @@ dependencies = [
  "bao1x-hal-service",
  "blitstr2",
  "com",
- "content-plugin-api",
  "digest 0.9.0",
  "enum_dispatch",
  "graphics-server",
  "hex 0.4.3",
  "ime-plugin-api",
- "ime-plugin-shell",
  "keyboard",
  "locales",
  "log",
@@ -3660,7 +3655,6 @@ dependencies = [
  "xous 0.9.71 (registry+https://github.com/rust-lang/crates.io-index)",
  "xous-api-log",
  "xous-api-names",
- "xous-api-ticktimer",
  "xous-ipc 0.10.11 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
@@ -3877,7 +3871,6 @@ dependencies = [
  "bao1x-emu",
  "bao1x-hal",
  "bao1x-hal-service",
- "blowfish",
  "byteorder",
  "cipher 0.4.4",
  "digest 0.10.7",
@@ -4050,7 +4043,6 @@ version = "0.1.0"
 dependencies = [
  "bitflags 1.3.2",
  "chrono",
- "locales",
  "log",
  "num-derive 0.4.2",
  "num-traits",
@@ -6541,7 +6533,6 @@ dependencies = [
 name = "spinor"
 version = "0.1.0"
 dependencies = [
- "com",
  "lazy_static",
  "llio",
  "log",
@@ -6627,7 +6618,6 @@ dependencies = [
  "codec",
  "com",
  "com_rs 0.1.0 (git+https://github.com/betrusted-io/com_rs?rev=891bdd3ca8e41f81510d112483e178aea3e3a921)",
- "content-plugin-api",
  "crossbeam",
  "digest 0.10.7",
  "dns",
@@ -7147,7 +7137,6 @@ dependencies = [
  "xous-api-log",
  "xous-api-names",
  "xous-api-susres 0.9.69",
- "xous-api-ticktimer",
  "xous-ipc 0.10.11 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
@@ -7581,7 +7570,6 @@ dependencies = [
  "cbor",
  "chrono",
  "com_rs 0.1.0 (git+https://github.com/betrusted-io/com_rs?rev=891bdd3ca8e41f81510d112483e178aea3e3a921)",
- "content-plugin-api",
  "ctap-crypto",
  "digest 0.9.0",
  "ed25519-compact",
