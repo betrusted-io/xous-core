@@ -192,7 +192,7 @@ fn main() {
         // process. This helps to prevent memory aliasing attacks by hardware blocks that partially
         // decode their addresses (this would be in anticipation of potential hardware bugs; ideally
         // this isn't ever a problem).
-        let svd_path = out_dir().join("../../SVD_PATH");
+        let svd_path = out_dir().join("SVD_PATH");
         let mut svd_file = OpenOptions::new().create(true).write(true).truncate(true).open(svd_path).unwrap();
         for svd in svd_filenames.iter() {
             writeln!(svd_file, "utralib/{}", svd).unwrap();
@@ -200,7 +200,7 @@ fn main() {
     }
     #[cfg(any(feature = "hosted", feature = "hosted-baosec"))]
     {
-        let svd_path = out_dir().join("../../SVD_PATH");
+        let svd_path = out_dir().join("SVD_PATH");
         let mut svd_file = OpenOptions::new().create(true).write(true).truncate(true).open(svd_path).unwrap();
         write!(svd_file, "").unwrap(); // there is no SVD file for hosted mode
     }
