@@ -1,5 +1,4 @@
 use std::time::{Duration, Instant};
-use std::u64;
 
 use arbitrary_int::{Number, u5};
 use bao1x_api::bio::*;

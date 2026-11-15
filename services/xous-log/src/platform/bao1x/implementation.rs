@@ -2,7 +2,7 @@ use core::fmt::{Error, Write};
 #[cfg(all(feature = "bao1x", not(feature = "hwsim"), not(feature = "gdb-stub")))]
 use std::pin::Pin;
 #[cfg(all(feature = "bao1x", not(feature = "hwsim"), not(feature = "gdb-stub")))]
-use std::sync::atomic::{AtomicBool, AtomicU32};
+use std::sync::atomic::AtomicU32;
 
 #[cfg(all(feature = "bao1x", not(feature = "hwsim"), not(feature = "gdb-stub")))]
 use bao1x_hal::board::UART_DMA_TX_BUF_PHYS;
