@@ -25,7 +25,6 @@ modals = { path = "../../services/modals" }
 trng = { path = "../../services/trng" }
 susres = { path = "../../api/xous-api-susres", package = "xous-api-susres" }
 ime-plugin-api = { path = "../../services/ime-plugin-api" }
-content-plugin-api = { path = "../../services/content-plugin-api" } # all content canvas providers must provide this API
 backup = { path = "libraries/backup" }
 byteorder = { version = "1.4.3", default-features = false }
 arrayref = "0.3.6"
