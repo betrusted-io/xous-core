@@ -3,6 +3,9 @@ name = "usb-bao1x"
 version = "0.1.0"
 edition = "2021"
 
+[lints.cargo]
+unused_dependencies = "allow"
+
 [dependencies]
 utralib = { version = "0.1.27", optional = true, default-features = false }
 xous-names = { package = "xous-api-names", version = "0.9.72" }

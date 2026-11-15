@@ -8,6 +8,9 @@ authors = [
 edition = "2018"
 description = "Initial kernel loader for Xous"
 
+[lints.cargo]
+unused_dependencies = "allow"
+
 [dependencies]
 xous = "0.9.71"
 ed25519-dalek-loader = { path = "ed25519-dalek-loader", default-features = false, optional = true }

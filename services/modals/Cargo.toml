@@ -5,6 +5,9 @@ authors = ["bunnie <bunnie@kosagi.com>"]
 edition = "2018"
 description = "Ux modals server"
 
+[lints.cargo]
+unused_dependencies = "allow"
+
 # Dependency versions enforced by Cargo.lock.
 [dependencies]
 xous = "0.9.71"

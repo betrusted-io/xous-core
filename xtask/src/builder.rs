@@ -1010,11 +1010,7 @@ impl Builder {
                 println!("Dry run requested: only building and not running");
             }
         } else {
-            let svd_spec_path = format!(
-                "target/{}/{}/build/SVD_PATH",
-                self.target.as_ref().expect("target"),
-                self.stream.as_str()
-            );
+            let svd_spec_path = format!("target/SVD_PATH");
             if self.change_target {
                 std::fs::remove_file(&svd_spec_path).ok(); // don't fail if the file does not exist
             }

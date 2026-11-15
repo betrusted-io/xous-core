@@ -5,6 +5,9 @@ authors = ["bunnie <bunnie@kosagi.com>"]
 edition = "2021"
 description = "Keystore server for compact devices"
 
+[lints.cargo]
+unused_dependencies = "allow"
+
 # Dependency versions enforced by Cargo.lock.
 [dependencies]
 utralib = { version = "0.1.27", optional = true, default-features = false }
@@ -36,7 +39,6 @@ aes-kw = { version = "0.2.1", features = ["alloc"] }
 
 # bcrypt
 cipher = "0.4.3"
-blowfish = { version = "0.9.1", features = ["bcrypt"] }
 
 # password modals - keep them in this crate to minimize plaintext password manipulations
 locales = { path = "../../locales" }

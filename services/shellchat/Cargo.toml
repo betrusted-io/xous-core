@@ -5,10 +5,13 @@ edition = "2018"
 name = "shellchat"
 version = "0.1.0"
 
+[lints.cargo]
+unused_dependencies = "allow"
+
 # Dependency versions enforced by Cargo.lock.
 [dependencies]
 com = { path = "../com" }
-content-plugin-api = { path = "../content-plugin-api" }                   # all content canvas providers must provide this API
+content-plugin-api = { path = "../content-plugin-api" }                      # all content canvas providers must provide this API
 gam = { path = "../gam" }
 blitstr2 = { path = "../../libs/blitstr2" }
 ux-api = { path = "../../libs/ux-api" }

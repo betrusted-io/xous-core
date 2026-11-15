@@ -5,6 +5,9 @@ edition = "2018"
 name = "ime-frontend"
 version = "0.1.0"
 
+[lints.cargo]
+unused_dependencies = "allow"
+
 # Dependency versions enforced by Cargo.lock.
 [dependencies]
 gam = { path = "../gam" }
