@@ -5,13 +5,14 @@ edition = "2018"
 name = "gam"
 version = "0.1.0"
 
+[lints.cargo]
+unused_dependencies = "allow"
+
 # Dependency versions enforced by Cargo.lock.
 [dependencies]
 com = { path = "../com" }                                                 # used by the backlight setting on the main menu thread
-content-plugin-api = { path = "../content-plugin-api" }
 graphics-server = { path = "../graphics-server" }
 ime-plugin-api = { path = "../ime-plugin-api" }
-ime-plugin-shell = { path = "../ime-plugin-shell" }
 keyboard = { path = "../keyboard", optional = true }
 log = "0.4.14"
 log-server = { package = "xous-api-log", version = "0.1.70" }

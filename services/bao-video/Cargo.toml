@@ -3,6 +3,9 @@ name = "bao-video"
 version = "0.1.0"
 edition = "2021"
 
+[lints.cargo]
+unused_dependencies = "allow"
+
 [dependencies]
 bao1x-hal = { path = "../../libs/bao1x-hal", features = [
     "std",
