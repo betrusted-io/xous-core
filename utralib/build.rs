@@ -5,7 +5,15 @@ use std::io::Read;
 use std::io::Write;
 use std::path::PathBuf;
 
-fn out_dir() -> PathBuf { PathBuf::from(env::var_os("OUT_DIR").unwrap()) }
+pub fn truncate_at_release(path: PathBuf) -> PathBuf {
+    match path.ancestors().find(|anc| anc.file_name().is_some_and(|n| n == "target")) {
+        // `truncated` borrows from `path`; clone it before moving `path` out.
+        Some(truncated) => truncated.to_path_buf(),
+        None => path,
+    }
+}
+
+fn out_dir() -> PathBuf { truncate_at_release(PathBuf::from(env::var_os("OUT_DIR").unwrap())) }
 
 /// Helper macro that returns a constant number of features enabled among specified list.
 macro_rules! count_enabled_features {
