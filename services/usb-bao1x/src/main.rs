@@ -770,6 +770,8 @@ pub(crate) fn main_hw() -> ! {
                                 response.replace(buf).unwrap();
                                 // the rx_msg will drop and respond to the listener
                                 serial_rx_trigger = false;
+                                // what was just handed over must not be handed over again
+                                serial_buf.clear();
                             }
                             None => {} // do nothing
                         }
