@@ -282,7 +282,9 @@ impl Iox {
                     None
                 } else {
                     self.set_alternate_function(port, pin, IoxFunction::AF1);
-                    let bio_bit = 15 - pin;
+                    // Identity: PB[n] <-> BIO/PIOSEL bit n (matches set_ports_from_bio_bitmask
+                    // and bio_bit_to_port_and_pin). See xous-core#1018.
+                    let bio_bit = pin;
                     self.csr.wo(iox::SFR_PIOSEL, self.csr.r(iox::SFR_PIOSEL) | (1 << bio_bit as u32));
                     Some(bio_bit)
                 }
@@ -311,7 +313,7 @@ impl Iox {
                 if pin >= 16 {
                     None
                 } else {
-                    let pio_bit = 15 - pin;
+                    let pio_bit = pin;
                     self.csr.wo(iox::SFR_PIOSEL, self.csr.r(iox::SFR_PIOSEL) & !(1 << pio_bit as u32));
                     Some(pio_bit)
                 }

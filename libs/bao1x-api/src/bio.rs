@@ -630,7 +630,10 @@ pub fn port_and_pin_to_bio_bit(port: IoxPort, pin: u8) -> Option<arbitrary_int::
             if pin >= 16 {
                 None
             } else {
-                let bio_bit = 15 - pin;
+                // Identity mapping: PB[n] <-> BIO bit n (matches bio_bit_to_port_and_pin
+                // and the Dabao pinout). Previously this used `15 - pin`, which was
+                // inverted relative to both. See xous-core#1018.
+                let bio_bit = pin;
                 Some(arbitrary_int::u5::new(bio_bit))
             }
         }
@@ -643,5 +646,48 @@ pub fn port_and_pin_to_bio_bit(port: IoxPort, pin: u8) -> Option<arbitrary_int::
             }
         }
         _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn bio_bit_port_pin_round_trip() {
+        for bit in 0u8..32 {
+            let u5 = arbitrary_int::u5::new(bit);
+            let (port, pin) = bio_bit_to_port_and_pin(u5);
+            let back = port_and_pin_to_bio_bit(port, pin).expect("round-trip should succeed");
+            assert_eq!(
+                back.value(),
+                bit,
+                "round-trip failed for BIO bit {} -> {:?}/{} -> {}",
+                bit,
+                port,
+                pin,
+                back.value()
+            );
+        }
+    }
+
+    #[test]
+    fn port_b_is_identity_with_bio_bits() {
+        // Dabao pinout: PB[n] == BIO[n]
+        for pin in 0u8..16 {
+            let bit = port_and_pin_to_bio_bit(IoxPort::PB, pin).unwrap();
+            assert_eq!(bit.value(), pin);
+            let (port, p) = bio_bit_to_port_and_pin(bit);
+            assert!(matches!(port, IoxPort::PB));
+            assert_eq!(p, pin);
+        }
+    }
+
+    #[test]
+    fn port_c_offset_by_sixteen() {
+        for pin in 0u8..16 {
+            let bit = port_and_pin_to_bio_bit(IoxPort::PC, pin).unwrap();
+            assert_eq!(bit.value(), pin + 16);
+        }
     }
 }
