@@ -1,0 +1,67 @@
+# NOTE: the crate/package is called "mailapp", not "mail", because the
+# workspace already contains a library crate named "mail" (libs/mail, the
+# SMTP/IMAP client this app is built on). Two workspace members cannot share
+# a package name. The *app* is still "mail" everywhere it's user-visible:
+# the directory is apps/mail, the GAM context name is "mail" (see
+# apps/manifest.json), and the menu entry reads "Mail". Build it with:
+#
+#     cargo xtask app-image mailapp
+#
+[package]
+name = "mailapp"
+version = "0.1.0"
+authors = ["pakl <patryk@pakl.net>"]
+edition = "2021"
+description = "Graphical IMAP/SMTP mail client (GAM app)"
+
+# Dependency versions kept in lockstep with the other GAM apps
+# (apps/vault, apps/chat-test) so the shared `gam`/`modals` crates resolve
+# to a single version across the workspace.
+[dependencies]
+log = "0.4.14"
+num-derive = { version = "0.4.2", default-features = false }
+num-traits = { version = "0.2.14", default-features = false }
+xous = "0.9.70"
+xous-ipc = "0.10.10"
+log-server = { package = "xous-api-log", version = "0.1.69" }
+ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.70" }
+xous-names = { package = "xous-api-names", version = "0.9.71" }
+gam = { path = "../../services/gam" }
+
+# The app runs its own thin GAM shell (own UxRegistration + content canvas +
+# F-key handling), like apps/vault, rather than the `chat` library -- so we
+# can supply our own F-key legend labels. `ime-plugin-api` is the predictor
+# interface our icontray (src/icontray.rs) implements to draw those labels.
+ime-plugin-api = { path = "../../services/ime-plugin-api" }
+
+# Modal forms/pickers used for the inbox, reader, compose and settings.
+modals = { path = "../../services/modals" }
+
+# pddb: we call try_mount() at startup (the chat library used to do this for
+# us) so account config and TLS trust anchors can be read/written.
+pddb = { path = "../../services/pddb" }
+
+# net + com_rs: used only to check whether the network is up (a DHCP-bound
+# IPv4 config) before attempting a blocking connect -- otherwise, with wifi
+# down, the DNS/connect stalls the single-threaded event loop and the app
+# stops responding to F-keys.
+net = { path = "../../services/net" }
+com_rs = { git = "https://github.com/betrusted-io/com_rs", rev = "891bdd3ca8e41f81510d112483e178aea3e3a921" }
+
+# The synchronous SMTP/IMAP client. This is the "mail-related code" the
+# edlin app was built on; the higher-level MIME/RFC-2047 parsing and
+# orchestration from edlin's cmds.rs is reproduced in src/mailapp.rs.
+mail = { path = "../../libs/mail" }
+
+# TLS certificate trust: probe the mail server's offered chain and, if it's
+# not already trusted, show the GAM "trust this certificate?" modal (the
+# same flow apps/edlin got for free via libs/mail; we drive it explicitly
+# so it reliably appears before we connect). Must resolve to the same rustls
+# instance as libs/mail -- both use the workspace-pinned rustls =0.22.2.
+tls = { path = "../../libs/tls" }
+
+# RFC 2047 "B" (base64) encoded-word decoding in the header parser.
+base64 = { version = "0.22.1", default-features = false, features = ["alloc"] }
+
+[features]
+default = []

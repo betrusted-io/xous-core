@@ -1,0 +1,17 @@
+[package]
+name = "mail"
+version = "0.1.0"
+edition = "2021"
+description = "Minimal, synchronous SMTP and IMAP clients (no async runtime, no tokio)"
+
+[dependencies]
+tls = { path = "../tls" }
+
+# Must stay in lockstep with libs/tls's rustls version (see note there
+# about the workspace-level patch to xous-ring) so that types like
+# RootCertStore / ClientConnection returned across the tls <-> mail
+# boundary are the same crate instance.
+rustls = { version = "=0.22.2" }
+
+base64 = { version = "0.22.1", default-features = false, features = ["alloc"] }
+log = "0.4.14"
