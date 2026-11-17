@@ -3,6 +3,7 @@ on:
     branches:
       - main
       - dev
+      - "feature/**"
   pull_request:
     branches:
       - main
@@ -31,9 +32,19 @@ jobs:
       - name: Fetch tags
         run: git fetch --prune --unshallow --tags
 
+      - name: Fetch upstream release tags (forks may lack annotated tags for signing)
+        continue-on-error: true
+        run: |
+          git remote add upstream https://github.com/betrusted-io/xous-core.git 2>/dev/null || true
+          git fetch upstream --tags --prune --no-recurse-submodules
+
       - uses: Swatinem/rust-cache@v1
 
+      # GITHUB_TOKEN raises the releases API quota; anonymous shared-runner IPs
+      # often 403 when many matrix jobs hit betrusted-io/rust together.
       - name: Install RISC-V toolkit
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: cargo xtask install-toolkit --force --no-verify
 
       - name: Clean out old target directory (in case of libstd change)
