@@ -29,6 +29,8 @@ bao1x-hal = { path = "../../libs/bao1x-hal", optional = true, default-features =
     "std",
 ] }
 
+libc = { version = "0.2", optional = true }
+
 # FIXME: bring atsama5d27 target up to date so utralib dependency does not conflict
 # [target.'cfg(target_arch = "arm")'.dependencies]
 # atsama5d27 = { git = "https://github.com/Foundation-Devices/atsama5d27.git", branch = "master", features = [
@@ -43,7 +45,9 @@ bao1x = ["utralib/bao1x", "bao1x-hal"]
 board-baosec = ["bao1x-hal/board-baosec"]
 board-baosor = ["bao1x-hal/board-baosor"]
 board-dabao = ["bao1x-hal/board-dabao"]
-hosted-baosec = []
+hosted-bao = []
+hosted-baosec = ["hosted-bao"]
+hosted-dabao = ["hosted-bao", "libc"]
 hwsim = []
 # when activated, disables the console so the kernel GDB stub can claim it.
 gdb-stub = []

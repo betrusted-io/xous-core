@@ -104,7 +104,7 @@ impl<'a> ShellCmdApi<'a> for Test {
                     }
                 }
             }
-            #[cfg(not(feature = "hosted-baosec"))]
+            #[cfg(not(feature = "hosted-bao"))]
             "shipmode" => {
                 use bao1x_hal::i2c::I2c;
                 let mut i2c = I2c::new();
@@ -119,7 +119,7 @@ impl<'a> ShellCmdApi<'a> for Test {
                 axp2101.powerdown(&mut i2c).ok();
                 log::info!("sent shutdown to axp2101");
             }
-            #[cfg(not(feature = "hosted-baosec"))]
+            #[cfg(not(feature = "hosted-bao"))]
             "deepsleep" => {
                 let gfx = ux_api::service::gfx::Gfx::new(&_env.xns).unwrap();
                 log::info!("turn off display");
@@ -155,7 +155,7 @@ impl<'a> ShellCmdApi<'a> for Test {
                 let (_, value) = std::env::vars().find(|(key, _value)| key == "SEED").unwrap();
                 log::info!("Seed: {:?}", value);
             }
-            #[cfg(not(feature = "hosted-baosec"))]
+            #[cfg(not(feature = "hosted-bao"))]
             "wfi" => {
                 let gfx = ux_api::service::gfx::Gfx::new(&_env.xns).unwrap();
                 log::info!("turn off display");
@@ -250,7 +250,7 @@ impl<'a> ShellCmdApi<'a> for Test {
                     }
                 }
             }
-            #[cfg(not(feature = "hosted-baosec"))]
+            #[cfg(not(feature = "hosted-bao"))]
             "cam" => {
                 use bao1x_api::I2cApi;
                 let mut i2c = bao1x_hal::i2c::I2c::new();
@@ -269,7 +269,7 @@ impl<'a> ShellCmdApi<'a> for Test {
                     write!(ret, "Wrote {:x} into {:x}", data, adr).ok();
                 }
             }
-            #[cfg(all(not(feature = "hosted-baosec"), feature = "oem-baosec-lite"))]
+            #[cfg(all(not(feature = "hosted-bao"), feature = "oem-baosec-lite"))]
             "accel" => {
                 use std::time::{Duration, Instant};
 

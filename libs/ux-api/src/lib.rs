@@ -3,11 +3,11 @@
 #[cfg(feature = "std")]
 pub mod cursor;
 mod fontmap;
-#[cfg(all(feature = "std", any(feature = "board-baosec", feature = "hosted-baosec")))]
+#[cfg(all(feature = "std", any(feature = "board-baosec", feature = "hosted-bao")))]
 pub mod menu;
 pub mod minigfx;
 pub mod platform;
-#[cfg(all(feature = "std", any(feature = "board-baosec", feature = "hosted-baosec")))]
+#[cfg(all(feature = "std", any(feature = "board-baosec", feature = "hosted-bao")))]
 pub mod widgets;
 #[cfg(feature = "std")]
 pub mod wordwrap;
@@ -17,16 +17,16 @@ pub mod bitmaps;
 #[cfg(feature = "std")]
 pub mod service;
 
-#[cfg(all(feature = "std", any(feature = "board-baosec", feature = "hosted-baosec")))]
+#[cfg(all(feature = "std", any(feature = "board-baosec", feature = "hosted-bao")))]
 use num_traits::*;
-#[cfg(all(feature = "std", any(feature = "board-baosec", feature = "hosted-baosec")))]
+#[cfg(all(feature = "std", any(feature = "board-baosec", feature = "hosted-bao")))]
 use xous::Message;
-#[cfg(all(feature = "std", any(feature = "board-baosec", feature = "hosted-baosec")))]
+#[cfg(all(feature = "std", any(feature = "board-baosec", feature = "hosted-bao")))]
 use xous_ipc::Buffer;
 
 // common message forwarding infrastructure used by Menus, Modals, etc...
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
-#[cfg(all(feature = "std", any(feature = "board-baosec", feature = "hosted-baosec")))]
+#[cfg(all(feature = "std", any(feature = "board-baosec", feature = "hosted-bao")))]
 struct MsgForwarder {
     pub public_sid: [u32; 4],
     pub private_sid: [u32; 4],
@@ -38,7 +38,7 @@ struct MsgForwarder {
 /// "modal" interface to the internal private server. It keeps the GAM from being
 /// able to tinker with the internal mechanics of the larger server that owns the
 /// dialog box.
-#[cfg(all(feature = "std", any(feature = "board-baosec", feature = "hosted-baosec")))]
+#[cfg(all(feature = "std", any(feature = "board-baosec", feature = "hosted-bao")))]
 pub(crate) fn forwarding_thread(addr: usize, size: usize, offset: usize) {
     let buf = unsafe { Buffer::from_raw_parts(addr, size, offset) };
     let forwarding_config = buf.to_original::<MsgForwarder, _>().unwrap();

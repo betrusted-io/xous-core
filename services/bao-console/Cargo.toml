@@ -53,6 +53,7 @@ xous-usb-hid = { git = "https://github.com/betrusted-io/xous-usb-hid.git", branc
 [features]
 bao1x = ["utralib/bao1x", "usb-bao1x/bao1x", "aes/bao1x"]
 board-baosec = [
+    "with-pddb",
     "modals/board-baosec",
     "bao1x-hal-service",
     "bao1x-hal",
@@ -63,12 +64,19 @@ board-baosec = [
     "bio-lib",
 ]
 oem-baosec-lite = ["bao1x-hal/sensor-lis2dh12"]
-hosted-baosec = [
-    "modals/hosted-baosec",
-    "usb-bao1x/hosted-baosec",
+hosted-bao = [
+    "modals/hosted-bao",
+    "usb-bao1x/hosted-bao",
     "bao1x-emu",
+    "bao1x-hal/hosted-bao",
+]
+hosted-baosec = [
+    "hosted-bao",
+    "with-pddb",
     "pddb/hosted-baosec",
-    "bao1x-hal/hosted-baosec",
+]
+hosted-dabao = [
+    "hosted-bao",
 ]
 # Don't use this for dabao. Use apps-dabao/dabao-console instead!
 # board-dabao = [
@@ -96,4 +104,4 @@ rramtests = []
 # loaded and run.
 duart-debug-hal = ["bao1x-hal/debug-print-duart"]
 
-default = ["with-pddb"]
+default = []
