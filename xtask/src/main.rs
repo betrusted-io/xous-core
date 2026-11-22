@@ -324,9 +324,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             // emits the TEST/DONE sentinel stream.
             builder.target_renode().add_services(&base_pkgs).add_services(&get_cratespecs());
             builder.add_loader_feature("renode-bypass");
-            builder
-                .add_service("ipc-echo", LoaderRegion::Ram)
-                .add_service("ipc-tests", LoaderRegion::Ram);
+            builder.add_service("ipc-echo", LoaderRegion::Ram).add_service("ipc-tests", LoaderRegion::Ram);
         }
         Some("std-net-ci") => {
             // The libstd-net image plus the on-target std::net test runner;
