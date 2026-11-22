@@ -14,13 +14,13 @@
 //! resolver per pending out-of-line element, capping such nests at 64
 //! elements. Flat `Vec<POD>`, `String`, and POD inline fields are safe.
 
+use std::io;
+
+use ipc_echo::{EchoPayload, OP_ECHO, SERVER_NAME};
 use rkyv::rancor::Failure;
 use rkyv::ser::writer::IoWriter;
 use rkyv::ser::{Positional, allocator::SubAllocator};
 use rkyv::{Archive, Deserialize, Serialize};
-use std::io;
-
-use ipc_echo::{EchoPayload, OP_ECHO, SERVER_NAME};
 
 const PAGE: usize = 4096;
 
@@ -61,11 +61,8 @@ pub struct Empty;
 pub fn probe_len<T>(v: &T) -> usize
 where
     T: for<'a> Serialize<
-            rkyv::rancor::Strategy<
-                rkyv::ser::Serializer<IoWriter<io::Sink>, SubAllocator<'a>, ()>,
-                Failure,
-            >,
-        >,
+        rkyv::rancor::Strategy<rkyv::ser::Serializer<IoWriter<io::Sink>, SubAllocator<'a>, ()>, Failure>,
+    >,
 {
     let mut scratch = [core::mem::MaybeUninit::<u8>::uninit(); 256];
     let writer = IoWriter::new(io::sink());
@@ -75,9 +72,7 @@ where
         .expect("probe: value did not serialize")
 }
 
-fn page_round(n: usize) -> usize {
-    (n + (PAGE - 1)) & !(PAGE - 1)
-}
+fn page_round(n: usize) -> usize { (n + (PAGE - 1)) & !(PAGE - 1) }
 
 /// Assert the growth-path invariants on a buffer made by `into_buf`:
 /// `used` equals the probe length exactly, and `capacity` is the page-rounded
@@ -91,14 +86,8 @@ where
 {
     let probe = expected.probe();
     assert_eq!(buf.used(), probe, "used must equal probe length exactly");
-    assert_eq!(
-        buf.capacity(),
-        page_round(probe.max(PAGE)),
-        "capacity must be the page-rounded allocation"
-    );
-    let back: T = buf
-        .to_original()
-        .expect("roundtrip: valid buffer must deserialize");
+    assert_eq!(buf.capacity(), page_round(probe.max(PAGE)), "capacity must be the page-rounded allocation");
+    let back: T = buf.to_original().expect("roundtrip: valid buffer must deserialize");
     assert_eq!(&back, expected, "roundtrip must be lossless");
 }
 
@@ -109,15 +98,10 @@ pub trait Probeable {
 impl<T> Probeable for T
 where
     T: for<'a> Serialize<
-            rkyv::rancor::Strategy<
-                rkyv::ser::Serializer<IoWriter<io::Sink>, SubAllocator<'a>, ()>,
-                Failure,
-            >,
-        >,
+        rkyv::rancor::Strategy<rkyv::ser::Serializer<IoWriter<io::Sink>, SubAllocator<'a>, ()>, Failure>,
+    >,
 {
-    fn probe(&self) -> usize {
-        probe_len(self)
-    }
+    fn probe(&self) -> usize { probe_len(self) }
 }
 
 fn composite(data_len: usize, label_len: usize, kind: Kind) -> Composite {
@@ -143,12 +127,7 @@ fn composite(data_len: usize, label_len: usize, kind: Kind) -> Composite {
 /// The core promise of the growth patch: `into_buf().used()` is EXACTLY the
 /// probe length on riscv32, for POD (fast path) and heap-backed payloads.
 pub fn t_probe_exact_pod() {
-    let pod = Pod {
-        a: 0xDEAD_BEEF,
-        b: -0x1234_5678_9ABC_DEF0,
-        c: [0x5A; 32],
-        d: [[0xA5; 16]; 4],
-    };
+    let pod = Pod { a: 0xDEAD_BEEF, b: -0x1234_5678_9ABC_DEF0, c: [0x5A; 32], d: [[0xA5; 16]; 4] };
     let buf = xous_ipc::Buffer::into_buf(pod.clone()).expect("pod: into_buf");
     // POD fits one page: fast path must have been taken (no second attempt)
     assert_eq!(buf.capacity(), PAGE, "POD must land in the single-page fast path");

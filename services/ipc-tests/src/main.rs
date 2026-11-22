@@ -35,11 +35,8 @@ fn one_line(reason: &str) -> String {
 /// swaptest1 / ipc-echo.
 fn bump_heap() {
     const HEAP_LIMIT: usize = 1024 * 1024 * 8;
-    let result = xous::rsyscall(xous::SysCall::AdjustProcessLimit(
-        xous::Limits::HeapMaximum as usize,
-        0,
-        HEAP_LIMIT,
-    ));
+    let result =
+        xous::rsyscall(xous::SysCall::AdjustProcessLimit(xous::Limits::HeapMaximum as usize, 0, HEAP_LIMIT));
     if let Ok(xous::Result::Scalar2(1, current_limit)) = result {
         xous::rsyscall(xous::SysCall::AdjustProcessLimit(
             xous::Limits::HeapMaximum as usize,
