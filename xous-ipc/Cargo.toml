@@ -15,4 +15,6 @@ bitflags = { version = "1" }
 rkyv = { version = "0.8.8", default-features = false, features = [
     "std",
     "alloc",
+    # required for checked archive access (rkyv::access) in buffer.rs
+    "bytecheck",
 ] }

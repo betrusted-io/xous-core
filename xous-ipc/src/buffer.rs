@@ -3,7 +3,8 @@ use std::marker::PhantomData;
 
 use rkyv::{
     Archive, Deserialize, Place, Portable, Serialize,
-    api::low::LowSerializer,
+    api::low::{LowSerializer, LowValidator},
+    bytecheck::CheckBytes,
     rancor::{Failure, Strategy},
     ser::{Positional, allocator::SubAllocator, writer::Buffer as RkyvBuffer},
     with::{ArchiveWith, Identity, SerializeWith},
@@ -312,27 +313,42 @@ impl<'buf> Buffer<'buf> {
 
     /// Zero-copy representation of the data on the receiving side, wrapped in an "Archived" trait and left in
     /// the heap. Cheap so uses "as_" prefix.
+    ///
+    /// The byte range is validated before being handed out as a reference: `Err(Error::SerializationError)`
+    /// is returned when the buffer does not contain a valid archive of `T` (for example, truncated data,
+    /// dangling interior pointers, or data serialized as a different type). Validation cost is linear in the
+    /// number of reachable fields, and never allocates.
     #[allow(dead_code)]
-    pub fn as_flat<T, U>(&self) -> core::result::Result<&U, ()>
+    pub fn as_flat<T, U>(&self) -> core::result::Result<&U, Error>
     where
         T: rkyv::Archive<Archived = U>,
-        U: Portable,
+        U: Portable + for<'a> CheckBytes<LowValidator<'a, rkyv::rancor::Error>>,
     {
-        let r = unsafe { rkyv::access_unchecked::<U>(&self.slice[..self.used]) };
-        Ok(r)
+        rkyv::api::low::access_pos::<U, rkyv::rancor::Error>(
+            &self.slice[..self.used],
+            rkyv::api::root_position::<U>(self.used),
+        )
+        .map_err(|_| Error::SerializationError)
     }
 
     /// A representation identical to the original, but requires copying to the stack. More expensive so uses
     /// "to_" prefix.
+    ///
+    /// Debugging note - the rancor::Error type is much richer than the returned Error::SerializationError
+    /// so extracting that and printing it can be helpful in tracing down subtle errors.
     #[allow(dead_code)]
     pub fn to_original<T, U>(&self) -> core::result::Result<T, Error>
     where
         T: rkyv::Archive<Archived = U>,
-        U: Portable,
+        U: Portable + for<'a> CheckBytes<LowValidator<'a, rkyv::rancor::Error>>,
         <T as Archive>::Archived: Deserialize<T, Strategy<rkyv::de::Pool, rkyv::rancor::Error>>,
     {
-        let r = unsafe { rkyv::access_unchecked::<U>(&self.slice[..self.used]) };
-        rkyv::deserialize::<T, rkyv::rancor::Error>(r).map_err(|_| Error::InternalError)
+        let r = rkyv::api::low::access_pos::<U, rkyv::rancor::Error>(
+            &self.slice[..self.used],
+            rkyv::api::root_position::<U>(self.used),
+        )
+        .map_err(|_| Error::SerializationError)?;
+        rkyv::deserialize::<T, rkyv::rancor::Error>(r).map_err(|_| Error::SerializationError)
     }
 
     pub fn used(&self) -> usize { self.used }
