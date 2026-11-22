@@ -189,7 +189,7 @@ impl<'buf> Buffer<'buf> {
         Ok(result)
     }
 
-    fn into_buf_inner<F, T>(src: &T) -> core::result::Result<Self, ()>
+    fn into_buf_inner<F, T>(src: &T) -> core::result::Result<Self, Error>
     where
         F: for<'a, 'b> SerializeWith<T, Serializer<'a, 'b>>,
     {
@@ -225,14 +225,20 @@ impl<'buf> Buffer<'buf> {
         let writer = RkyvBuffer::from(&mut xous_buf.slice[..]);
         let alloc = SubAllocator::new(&mut scratch);
 
-        let serialized_buf =
-            rkyv::api::low::to_bytes_in_with_alloc::<_, _, Failure>(&wrap, writer, alloc).map_err(|_| ())?;
+        let serialized_buf = rkyv::api::low::to_bytes_in_with_alloc::<_, _, Failure>(&wrap, writer, alloc)
+            .map_err(|_| Error::SerializationError)?;
         xous_buf.used = serialized_buf.pos();
         Ok(xous_buf)
     }
 
+    /// Serialize `src` into a freshly allocated `Buffer`.
+    ///
+    /// Returns `Err(Error::SerializationError)` when the serialized form does not fit the allocation
+    /// (the buffer is sized by `size_of::<T>()`, rounded up to a page, so heap-backed types such as
+    /// `Vec`/`String` whose contents exceed a page can overflow it). On error nothing leaks: no page
+    /// mapping outlives the failed call.
     #[allow(dead_code)]
-    pub fn into_buf<T>(src: T) -> core::result::Result<Self, ()>
+    pub fn into_buf<T>(src: T) -> core::result::Result<Self, Error>
     where
         T: for<'b, 'a> rkyv::Serialize<
                 rkyv::rancor::Strategy<
@@ -248,7 +254,7 @@ impl<'buf> Buffer<'buf> {
         Buffer::into_buf_inner::<Identity, T>(&src)
     }
 
-    fn replace_inner<F, T>(&mut self, src: T) -> core::result::Result<(), &'static str>
+    fn replace_inner<F, T>(&mut self, src: T) -> core::result::Result<(), Error>
     where
         F: for<'a, 'b> SerializeWith<T, Serializer<'a, 'b>>,
     {
@@ -284,8 +290,8 @@ impl<'buf> Buffer<'buf> {
         let writer = RkyvBuffer::from(&mut self.slice[..]);
         let alloc = SubAllocator::new(&mut scratch);
 
-        let serialized_buf =
-            rkyv::api::low::to_bytes_in_with_alloc::<_, _, Failure>(&wrap, writer, alloc).unwrap();
+        let serialized_buf = rkyv::api::low::to_bytes_in_with_alloc::<_, _, Failure>(&wrap, writer, alloc)
+            .map_err(|_| Error::SerializationError)?;
         self.used = serialized_buf.pos();
 
         if let Some(ref mut msg) = self.memory_message.as_mut() {
@@ -294,8 +300,14 @@ impl<'buf> Buffer<'buf> {
         Ok(())
     }
 
+    /// Serialize `src` into this buffer, updating the length reported to the server.
+    ///
+    /// Returns `Err(Error::SerializationError)` (instead of panicking) when `src` serializes to more
+    /// than `capacity()` bytes. Note that a failed attempt may leave partially serialized bytes in the
+    /// buffer: `used` is left at its previous value, but the contents are indeterminate until the next
+    /// successful `replace()` or `volatile_clear()`.
     #[allow(dead_code)]
-    pub fn replace<T>(&mut self, src: T) -> core::result::Result<(), &'static str>
+    pub fn replace<T>(&mut self, src: T) -> core::result::Result<(), Error>
     where
         T: for<'b, 'a> rkyv::Serialize<
                 rkyv::rancor::Strategy<
@@ -352,6 +364,12 @@ impl<'buf> Buffer<'buf> {
     }
 
     pub fn used(&self) -> usize { self.used }
+
+    /// Total writable capacity of the backing allocation, in bytes (page-rounded). Unlike `used()`,
+    /// this is the room available to serialize *into*: `replace()` fails with `Error::SerializationError`
+    /// when a value serializes to more than `capacity()` bytes. Callers that grow payloads can compare
+    /// against this to decide when to reallocate a larger buffer.
+    pub fn capacity(&self) -> usize { self.slice.len() }
 }
 
 impl<'a> core::convert::AsRef<[u8]> for Buffer<'a> {
