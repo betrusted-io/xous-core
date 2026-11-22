@@ -85,6 +85,8 @@ members = [
   "services/libstd-test",
   "services/pddb-fs-tests",
   "services/net-tests",
+  "services/ipc-echo",
+  "services/ipc-tests",
   "services/ffi-test",
   "services/tts",
   "services/cram-console",
