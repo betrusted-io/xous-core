@@ -27,7 +27,7 @@ import sys
 RE_TEST = re.compile(
     r'TEST (\S+) (PASS|FAIL|XFAIL|XPASS)(?:\s+(.*?))?\s*$')
 RE_DONE = re.compile(
-    r'(FS|NET)-TESTS DONE: pass=(\d+) fail=(\d+) xfail=(\d+) xpass=(\d+) total=(\d+)')
+    r'(FS|NET|IPC)-TESTS DONE: pass=(\d+) fail=(\d+) xfail=(\d+) xpass=(\d+) total=(\d+)')
 # Trailing source location the runner appends, e.g. " (services/.../main.rs:74)".
 RE_LOC = re.compile(r'\s*\(services/[^)]*\)\s*$')
 
