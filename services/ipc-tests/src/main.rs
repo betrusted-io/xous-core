@@ -119,8 +119,8 @@ fn main() -> ! {
 
     let mut pass = 0usize;
     let mut fail = 0usize;
-    let mut xfail = 0usize;
-    let mut xpass = 0usize;
+    let xfail = 0usize;
+    let xpass = 0usize;
     for &(name, test) in all_tests.iter() {
         PANIC_MSG.lock().unwrap().take();
         log::info!("TEST {} START", name);

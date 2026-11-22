@@ -206,7 +206,7 @@ pub fn t_zero_size() {
 /// truncated buffer must both surface SerializationError, never UB/panic.
 pub fn t_checked_access_errors() {
     let c = composite(100, 10, Kind::Text("hello".into()));
-    let mut buf = xous_ipc::Buffer::into_buf(c).expect("access: into_buf");
+    let buf = xous_ipc::Buffer::into_buf(c).expect("access: into_buf");
 
     // wrong type: different layout, must be rejected
     let r = buf.as_flat::<Composite2, _>();
