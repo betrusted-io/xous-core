@@ -1,0 +1,119 @@
+# xous-ipc CI machine definition (headless SoC only).
+#
+# Derived from emulation/tests/net-ci.resc, stripped to the minimum for the
+# ipc-ci image (xtask ipc-ci: base_pkgs + ipc-echo + ipc-tests, no PDDB, no
+# COM/net/graphics):
+# - NO EC and NO wifi switch: those exist because the net suites drive the COM
+#   -> EC -> WF200 path (and because a COM transaction null-derefs without a
+#   peer). The ipc image contains no COM service and issues no COM
+#   transactions, so the SoC runs alone.
+# - the flash backing file is still per-run scratch (the flash model needs one
+#   and writes through); the image carries no persistent state.
+# - deterministic seed (feeds the TRNG models, as elsewhere, even though this
+#   suite does not consume randomness).
+#
+# Driven by tools/ipc-ci.py (local loop) or the renode-test robot suite.
+
+# Overridable parameters; defaults resolve relative to this script. Callers
+# (driver/robot) set these before including this file.
+$image_dir?=$ORIGIN/../../target/riscv32imac-unknown-xous-elf/release
+$flash_file?=$ORIGIN/../../target/ipc-ci/flash.bin
+$console_log?=$ORIGIN/../../target/ipc-ci/console.log
+$kernel_log?=$ORIGIN/../../target/ipc-ci/kernel.log
+
+# Add emulation/ to the global path, so @peripherals/... and @soc/... resolve
+# exactly as they do for emulation/betrusted.resc.
+path add $ORIGIN/..
+
+using sysbus
+
+# Deterministic runs: fixed emulation seed (feeds the TRNG models).
+emulation SetSeed 0x0
+
+# Add peripherals that are defined in C#.  You must restart Renode
+# if you modify these files.
+i @peripherals/ABRTCMC.cs
+i @peripherals/BetrustedEcI2C.cs
+i @peripherals/BetrustedSocI2C.cs
+i @peripherals/BetrustedSpinor.cs
+i @peripherals/BetrustedWatchdog.cs
+i @peripherals/BQ24157.cs
+i @peripherals/BQ27421.cs
+i @peripherals/BtEvents.cs
+i @peripherals/ComConnector.cs
+# The SoC platform description instantiates the SoC-side COM peripheral
+# unconditionally, so its assemblies must be loaded even though this suite
+# creates no EC and wires nothing to a COM connector (the ipc image contains
+# no COM service and issues no COM transactions).
+EnsureTypeIsLoaded "Antmicro.Renode.Peripherals.SPI.Betrusted.IComPeripheral"
+EnsureTypeIsLoaded "Antmicro.Renode.Peripherals.SPI.Betrusted.IComController"
+i @peripherals/ComEc.cs
+i @peripherals/ComSoC.cs
+i @peripherals/EcPower.cs
+i @peripherals/EcWifi.cs
+i @peripherals/engine.cs
+i @peripherals/Jtag.cs
+i @peripherals/keyboard.cs
+i @peripherals/keyrom.cs
+i @peripherals/LiteX_Timer_32.cs
+i @peripherals/LM3509.cs
+i @peripherals/LSM6DS3.cs
+i @peripherals/memlcd.cs
+i @peripherals/MXIC_MX66UM1G45G.cs
+i @peripherals/sha512.cs
+i @peripherals/spinor_soft_int.cs
+i @peripherals/ticktimer.cs
+i @peripherals/trng_kernel.cs
+i @peripherals/trng_server.cs
+i @peripherals/TLV320AIC3100.cs
+i @peripherals/TUSB320LAI.cs
+i @peripherals/WF200.cs
+i @peripherals/wfi.cs
+
+EnsureTypeIsLoaded "Antmicro.Renode.Peripherals.CPU.VexRiscv"
+i @peripherals/vexriscv-aes.cs
+
+EnsureTypeIsLoaded "Antmicro.Renode.Peripherals.Timers.Betrusted.TickTimer"
+i @peripherals/susres.cs
+
+############### Define the Betrusted SoC ###############
+mach create "SoC"
+machine LoadPlatformDescription @soc/betrusted-soc.repl
+
+sysbus Tag <0xB0000000, 0xB0006000> "Framebuffer"
+
+# Silence GPIO
+sysbus SilenceRange <0xf0003000, 0xF0003FFF>
+# Silence POWER
+sysbus SilenceRange <0xF0014000 100>
+
+# Attach the flash backing to the per-run scratch file (writes persist!)
+sysbus.spinor.flash BackingFile $flash_file
+
+# Load the SPI flash into RAM
+sysbus LoadBinary $ORIGIN/../../utralib/renode/soc_csr.bin 0x20000000
+
+# The macro `reset` gets called implicitly when running `machine Reset`
+macro reset
+"""
+    sysbus LoadBinary $image_dir/loader.bin 0x20500000
+    sysbus LoadBinary $image_dir/xous.img 0x20980000
+    # Set $a0 to point at the args binary
+    cpu SetRegisterUnsafe 10 0x20980000
+    cpu PC 0x20501000
+"""
+
+# File-backed UART capture with immediate flush (xous-swap.resc idiom).
+# All CI markers/sentinels appear on `console` (the log-server UART);
+# `uart` carries kernel debug only.
+uart CreateFileBackend $kernel_log true
+console CreateFileBackend $console_log true
+
+runMacro $reset
+
+# Renode 1.16.1 logs a per-access "Using `GetRegisterUnsafe` API is obsolete"
+# WARNING from the cpu (the wfi/idle path hits it continuously), which can
+# balloon the run log to tens of GB. Suppress cpu messages below Error.
+logLevel 3 sysbus.cpu
+
+start
