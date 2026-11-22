@@ -398,7 +398,7 @@ pub(crate) const USB_LPM_SUPPORT: u8 = 1 << 1; /* supports LPM */
 #[allow(dead_code)]
 pub(crate) const USB_BESL_SUPPORT: u8 = 1 << 2; /* supports BESL */
 #[allow(dead_code)]
-pub(crate) const USB_BESL_BASELINE_VALID: u8 = 1 << 3; /* Baseline BESL valid*/
+pub(crate) const USB_BESL_BASELINE_VALID: u8 = 1 << 3; /* Baseline BESL valid */
 #[allow(dead_code)]
 pub(crate) const USB_BESL_DEEP_VALID: u8 = 1 << 4; /* Deep BESL valid */
 

@@ -120,24 +120,24 @@ pub(crate) const OV2640_SENSOR_HISTO_HIGH: u8 = 0x62;
 /**
  * @brief  OV2640 Features Parameters
  */
-pub(crate) const OV2640_BRIGHTNESS_LEVEL0: u8 = 0x40; /* Brightness level -2         */
-pub(crate) const OV2640_BRIGHTNESS_LEVEL1: u8 = 0x30; /* Brightness level -1         */
-pub(crate) const OV2640_BRIGHTNESS_LEVEL2: u8 = 0x20; /* Brightness level 0          */
-pub(crate) const OV2640_BRIGHTNESS_LEVEL3: u8 = 0x10; /* Brightness level +1         */
-pub(crate) const OV2640_BRIGHTNESS_LEVEL4: u8 = 0x00; /* Brightness level +2         */
-pub(crate) const OV2640_BLACK_WHITE_BW: u8 = 0x18; /* Black and white effect      */
-pub(crate) const OV2640_BLACK_WHITE_NEGATIVE: u8 = 0x40; /* Negative effect             */
-pub(crate) const OV2640_BLACK_WHITE_BW_NEGATIVE: u8 = 0x58; /* BW and Negative effect      */
-pub(crate) const OV2640_BLACK_WHITE_NORMAL: u8 = 0x00; /* Normal effect               */
-pub(crate) const OV2640_CONTRAST_LEVEL0: u16 = 0x3418; /* Contrast level -2           */
-pub(crate) const OV2640_CONTRAST_LEVEL1: u16 = 0x2A1C; /* Contrast level -2           */
-pub(crate) const OV2640_CONTRAST_LEVEL2: u16 = 0x2020; /* Contrast level -2           */
-pub(crate) const OV2640_CONTRAST_LEVEL3: u16 = 0x1624; /* Contrast level -2           */
-pub(crate) const OV2640_CONTRAST_LEVEL4: u16 = 0x0C28; /* Contrast level -2           */
-pub(crate) const OV2640_COLOR_EFFECT_ANTIQUE: u16 = 0xA640; /* Antique effect              */
-pub(crate) const OV2640_COLOR_EFFECT_BLUE: u16 = 0x40A0; /* Blue effect                 */
-pub(crate) const OV2640_COLOR_EFFECT_GREEN: u16 = 0x4040; /* Green effect                */
-pub(crate) const OV2640_COLOR_EFFECT_RED: u16 = 0xC040; /* Red effect                  */
+pub(crate) const OV2640_BRIGHTNESS_LEVEL0: u8 = 0x40; /* Brightness level -2 */
+pub(crate) const OV2640_BRIGHTNESS_LEVEL1: u8 = 0x30; /* Brightness level -1 */
+pub(crate) const OV2640_BRIGHTNESS_LEVEL2: u8 = 0x20; /* Brightness level 0 */
+pub(crate) const OV2640_BRIGHTNESS_LEVEL3: u8 = 0x10; /* Brightness level +1 */
+pub(crate) const OV2640_BRIGHTNESS_LEVEL4: u8 = 0x00; /* Brightness level +2 */
+pub(crate) const OV2640_BLACK_WHITE_BW: u8 = 0x18; /* Black and white effect */
+pub(crate) const OV2640_BLACK_WHITE_NEGATIVE: u8 = 0x40; /* Negative effect */
+pub(crate) const OV2640_BLACK_WHITE_BW_NEGATIVE: u8 = 0x58; /* BW and Negative effect */
+pub(crate) const OV2640_BLACK_WHITE_NORMAL: u8 = 0x00; /* Normal effect */
+pub(crate) const OV2640_CONTRAST_LEVEL0: u16 = 0x3418; /* Contrast level -2 */
+pub(crate) const OV2640_CONTRAST_LEVEL1: u16 = 0x2A1C; /* Contrast level -2 */
+pub(crate) const OV2640_CONTRAST_LEVEL2: u16 = 0x2020; /* Contrast level -2 */
+pub(crate) const OV2640_CONTRAST_LEVEL3: u16 = 0x1624; /* Contrast level -2 */
+pub(crate) const OV2640_CONTRAST_LEVEL4: u16 = 0x0C28; /* Contrast level -2 */
+pub(crate) const OV2640_COLOR_EFFECT_ANTIQUE: u16 = 0xA640; /* Antique effect */
+pub(crate) const OV2640_COLOR_EFFECT_BLUE: u16 = 0x40A0; /* Blue effect */
+pub(crate) const OV2640_COLOR_EFFECT_GREEN: u16 = 0x4040; /* Green effect */
+pub(crate) const OV2640_COLOR_EFFECT_RED: u16 = 0xC040; /* Red effect */
 
 #[repr(u8)]
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
