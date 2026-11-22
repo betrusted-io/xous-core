@@ -5,7 +5,7 @@ edition = "2021"
 
 [dependencies]
 xous = "0.9.71"
-xous-ipc = "0.10.11"
+xous-ipc = "0.10.12"
 log = "0.4.14"
 num-derive = { version = "0.4.2", default-features = false }
 num-traits = { version = "0.2.14", default-features = false }

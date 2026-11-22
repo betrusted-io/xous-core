@@ -5,9 +5,9 @@ edition = "2024"
 
 [dependencies]
 xous = { version = "0.9.71", features = ["raw-trng"] }
-xous-ipc = "0.10.11"
-xous-names = { package = "xous-api-names", version = "0.9.72" }
-ticktimer = { package = "xous-api-ticktimer", version = "0.9.71" }
-log-server = { package = "xous-api-log", version = "0.1.70" }
+xous-ipc = "0.10.12"
+xous-names = { package = "xous-api-names", version = "0.9.73" }
+ticktimer = { package = "xous-api-ticktimer", version = "0.9.72" }
+log-server = { package = "xous-api-log", version = "0.1.71" }
 log = "0.4.14"
 arbitrary-int = "1.2"

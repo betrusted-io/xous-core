@@ -4,7 +4,7 @@ description = "System call interface for Xous"
 edition = "2018"
 license = "MIT OR Apache-2.0"
 name = "xous-ipc"
-version = "0.10.11"
+version = "0.10.12"
 repository = "https://github.com/betrusted-io/xous-core/"
 homepage = "https://betrusted.io/"
 
@@ -15,4 +15,6 @@ bitflags = { version = "1" }
 rkyv = { version = "0.8.8", default-features = false, features = [
     "std",
     "alloc",
+    # required for checked archive access (rkyv::access) in buffer.rs
+    "bytecheck",
 ] }

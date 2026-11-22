@@ -8,9 +8,9 @@ description = "PDDB std::fs test runner for Renode CI"
 # Dependency versions enforced by Cargo.lock.
 [dependencies]
 xous = "0.9.71"
-log-server = { package = "xous-api-log", version = "0.1.70" }
-ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.71" }
-xous-names = { package = "xous-api-names", version = "0.9.72" }
+log-server = { package = "xous-api-log", version = "0.1.71" }
+ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.72" }
+xous-names = { package = "xous-api-names", version = "0.9.73" }
 log = "0.4.14"
 pddb = { path = "../pddb" }
 

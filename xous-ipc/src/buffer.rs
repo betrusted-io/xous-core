@@ -1,11 +1,13 @@
 use core::mem::MaybeUninit;
+use std::io;
 use std::marker::PhantomData;
 
 use rkyv::{
     Archive, Deserialize, Place, Portable, Serialize,
-    api::low::LowSerializer,
+    api::low::{LowSerializer, LowValidator},
+    bytecheck::CheckBytes,
     rancor::{Failure, Strategy},
-    ser::{Positional, allocator::SubAllocator, writer::Buffer as RkyvBuffer},
+    ser::{Positional, allocator::SubAllocator, writer::Buffer as RkyvBuffer, writer::IoWriter},
     with::{ArchiveWith, Identity, SerializeWith},
 };
 use xous::{
@@ -25,22 +27,31 @@ const PAGE_SIZE: usize = 0x1000;
 
 type Serializer<'a, 'b> = LowSerializer<RkyvBuffer<'b>, SubAllocator<'a>, Failure>;
 
+/// Probe serializer used by `into_buf()` to measure a value's exact serialized size before allocating
+/// real pages. Writes are discarded by `io::Sink`; `IoWriter` counts them positionally, so the final
+/// position equals the byte length the page-backed `Serializer` would have produced: the padding the
+/// real pass inserts is position-derived (never address-derived), and the sub-allocator's scratch
+/// never contributes to the output stream.
+type ProbeSerializer<'a> = LowSerializer<IoWriter<io::Sink>, SubAllocator<'a>, Failure>;
+
 impl<'buf> Buffer<'buf> {
     #[allow(dead_code)]
-    pub fn new(len: usize) -> Self {
+    pub fn new(len: usize) -> Self { Self::try_new(len).expect("xous-ipc: OOM in buffer allocation") }
+
+    fn try_new(len: usize) -> core::result::Result<Self, Error> {
         let flags = MemoryFlags::R | MemoryFlags::W;
         let len_to_page = (len + (PAGE_SIZE - 1)) & !(PAGE_SIZE - 1);
 
         // Allocate enough memory to hold the requested data
-        let new_mem = map_memory(None, None, len_to_page, flags).expect("xous-ipc: OOM in buffer allocation");
+        let new_mem = map_memory(None, None, len_to_page, flags)?;
 
-        Buffer {
+        Ok(Buffer {
             pages: new_mem,
             slice: unsafe { core::slice::from_raw_parts_mut(new_mem.as_mut_ptr(), len_to_page) },
             used: 0,
             should_drop: true,
             memory_message: None,
-        }
+        })
     }
 
     /// use a volatile write to ensure a clear operation is not optimized out
@@ -188,9 +199,10 @@ impl<'buf> Buffer<'buf> {
         Ok(result)
     }
 
-    fn into_buf_inner<F, T>(src: &T) -> core::result::Result<Self, ()>
+    fn into_buf_inner<F, T>(src: &T) -> core::result::Result<Self, Error>
     where
         F: for<'a, 'b> SerializeWith<T, Serializer<'a, 'b>>,
+        F: for<'a> SerializeWith<T, ProbeSerializer<'a>>,
     {
         struct Wrap<'a, F, T>(&'a T, PhantomData<F>);
 
@@ -217,21 +229,78 @@ impl<'buf> Buffer<'buf> {
                 F::serialize_with(self.0, serializer)
             }
         }
-        let mut xous_buf = Self::new(core::mem::size_of::<T>());
-        let mut scratch = [MaybeUninit::<u8>::uninit(); 256];
+
+        impl<'a, F, T> Serialize<ProbeSerializer<'a>> for Wrap<'_, F, T>
+        where
+            F: SerializeWith<T, ProbeSerializer<'a>>,
+        {
+            fn serialize(
+                &self,
+                serializer: &mut ProbeSerializer<'a>,
+            ) -> core::result::Result<Self::Resolver, Failure> {
+                F::serialize_with(self.0, serializer)
+            }
+        }
 
         let wrap = Wrap(src, PhantomData::<F>);
+
+        // Fast path: `size_of::<T>()` rounded to a page. Covers every inline (POD) type, which is
+        // serialized exactly once into exactly one mapped page -- identical cost to a pre-growth
+        // xous-ipc. Heap-backed types (`Vec`, `String`) overflow it because their contents land
+        // out-of-line in the buffer; they fall through to the probe below.
+        let mut xous_buf = Self::try_new(core::mem::size_of::<T>())?;
+        {
+            let mut scratch = [MaybeUninit::<u8>::uninit(); 256];
+            let writer = RkyvBuffer::from(&mut xous_buf.slice[..]);
+            let alloc = SubAllocator::new(&mut scratch);
+            if let Ok(serialized_buf) =
+                rkyv::api::low::to_bytes_in_with_alloc::<_, _, Failure>(&wrap, writer, alloc)
+            {
+                xous_buf.used = serialized_buf.pos();
+                return Ok(xous_buf);
+            }
+        }
+        // The attempt overflowed: its partial writes are garbage, and dropping unmaps the too-small
+        // buffer before any replacement is mapped (a remap gets kernel-zeroed pages, so nothing leaks).
+        drop(xous_buf);
+
+        // Slow path, once per overflow: measure the exact serialized size by running the same
+        // serializer over a byte sink -- no mapping, no copy. Padding is position-derived and the
+        // scratch allocator contributes nothing to the output stream, so the probe length matches the
+        // real pass byte-for-byte and the real pass needs no retry loop.
+        let needed = {
+            let mut scratch = [MaybeUninit::<u8>::uninit(); 256];
+            let writer = IoWriter::new(io::sink());
+            let alloc = SubAllocator::new(&mut scratch);
+            rkyv::api::low::to_bytes_in_with_alloc::<_, _, Failure>(&wrap, writer, alloc)
+                .map(|writer| writer.pos())
+                .map_err(|_| Error::SerializationError)?
+        };
+
+        // Allocate exactly what the probe measured (page-rounded by try_new) and serialize once.
+        let mut xous_buf = Self::try_new(needed)?;
+        let mut scratch = [MaybeUninit::<u8>::uninit(); 256];
         let writer = RkyvBuffer::from(&mut xous_buf.slice[..]);
         let alloc = SubAllocator::new(&mut scratch);
-
-        let serialized_buf =
-            rkyv::api::low::to_bytes_in_with_alloc::<_, _, Failure>(&wrap, writer, alloc).map_err(|_| ())?;
+        let serialized_buf = rkyv::api::low::to_bytes_in_with_alloc::<_, _, Failure>(&wrap, writer, alloc)
+            .map_err(|_| Error::SerializationError)?;
         xous_buf.used = serialized_buf.pos();
         Ok(xous_buf)
     }
 
+    /// Serialize `src` into a freshly allocated `Buffer`.
+    ///
+    /// Types that serialize inline (POD-shaped payloads) are written once into a single page sized by
+    /// `size_of::<T>()`, exactly as before. Types that overflow that first page (`Vec`, `String`, and
+    /// other heap-backed fields) are re-serialized once into a throwaway byte sink to measure the
+    /// exact archive length, then mapped once, page-rounded to that size; the only failure modes are a
+    /// serialization error or a genuine allocation failure from the kernel, both returned as `Err`.
+    ///
+    /// `IoWriter<io::Sink>` in the bound below is the probe serializer; `#[derive(rkyv::Serialize)]`
+    /// types implement it automatically, only hand-written, serializer-specific `Serialize` impls need
+    /// to add it.
     #[allow(dead_code)]
-    pub fn into_buf<T>(src: T) -> core::result::Result<Self, ()>
+    pub fn into_buf<T>(src: T) -> core::result::Result<Self, Error>
     where
         T: for<'b, 'a> rkyv::Serialize<
                 rkyv::rancor::Strategy<
@@ -243,11 +312,21 @@ impl<'buf> Buffer<'buf> {
                     rkyv::rancor::Failure,
                 >,
             >,
+        T: for<'a> rkyv::Serialize<
+                rkyv::rancor::Strategy<
+                    rkyv::ser::Serializer<
+                        rkyv::ser::writer::IoWriter<std::io::Sink>,
+                        rkyv::ser::allocator::SubAllocator<'a>,
+                        (),
+                    >,
+                    rkyv::rancor::Failure,
+                >,
+            >,
     {
         Buffer::into_buf_inner::<Identity, T>(&src)
     }
 
-    fn replace_inner<F, T>(&mut self, src: T) -> core::result::Result<(), &'static str>
+    fn replace_inner<F, T>(&mut self, src: T) -> core::result::Result<(), Error>
     where
         F: for<'a, 'b> SerializeWith<T, Serializer<'a, 'b>>,
     {
@@ -283,8 +362,8 @@ impl<'buf> Buffer<'buf> {
         let writer = RkyvBuffer::from(&mut self.slice[..]);
         let alloc = SubAllocator::new(&mut scratch);
 
-        let serialized_buf =
-            rkyv::api::low::to_bytes_in_with_alloc::<_, _, Failure>(&wrap, writer, alloc).unwrap();
+        let serialized_buf = rkyv::api::low::to_bytes_in_with_alloc::<_, _, Failure>(&wrap, writer, alloc)
+            .map_err(|_| Error::SerializationError)?;
         self.used = serialized_buf.pos();
 
         if let Some(ref mut msg) = self.memory_message.as_mut() {
@@ -293,8 +372,14 @@ impl<'buf> Buffer<'buf> {
         Ok(())
     }
 
+    /// Serialize `src` into this buffer, updating the length reported to the server.
+    ///
+    /// Returns `Err(Error::SerializationError)` (instead of panicking) when `src` serializes to more
+    /// than `capacity()` bytes. Note that a failed attempt may leave partially serialized bytes in the
+    /// buffer: `used` is left at its previous value, but the contents are indeterminate until the next
+    /// successful `replace()` or `volatile_clear()`.
     #[allow(dead_code)]
-    pub fn replace<T>(&mut self, src: T) -> core::result::Result<(), &'static str>
+    pub fn replace<T>(&mut self, src: T) -> core::result::Result<(), Error>
     where
         T: for<'b, 'a> rkyv::Serialize<
                 rkyv::rancor::Strategy<
@@ -312,30 +397,51 @@ impl<'buf> Buffer<'buf> {
 
     /// Zero-copy representation of the data on the receiving side, wrapped in an "Archived" trait and left in
     /// the heap. Cheap so uses "as_" prefix.
+    ///
+    /// The byte range is validated before being handed out as a reference: `Err(Error::SerializationError)`
+    /// is returned when the buffer does not contain a valid archive of `T` (for example, truncated data,
+    /// dangling interior pointers, or data serialized as a different type). Validation cost is linear in the
+    /// number of reachable fields, and never allocates.
     #[allow(dead_code)]
-    pub fn as_flat<T, U>(&self) -> core::result::Result<&U, ()>
+    pub fn as_flat<T, U>(&self) -> core::result::Result<&U, Error>
     where
         T: rkyv::Archive<Archived = U>,
-        U: Portable,
+        U: Portable + for<'a> CheckBytes<LowValidator<'a, rkyv::rancor::Error>>,
     {
-        let r = unsafe { rkyv::access_unchecked::<U>(&self.slice[..self.used]) };
-        Ok(r)
+        rkyv::api::low::access_pos::<U, rkyv::rancor::Error>(
+            &self.slice[..self.used],
+            rkyv::api::root_position::<U>(self.used),
+        )
+        .map_err(|_| Error::SerializationError)
     }
 
     /// A representation identical to the original, but requires copying to the stack. More expensive so uses
     /// "to_" prefix.
+    ///
+    /// Debugging note - the rancor::Error type is much richer than the returned Error::SerializationError
+    /// so extracting that and printing it can be helpful in tracing down subtle errors.
     #[allow(dead_code)]
     pub fn to_original<T, U>(&self) -> core::result::Result<T, Error>
     where
         T: rkyv::Archive<Archived = U>,
-        U: Portable,
+        U: Portable + for<'a> CheckBytes<LowValidator<'a, rkyv::rancor::Error>>,
         <T as Archive>::Archived: Deserialize<T, Strategy<rkyv::de::Pool, rkyv::rancor::Error>>,
     {
-        let r = unsafe { rkyv::access_unchecked::<U>(&self.slice[..self.used]) };
-        rkyv::deserialize::<T, rkyv::rancor::Error>(r).map_err(|_| Error::InternalError)
+        let r = rkyv::api::low::access_pos::<U, rkyv::rancor::Error>(
+            &self.slice[..self.used],
+            rkyv::api::root_position::<U>(self.used),
+        )
+        .map_err(|_| Error::SerializationError)?;
+        rkyv::deserialize::<T, rkyv::rancor::Error>(r).map_err(|_| Error::SerializationError)
     }
 
     pub fn used(&self) -> usize { self.used }
+
+    /// Total writable capacity of the backing allocation, in bytes (page-rounded). Unlike `used()`,
+    /// this is the room available to serialize *into*: `replace()` fails with `Error::SerializationError`
+    /// when a value serializes to more than `capacity()` bytes. Callers that grow payloads can compare
+    /// against this to decide when to reallocate a larger buffer.
+    pub fn capacity(&self) -> usize { self.slice.len() }
 }
 
 impl<'a> core::convert::AsRef<[u8]> for Buffer<'a> {

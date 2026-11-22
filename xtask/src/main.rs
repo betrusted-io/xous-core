@@ -315,6 +315,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .add_feature("gam/renode")
                 .add_feature("modals/renode");
         }
+        Some("ipc-ci") => {
+            // Minimum-package Renode image (cf. libstd-test: no PDDB, no
+            // first-boot UX, signature checks bypassed -> unattended boot)
+            // plus the xous-ipc regression suite: a skeleton MutableBorrow
+            // echo server and the on-target test runner that drives
+            // Buffer/into_buf/replace/as_flat/to_original corner cases and
+            // emits the TEST/DONE sentinel stream.
+            builder.target_renode().add_services(&base_pkgs).add_services(&get_cratespecs());
+            builder.add_loader_feature("renode-bypass");
+            builder.add_service("ipc-echo", LoaderRegion::Ram).add_service("ipc-tests", LoaderRegion::Ram);
+        }
         Some("std-net-ci") => {
             // The libstd-net image plus the on-target std::net test runner;
             // see the libstd-net arm above for why the feature list is what
@@ -1239,6 +1250,8 @@ Renode emulation:
  libstd-net              Renode test image for testing network functions. Bypasses sig checks, keys locked out.
  std-net-ci              libstd-net image plus the net-tests runner (on-target std::net CI suite).
  std-net-cross-host-ci        std-net-ci plus the cross-host themes (real DHCP peer on the switch).
+ ipc-ci                  libstd-test image plus ipc-echo and the ipc-tests runner
+                         (on-target xous-ipc Buffer CI suite).
  ffi-test                builds an image for testing C-FFI bindings and integration. [cratespecs] are services
  renode-aes-test         Renode image for AES emulation development. Extremely minimal.
 

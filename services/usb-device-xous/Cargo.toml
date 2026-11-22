@@ -11,10 +11,10 @@ unused_dependencies = "allow"
 # Dependency versions enforced by Cargo.lock.
 [dependencies]
 xous = "0.9.71"
-xous-ipc = "0.10.11"
-log-server = { package = "xous-api-log", version = "0.1.70" }
-ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.71" }
-xous-names = { package = "xous-api-names", version = "0.9.72" }
+xous-ipc = "0.10.12"
+log-server = { package = "xous-api-log", version = "0.1.71" }
+ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.72" }
+xous-names = { package = "xous-api-names", version = "0.9.73" }
 log = "0.4.14"
 llio = { path = "../llio" }
 num-derive = { version = "0.4.2", default-features = false }

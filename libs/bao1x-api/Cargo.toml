@@ -12,8 +12,8 @@ license = "Apache-2.0"
 
 [dependencies]
 xous = "0.9.71"
-xous-ipc = { version = "0.10.11", optional = true }
-xous-names = { package = "xous-api-names", version = "0.9.72", optional = true }
+xous-ipc = { version = "0.10.12", optional = true }
+xous-names = { package = "xous-api-names", version = "0.9.73", optional = true }
 num-derive = { version = "0.4.2", default-features = false }
 num-traits = { version = "0.2.14", default-features = false }
 rkyv = { version = "0.8.8", default-features = false, features = [

@@ -13,5 +13,5 @@ rkyv = { version = "0.8.8", default-features = false, features = [
     "alloc",
 ] }
 ux-api = { path = "../../libs/ux-api" }
-xous-names = { package = "xous-api-names", version = "0.9.72" } # used by the IMEF for registering listeners
+xous-names = { package = "xous-api-names", version = "0.9.73" } # used by the IMEF for registering listeners
 log = "0.4.14"
