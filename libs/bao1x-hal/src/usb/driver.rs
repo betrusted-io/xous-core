@@ -894,8 +894,10 @@ pub struct CorigineUsb {
     stall_spec: [Option<bool>; CRG_EP_NUM * 2 + 2],
 
     pub max_packet_size: [Option<usize>; CRG_EP_NUM * 2 + 2],
-    app_enq_index: [usize; CRG_EP_NUM + 1],
-    app_deq_index: [usize; CRG_EP_NUM + 1],
+    // Indexed by PEI (per direction), not bare ep_num — IN and OUT each have
+    // their own CRG_UDC_APP_BUF_LEN slot and must track occupancy independently.
+    app_enq_index: [usize; CRG_EP_NUM * 2 + 2],
+    app_deq_index: [usize; CRG_EP_NUM * 2 + 2],
 
     speed: UsbDeviceSpeed,
 
@@ -969,8 +971,8 @@ impl CorigineUsb {
             setup: None,
             stall_spec: [None; CRG_EP_NUM * 2 + 2],
             max_packet_size: [None; CRG_EP_NUM * 2 + 2],
-            app_enq_index: [0; CRG_EP_NUM + 1],
-            app_deq_index: [0; CRG_EP_NUM + 1],
+            app_enq_index: [0; CRG_EP_NUM * 2 + 2],
+            app_deq_index: [0; CRG_EP_NUM * 2 + 2],
             setup_tag: 0,
             speed: UsbDeviceSpeed::Unknown,
             ep0_buf: AtomicPtr::new(core::ptr::null_mut()),
@@ -1109,82 +1111,78 @@ impl CorigineUsb {
     }
 
     pub fn get_app_buf_ptr(&mut self, ep_num: u8, dir: bool) -> Option<usize> {
-        let mut enq_index = self.app_enq_index[ep_num as usize];
         let pei = CorigineUsb::pei(ep_num, dir);
         let mps = self.max_packet_size[pei].expect("max packet size was not initialized!");
-        let ep_num = ep_num as usize;
-        let mut new_index = self.app_enq_index[ep_num] + mps;
+        let enq_index = self.app_enq_index[pei];
+        let deq_index = self.app_deq_index[pei];
 
-        // normally check for overflow, but in the case of serial it seems to do better
-        // if we don't do that. I'm still not sure why we seem to miss some IN ACKs.
-        // TODO: figure this out
-        if new_index + mps > CRG_UDC_APP_BUF_LEN {
-            // ignore the the dq pointer, overflow for now -- for some reason, we aren't
-            // getting all the interrupts we expect to be getting. Maybe some of them are
-            // being combined in a race condition or something like that?
-            new_index = 0;
-            enq_index = 0;
-            self.app_enq_index[ep_num] = 0;
-        }
-        if
-        /* new_index + mps > CRG_UDC_APP_BUF_LEN */
-        false {
-            // we could do a circular buffer for enq/deq but I think a couple entries with a reset
-            // is typically enough. If we hit this, then yah, we have to implement a full circular buffer.
-            #[cfg(feature = "verbose-debug")]
-            crate::println!("enqueue overflow");
-            None
-        } else {
-            self.app_enq_index[ep_num] = new_index;
-            if ep_num == 0 {
-                let addr = self.ifram_base_ptr + CRG_UDC_EP0_BUF_OFFSET + enq_index;
+        // Linear ring that resets to 0 only when empty. With
+        // CRG_UDC_APP_BUF_LEN == HS MPS (512), this admits a single in-flight
+        // packet per PEI. Returning None maps to UsbError::WouldBlock in
+        // UsbBus::write so the CDC stack applies backpressure instead of
+        // re-arming the same 512-byte slot (see xous-core#1017).
+        let mut use_index = enq_index;
+        if use_index + mps > CRG_UDC_APP_BUF_LEN {
+            if enq_index != deq_index {
                 #[cfg(feature = "verbose-debug")]
-                crate::println!("ep0 app_ptr: {:x} index {}", addr, enq_index);
-                udc_pointer_check!(addr, CRG_UDC_APP_BUF_LEN);
-                Some(addr)
-            } else if ep_num <= CRG_EP_NUM {
-                let addr = self.ifram_base_ptr
-                    + CRG_UDC_APP_BUFOFFSET
-                    + ((ep_num - 1) as usize * 2 + if dir { 1 } else { 0 }) * CRG_UDC_APP_BUF_LEN
-                    + enq_index;
-                #[cfg(feature = "verbose-debug")]
-                crate::println!("ep{} app_ptr: {:x} index {}", ep_num, addr, enq_index);
-                udc_pointer_check!(addr, CRG_UDC_APP_BUF_LEN);
-                Some(addr)
-            } else {
-                crate::println!("ep_num {} is out of range", ep_num);
-                panic!("ep_num is out of range");
+                crate::println!("enqueue overflow");
+                return None;
             }
+            // Empty — safe to wrap.
+            use_index = 0;
+            self.app_enq_index[pei] = 0;
+            self.app_deq_index[pei] = 0;
+        }
+
+        self.app_enq_index[pei] = use_index + mps;
+        if ep_num == 0 {
+            let addr = self.ifram_base_ptr + CRG_UDC_EP0_BUF_OFFSET + use_index;
+            #[cfg(feature = "verbose-debug")]
+            crate::println!("ep0 app_ptr: {:x} index {}", addr, use_index);
+            udc_pointer_check!(addr, CRG_UDC_APP_BUF_LEN);
+            Some(addr)
+        } else if (ep_num as usize) <= CRG_EP_NUM {
+            let addr = self.ifram_base_ptr
+                + CRG_UDC_APP_BUFOFFSET
+                + ((ep_num as usize - 1) * 2 + if dir { 1 } else { 0 }) * CRG_UDC_APP_BUF_LEN
+                + use_index;
+            #[cfg(feature = "verbose-debug")]
+            crate::println!("ep{} app_ptr: {:x} index {}", ep_num, addr, use_index);
+            udc_pointer_check!(addr, CRG_UDC_APP_BUF_LEN);
+            Some(addr)
+        } else {
+            crate::println!("ep_num {} is out of range", ep_num);
+            panic!("ep_num is out of range");
         }
     }
 
     pub fn retire_app_buf_ptr(&mut self, ep_num: u8, dir: bool) -> usize {
-        let ep_num = ep_num as usize;
-        let deq_index = self.app_deq_index[ep_num];
-        self.app_deq_index[ep_num] +=
-            self.max_packet_size[ep_num].expect("max packet size was not initialized!");
+        let pei = CorigineUsb::pei(ep_num, dir);
+        let mps = self.max_packet_size[pei].expect("max packet size was not initialized!");
+        let deq_index = self.app_deq_index[pei];
+        self.app_deq_index[pei] += mps;
         #[cfg(feature = "verbose-debug")]
         crate::println!(
             "ep{} retire: enq_index {}; deq_index {}",
             ep_num,
-            self.app_enq_index[ep_num],
-            self.app_deq_index[ep_num]
+            self.app_enq_index[pei],
+            self.app_deq_index[pei]
         );
-        if self.app_deq_index[ep_num] == self.app_enq_index[ep_num] {
+        if self.app_deq_index[pei] == self.app_enq_index[pei] {
             #[cfg(feature = "verbose-debug")]
             crate::println!("Deq reset pointers to 0, ep{}", ep_num);
             // reset the pointers to 0 if we're empty
-            self.app_deq_index[ep_num] = 0;
-            self.app_enq_index[ep_num] = 0;
+            self.app_deq_index[pei] = 0;
+            self.app_enq_index[pei] = 0;
         }
         if ep_num == 0 {
             let ptr = self.ifram_base_ptr + CRG_UDC_EP0_BUF_OFFSET + deq_index;
             udc_pointer_check!(ptr, CRG_UDC_APP_BUF_LEN);
             ptr
-        } else if ep_num <= CRG_EP_NUM {
+        } else if (ep_num as usize) <= CRG_EP_NUM {
             let ptr = self.ifram_base_ptr
                 + CRG_UDC_APP_BUFOFFSET
-                + ((ep_num - 1) as usize * 2 + if dir { 1 } else { 0 }) * CRG_UDC_APP_BUF_LEN
+                + ((ep_num as usize - 1) * 2 + if dir { 1 } else { 0 }) * CRG_UDC_APP_BUF_LEN
                 + deq_index;
             udc_pointer_check!(ptr, CRG_UDC_APP_BUF_LEN);
             ptr
@@ -2719,6 +2717,8 @@ impl UsbBus for CorigineWrapper {
                         let ptr = app_ptr.addr;
                         let len = app_ptr.len;
                         udc_pointer_check!(ptr, len);
+                        // Free the RX slot now that the class has claimed the packet.
+                        self.core().retire_app_buf_ptr(ep_addr.index() as u8, CRG_OUT);
                         self.ep_out_ready[ep_addr.index()].store(false, Ordering::SeqCst);
                         let app_buf = unsafe { core::slice::from_raw_parts(ptr as *const u8, len) };
                         if buf.len() < app_buf.len() {
@@ -3004,10 +3004,13 @@ pub fn handle_event_inner(this: &mut CorigineUsb, event_trb: &mut EventTrbS) -> 
                         ep: ep as u8,
                     });
                     if dir == USB_RECV {
-                        // out
+                        // out — buffer stays owned until UsbBus::read() takes app_ptr
                         ret = CrgEvent::Data(ep_onehot, 0, 0)
                     } else {
-                        // in
+                        // in — host has the packet; free the TX app buffer slot so
+                        // the next write can proceed (pairs with get_app_buf_ptr
+                        // WouldBlock backpressure; fixes xous-core#1017 duplicates).
+                        this.retire_app_buf_ptr(ep as u8, CRG_IN);
                         ret = CrgEvent::Data(0, ep_onehot, 0)
                     }
                 } else if comp_code == CompletionCode::MissedServiceError {
